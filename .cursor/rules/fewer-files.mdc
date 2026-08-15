@@ -1,0 +1,31 @@
+---
+description: Professional lean build — more features, less work, stable app
+alwaysApply: true
+---
+
+# Professional lean school system
+
+Goal: **more features, less work, stable application** — not maximum files.
+
+## Principles
+
+1. **Reuse first** — extend existing pages, APIs, models, and `globals.css` before creating anything new.
+2. **Few files** — one global CSS (`src/app/globals.css`), one settings surface, group related backend logic.
+3. **Thin & stable** — keep API routes thin; put logic in existing services/controllers; avoid risky big rewrites.
+4. **Ship features** — prefer a working CRUD + clear UI over perfect folder architecture.
+5. **Don't break** — change the smallest surface that delivers the feature; run/build when touching core paths.
+6. **No drive-by refactors** — don't rename/move/split files unless needed for the requested feature.
+7. **No extra docs** — skip new markdown unless the user asks.
+
+## Default stack for a new feature
+
+1. Extend model if needed (or reuse existing).
+2. Add validation + service method in existing module files when possible.
+3. Thin API route.
+4. UI on existing page or one new page — styles only in `globals.css`.
+
+## Stability checklist
+
+- Don't invent parallel patterns (second theme, second auth, second form system).
+- Prefer boring, clear code over clever abstractions.
+- One design system: Sabaq CSS variables in `globals.css`.
