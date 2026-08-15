@@ -29,6 +29,15 @@ const defaults = {
     feeHeads: ["Tuition Fee", "Admission Fee", "Exam Fee", "Transport Fee", "Library Fee", "Course Fee"],
   },
   theme: DEFAULT_THEME,
+  institutionCode: "MAIN",
+  institutionType: "school" as const,
+  passPercent: 40,
+  attendanceAlertPercent: 75,
+  studentIdMode: "auto" as const,
+  employeeIdMode: "auto" as const,
+  lateFeePercent: 5,
+  lateFeeGraceDays: 7,
+  whtRate: 0,
 };
 
 type OptionKey = keyof typeof defaults.optionLists;

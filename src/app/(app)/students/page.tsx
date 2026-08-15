@@ -20,6 +20,8 @@ export default function StudentsPage() {
   const [editing, setEditing] = useState<StudentItem | null>(null);
   const [filterClass, setFilterClass] = useState("");
   const [filterBranch, setFilterBranch] = useState("");
+  const [promoteMsg, setPromoteMsg] = useState("");
+  const [promoting, setPromoting] = useState(false);
 
   const load = useCallback(async () => {
     const qs = new URLSearchParams();
@@ -46,6 +48,42 @@ export default function StudentsPage() {
     load();
   }
 
+  async function promoteClass(dryRun: boolean) {
+    if (!filterClass) {
+      setPromoteMsg("Filter to one class first, then run promotion.");
+      return;
+    }
+    setPromoting(true);
+    setPromoteMsg("");
+    try {
+      const res = await fetch("/api/students", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "promote",
+          classId: filterClass,
+          examType: "final",
+          dryRun,
+          passMark: 40,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPromoteMsg(data.error || "Promotion failed");
+        return;
+      }
+      const s = data.summary || {};
+      setPromoteMsg(
+        `${dryRun ? "Preview" : "Done"}: ${s.promoted || 0} promoted` +
+          (data.next ? ` → ${data.next}` : " (no next class — graduated)") +
+          ` · ${s.held || 0} held · ${s.graduated || 0} graduated`
+      );
+      if (!dryRun) load();
+    } finally {
+      setPromoting(false);
+    }
+  }
+
   const activeClass = classes.find((c) => c._id === filterClass);
 
   return (
@@ -61,6 +99,36 @@ export default function StudentsPage() {
           setOpen(true);
         }}
       />
+
+      {filterClass ? (
+        <Panel title="Auto-promote passed students" meta={activeClass ? `${activeClass.name}-${activeClass.section}` : ""}>
+          <p style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 12 }}>
+            Uses final-exam result cards (pass ≥ 40%). Passed students move to the next class on the
+            curriculum ladder; failures stay; top-of-ladder students graduate.
+          </p>
+          {promoteMsg ? <div className="alert">{promoteMsg}</div> : null}
+          <div className="form-actions" style={{ marginTop: 0 }}>
+            <button
+              type="button"
+              className="btn-ghost"
+              disabled={promoting}
+              onClick={() => promoteClass(true)}
+            >
+              Preview promotion
+            </button>
+            <button
+              type="button"
+              className="btn-dark"
+              disabled={promoting}
+              onClick={() => {
+                if (confirm("Promote all passed students in this class?")) promoteClass(false);
+              }}
+            >
+              {promoting ? "Working…" : "Promote passed students"}
+            </button>
+          </div>
+        </Panel>
+      ) : null}
 
       <div className="toolbar">
         <div className="chips">
@@ -125,6 +193,7 @@ export default function StudentsPage() {
                   <th>Guardian</th>
                   <th>Class</th>
                   <th>Admission No.</th>
+                  <th>Concession</th>
                   <th className="right">Status</th>
                   <th className="right">Actions</th>
                 </tr>
@@ -139,6 +208,11 @@ export default function StudentsPage() {
                     <td>{s.parentName || "—"}</td>
                     <td>{labelOfClass(s.classId as never)}</td>
                     <td className="num">{s.admissionNo}</td>
+                    <td>
+                      {s.discountType && s.discountType !== "none"
+                        ? `${s.discountPercent || 0}% ${String(s.discountType).replace(/_/g, " ")}`
+                        : "—"}
+                    </td>
                     <td className="right">
                       <StatusBadge status={s.status} />
                     </td>

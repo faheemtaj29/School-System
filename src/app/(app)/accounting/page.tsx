@@ -71,12 +71,47 @@ type TrialRow = {
   code: string;
   name: string;
   type: string;
+  openingDebit: number;
+  openingCredit: number;
+  periodDebit: number;
+  periodCredit: number;
   debit: number;
   credit: number;
 };
 
 type Branch = { code: string; name: string };
-type Tab = "overview" | "vouchers" | "coa" | "trial";
+type Tab =
+  | "overview"
+  | "vouchers"
+  | "coa"
+  | "ledger"
+  | "daybook"
+  | "trial"
+  | "pnl"
+  | "balance"
+  | "bank";
+
+type ReportGroup = {
+  code: string;
+  name: string;
+  total: number;
+  accounts: { code: string; name: string; amount: number }[];
+};
+
+type Section = { groups: ReportGroup[]; total: number };
+
+type LedgerRow = {
+  voucherId: string;
+  number: string;
+  voucherType: string;
+  date: string;
+  narration: string;
+  partyName?: string;
+  contra: string;
+  debit: number;
+  credit: number;
+  balance: number;
+};
 
 const blankLine = (): VoucherLine => ({
   accountCode: "",
@@ -128,7 +163,15 @@ export default function AccountingPage() {
   const [tab, setTab] = useState<Tab>("overview");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
-  const [trial, setTrial] = useState({ rows: [] as TrialRow[], totalDebit: 0, totalCredit: 0 });
+  const [trial, setTrial] = useState({
+    rows: [] as TrialRow[],
+    openingDebit: 0,
+    openingCredit: 0,
+    periodDebit: 0,
+    periodCredit: 0,
+    totalDebit: 0,
+    totalCredit: 0,
+  });
   const [statements, setStatements] = useState({
     income: 0,
     expense: 0,
@@ -146,6 +189,31 @@ export default function AccountingPage() {
   });
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branch, setBranch] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [ledgerCode, setLedgerCode] = useState("");
+  const [ledger, setLedger] = useState<{
+    account?: { code: string; name: string; type: string };
+    openingBalance: number;
+    rows: LedgerRow[];
+    totalDebit: number;
+    totalCredit: number;
+    closingBalance: number;
+  } | null>(null);
+  const [dayBook, setDayBook] = useState<Voucher[]>([]);
+  const [pnl, setPnl] = useState<{ income: Section; expense: Section; surplus: number } | null>(
+    null
+  );
+  const [balanceSheet, setBalanceSheet] = useState<{
+    assets: Section;
+    liabilities: Section;
+    equity: Section;
+    surplus: number;
+    equityTotal: number;
+    totalAssets: number;
+    totalLiabilitiesEquity: number;
+    balanced: boolean;
+  } | null>(null);
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [voucherOpen, setVoucherOpen] = useState(false);
@@ -154,27 +222,60 @@ export default function AccountingPage() {
   const [accountForm, setAccountForm] = useState(accountBlank);
   const [selected, setSelected] = useState<Voucher | null>(null);
   const [err, setErr] = useState("");
+  const [bankEntries, setBankEntries] = useState<
+    {
+      _id: string;
+      title: string;
+      type: string;
+      amount: number;
+      method?: string;
+      reconciled?: boolean;
+      whtAmount?: number;
+      date: string;
+    }[]
+  >([]);
 
   const load = useCallback(async () => {
-    const branchQuery = branch ? `&branch=${encodeURIComponent(branch)}` : "";
+    const period = new URLSearchParams();
+    if (branch) period.set("branch", branch);
+    if (from) period.set("from", from);
+    if (to) period.set("to", to);
+    const withView = (view: string, extra?: Record<string, string>) => {
+      const params = new URLSearchParams(period);
+      params.set("view", view);
+      for (const [key, value] of Object.entries(extra || {})) params.set(key, value);
+      return `/api/accounting?${params}`;
+    };
+
     const voucherQuery = new URLSearchParams({ view: "vouchers" });
     if (branch) voucherQuery.set("branch", branch);
     if (typeFilter) voucherQuery.set("type", typeFilter);
     if (statusFilter) voucherQuery.set("status", statusFilter);
-    const [a, v, t, s, cash, settings] = await Promise.all([
+
+    const [a, v, t, s, cash, settings, day, profit, bs] = await Promise.all([
       fetch("/api/accounting?view=accounts").then((r) => r.json()),
       fetch(`/api/accounting?${voucherQuery}`).then((r) => r.json()),
-      fetch(`/api/accounting?view=trial-balance${branchQuery}`).then((r) => r.json()),
-      fetch(`/api/accounting?view=statements${branchQuery}`).then((r) => r.json()),
+      fetch(withView("trial-balance")).then((r) => r.json()),
+      fetch(withView("statements")).then((r) => r.json()),
       fetch(`/api/accounting?${branch ? `branch=${encodeURIComponent(branch)}` : ""}`).then((r) =>
         r.json()
       ),
       fetch("/api/settings").then((r) => r.json()),
+      fetch(withView("day-book")).then((r) => r.json()),
+      fetch(withView("profit-loss")).then((r) => r.json()),
+      fetch(withView("balance-sheet")).then((r) => r.json()),
     ]);
+    setDayBook(day.vouchers || []);
+    setPnl(profit.income ? profit : null);
+    setBalanceSheet(bs.assets ? bs : null);
     setAccounts(a.accounts || []);
     setVouchers(v.vouchers || []);
     setTrial({
       rows: t.rows || [],
+      openingDebit: t.openingDebit || 0,
+      openingCredit: t.openingCredit || 0,
+      periodDebit: t.periodDebit || 0,
+      periodCredit: t.periodCredit || 0,
       totalDebit: t.totalDebit || 0,
       totalCredit: t.totalCredit || 0,
     });
@@ -195,6 +296,11 @@ export default function AccountingPage() {
         vouchers: { draft: 0, posted: 0, void: 0 },
       }
     );
+    setBankEntries(
+      ((cash.entries || []) as typeof bankEntries).filter((e) =>
+        ["bank", "online", "cheque"].includes(e.method || "")
+      )
+    );
     const list = settings.settings?.branches || [];
     setBranches(list);
     setVoucherForm((form) =>
@@ -202,11 +308,28 @@ export default function AccountingPage() {
         ? form
         : { ...form, branchCode: settings.settings.defaultBranchCode }
     );
-  }, [branch, typeFilter, statusFilter]);
+  }, [branch, from, to, typeFilter, statusFilter]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const loadLedger = useCallback(async () => {
+    if (!ledgerCode) {
+      setLedger(null);
+      return;
+    }
+    const params = new URLSearchParams({ view: "general-ledger", account: ledgerCode });
+    if (branch) params.set("branch", branch);
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    const data = await fetch(`/api/accounting?${params}`).then((r) => r.json());
+    setLedger(data.account ? data : null);
+  }, [ledgerCode, branch, from, to]);
+
+  useEffect(() => {
+    loadLedger();
+  }, [loadLedger]);
 
   const postingAccounts = useMemo(
     () => accounts.filter((account) => account.isPosting && account.isActive),
@@ -401,9 +524,14 @@ export default function AccountingPage() {
           {(
             [
               ["overview", "Overview"],
-              ["vouchers", "All Vouchers"],
+              ["vouchers", "Vouchers"],
               ["coa", "Chart of Accounts"],
+              ["ledger", "General Ledger"],
+              ["daybook", "Day Book"],
               ["trial", "Trial Balance"],
+              ["pnl", "Income & Expenditure"],
+              ["balance", "Balance Sheet"],
+              ["bank", "Bank & WHT"],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -416,15 +544,75 @@ export default function AccountingPage() {
             </button>
           ))}
         </div>
-        <select className={inputClass} value={branch} onChange={(e) => setBranch(e.target.value)}>
-          <option value="">Consolidated — all branches</option>
-          {branches.map((b) => (
-            <option key={b.code} value={b.code}>
-              {b.code} — {b.name}
-            </option>
-          ))}
-        </select>
       </div>
+
+      <div className="period-bar no-print">
+        <label>
+          <span>Branch</span>
+          <select className={inputClass} value={branch} onChange={(e) => setBranch(e.target.value)}>
+            <option value="">Consolidated — all branches</option>
+            {branches.map((b) => (
+              <option key={b.code} value={b.code}>
+                {b.code} — {b.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Period from</span>
+          <input
+            type="date"
+            className={inputClass}
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+        </label>
+        <label>
+          <span>Period to</span>
+          <input
+            type="date"
+            className={inputClass}
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+          />
+        </label>
+        <div className="period-actions">
+          {PERIOD_PRESETS.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              className="link-btn"
+              onClick={() => {
+                const range = preset.range();
+                setFrom(range.from);
+                setTo(range.to);
+              }}
+            >
+              {preset.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              setFrom("");
+              setTo("");
+            }}
+          >
+            All time
+          </button>
+          <button type="button" className="btn-dark" onClick={() => window.print()}>
+            Print report
+          </button>
+        </div>
+      </div>
+
+      <ReportHeading
+        title={REPORT_TITLES[tab]}
+        branch={branches.find((b) => b.code === branch)?.name || "All branches (consolidated)"}
+        from={from}
+        to={to}
+      />
 
       {tab === "overview" ? (
         <>
@@ -609,17 +797,28 @@ export default function AccountingPage() {
       ) : null}
 
       {tab === "trial" ? (
-        <Panel title="Trial Balance" meta={branch || "CONSOLIDATED"}>
+        <Panel
+          title="Trial Balance"
+          meta={`${trial.rows.length} ACCOUNTS · ${trial.totalDebit === trial.totalCredit ? "BALANCED" : "OUT OF BALANCE"}`}
+        >
           {!trial.rows.length ? (
             <EmptyState message="No posted voucher balances yet." />
           ) : (
             <div className="table-scroll">
-              <table className="reg">
+              <table className="reg report-table">
                 <thead>
                   <tr>
-                    <th>Account Code</th>
-                    <th>Account Name</th>
-                    <th>Type</th>
+                    <th rowSpan={2}>Code</th>
+                    <th rowSpan={2}>Account</th>
+                    <th className="right" colSpan={2}>Opening</th>
+                    <th className="right" colSpan={2}>Period Movement</th>
+                    <th className="right" colSpan={2}>Closing</th>
+                  </tr>
+                  <tr>
+                    <th className="right">Debit</th>
+                    <th className="right">Credit</th>
+                    <th className="right">Debit</th>
+                    <th className="right">Credit</th>
                     <th className="right">Debit</th>
                     <th className="right">Credit</th>
                   </tr>
@@ -628,17 +827,296 @@ export default function AccountingPage() {
                   {trial.rows.map((row) => (
                     <tr key={row.code}>
                       <td className="num">{row.code}</td>
-                      <td>{row.name}</td>
-                      <td style={{ textTransform: "capitalize" }}>{row.type}</td>
-                      <td className="num">{row.debit ? formatNumber(row.debit) : "—"}</td>
-                      <td className="num">{row.credit ? formatNumber(row.credit) : "—"}</td>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{row.name}</div>
+                        <div style={{ fontSize: 10.5, color: "var(--text-dim)", textTransform: "capitalize" }}>
+                          {row.type}
+                        </div>
+                      </td>
+                      <td className="num">{amount(row.openingDebit)}</td>
+                      <td className="num">{amount(row.openingCredit)}</td>
+                      <td className="num">{amount(row.periodDebit)}</td>
+                      <td className="num">{amount(row.periodCredit)}</td>
+                      <td className="num">{amount(row.debit)}</td>
+                      <td className="num">{amount(row.credit)}</td>
                     </tr>
                   ))}
-                  <tr>
-                    <td colSpan={3}><strong>TOTAL</strong></td>
+                  <tr className="total-row">
+                    <td colSpan={2}><strong>TOTAL</strong></td>
+                    <td className="num"><strong>{formatNumber(trial.openingDebit)}</strong></td>
+                    <td className="num"><strong>{formatNumber(trial.openingCredit)}</strong></td>
+                    <td className="num"><strong>{formatNumber(trial.periodDebit)}</strong></td>
+                    <td className="num"><strong>{formatNumber(trial.periodCredit)}</strong></td>
                     <td className="num"><strong>{formatNumber(trial.totalDebit)}</strong></td>
                     <td className="num"><strong>{formatNumber(trial.totalCredit)}</strong></td>
                   </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      ) : null}
+
+      {tab === "ledger" ? (
+        <Panel
+          title="General Ledger"
+          meta={ledger?.account ? `${ledger.account.code} · ${ledger.account.name}` : "SELECT ACCOUNT"}
+        >
+          <div className="chips no-print" style={{ marginBottom: 14 }}>
+            <select
+              className={inputClass}
+              value={ledgerCode}
+              onChange={(e) => setLedgerCode(e.target.value)}
+            >
+              <option value="">Select a posting account…</option>
+              {postingAccounts.map((a) => (
+                <option key={a.code} value={a.code}>
+                  {a.code} — {a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {!ledger ? (
+            <EmptyState message="Choose a posting account to view its ledger with running balance." />
+          ) : (
+            <div className="table-scroll">
+              <table className="reg report-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Voucher</th>
+                    <th>Particulars</th>
+                    <th className="right">Debit</th>
+                    <th className="right">Credit</th>
+                    <th className="right">Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colSpan={3}><strong>Opening balance b/f</strong></td>
+                    <td className="num">—</td>
+                    <td className="num">—</td>
+                    <td className="num"><strong>{signedBalance(ledger.openingBalance)}</strong></td>
+                  </tr>
+                  {ledger.rows.map((row, index) => (
+                    <tr key={`${row.voucherId}-${index}`}>
+                      <td className="num">{prettyDate(row.date)}</td>
+                      <td>
+                        <div className="num">{row.number}</div>
+                        <div style={{ fontSize: 10.5, color: "var(--text-dim)" }}>
+                          {voucherLabels[row.voucherType]}
+                        </div>
+                      </td>
+                      <td>
+                        <div>{row.narration}</div>
+                        <div style={{ fontSize: 10.5, color: "var(--text-dim)" }}>
+                          To: {row.contra || "—"}
+                          {row.partyName ? ` · ${row.partyName}` : ""}
+                        </div>
+                      </td>
+                      <td className="num">{amount(row.debit)}</td>
+                      <td className="num">{amount(row.credit)}</td>
+                      <td className="num">{signedBalance(row.balance)}</td>
+                    </tr>
+                  ))}
+                  <tr className="total-row">
+                    <td colSpan={3}><strong>TOTAL / CLOSING</strong></td>
+                    <td className="num"><strong>{formatNumber(ledger.totalDebit)}</strong></td>
+                    <td className="num"><strong>{formatNumber(ledger.totalCredit)}</strong></td>
+                    <td className="num"><strong>{signedBalance(ledger.closingBalance)}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      ) : null}
+
+      {tab === "daybook" ? (
+        <Panel title="Day Book" meta={`${dayBook.length} POSTED VOUCHERS`}>
+          {!dayBook.length ? (
+            <EmptyState message="No posted vouchers in this period." />
+          ) : (
+            <div className="table-scroll">
+              <table className="reg report-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Voucher</th>
+                    <th>Account</th>
+                    <th>Narration</th>
+                    <th className="right">Debit</th>
+                    <th className="right">Credit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dayBook.map((voucher) =>
+                    voucher.lines.map((line, index) => (
+                      <tr key={`${voucher._id}-${index}`}>
+                        {index === 0 ? (
+                          <>
+                            <td className="num" rowSpan={voucher.lines.length}>
+                              {prettyDate(voucher.date)}
+                            </td>
+                            <td rowSpan={voucher.lines.length}>
+                              <div className="num">{voucher.number}</div>
+                              <div style={{ fontSize: 10.5, color: "var(--text-dim)" }}>
+                                {voucherLabels[voucher.voucherType]} · {voucher.branchCode}
+                              </div>
+                            </td>
+                          </>
+                        ) : null}
+                        <td>
+                          <span className="num">{line.accountCode}</span> — {line.accountName}
+                        </td>
+                        <td>{line.narration || voucher.narration}</td>
+                        <td className="num">{amount(line.debit)}</td>
+                        <td className="num">{amount(line.credit)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      ) : null}
+
+      {tab === "pnl" ? (
+        <Panel title="Income & Expenditure Statement" meta={pnl ? (pnl.surplus >= 0 ? "SURPLUS" : "DEFICIT") : ""}>
+          {!pnl ? (
+            <EmptyState message="No posted income or expenditure in this period." />
+          ) : (
+            <>
+              <SectionTable title="Income" section={pnl.income} />
+              <SectionTable title="Expenditure" section={pnl.expense} />
+              <div className={`statement-result${pnl.surplus >= 0 ? " ok" : " bad"}`}>
+                <span>{pnl.surplus >= 0 ? "Surplus for the period" : "Deficit for the period"}</span>
+                <strong>{formatNumber(Math.abs(pnl.surplus))}</strong>
+              </div>
+            </>
+          )}
+        </Panel>
+      ) : null}
+
+      {tab === "balance" ? (
+        <Panel
+          title="Statement of Financial Position"
+          meta={balanceSheet ? (balanceSheet.balanced ? "BALANCED" : "OUT OF BALANCE") : ""}
+        >
+          {!balanceSheet ? (
+            <EmptyState message="No posted balances yet." />
+          ) : (
+            <div className="grid-2">
+              <div>
+                <SectionTable title="Assets" section={balanceSheet.assets} />
+                <div className="statement-result ok">
+                  <span>Total Assets</span>
+                  <strong>{formatNumber(balanceSheet.totalAssets)}</strong>
+                </div>
+              </div>
+              <div>
+                <SectionTable title="Liabilities" section={balanceSheet.liabilities} />
+                <SectionTable
+                  title="Equity / Funds"
+                  section={{
+                    groups: [
+                      ...balanceSheet.equity.groups,
+                      {
+                        code: "zz",
+                        name: "Current period surplus / (deficit)",
+                        total: balanceSheet.surplus,
+                        accounts: [],
+                      },
+                    ],
+                    total: balanceSheet.equityTotal,
+                  }}
+                />
+                <div className={`statement-result${balanceSheet.balanced ? " ok" : " bad"}`}>
+                  <span>Total Liabilities &amp; Equity</span>
+                  <strong>{formatNumber(balanceSheet.totalLiabilitiesEquity)}</strong>
+                </div>
+              </div>
+            </div>
+          )}
+        </Panel>
+      ) : null}
+
+      {tab === "bank" ? (
+        <Panel title="Bank reconciliation & WHT" meta={`${bankEntries.length} BANK LINES`}>
+          <p className="muted small" style={{ marginBottom: 12 }}>
+            Mark bank/online lines as reconciled. Apply WHT on expenses using the rate from Settings → Tax & Finance.
+          </p>
+          {!bankEntries.length ? (
+            <EmptyState message="No bank / online / cheque ledger lines yet." />
+          ) : (
+            <div className="table-scroll">
+              <table className="reg">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Title</th>
+                    <th>Method</th>
+                    <th className="right">Amount</th>
+                    <th>Reconciled</th>
+                    <th>WHT</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {bankEntries.map((row) => (
+                    <tr key={row._id}>
+                      <td>{prettyDate(row.date)}</td>
+                      <td>
+                        {row.title}
+                        <div className="muted small">{row.type}</div>
+                      </td>
+                      <td>{row.method}</td>
+                      <td className="num">{formatNumber(row.amount)}</td>
+                      <td>{row.reconciled ? "Yes" : "Open"}</td>
+                      <td className="num">{row.whtAmount ? formatNumber(row.whtAmount) : "—"}</td>
+                      <td>
+                        <div className="row-actions">
+                          <button
+                            type="button"
+                            className="link-btn"
+                            onClick={async () => {
+                              await fetch("/api/accounting", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  kind: "reconcile",
+                                  id: row._id,
+                                  reconciled: !row.reconciled,
+                                }),
+                              });
+                              load();
+                            }}
+                          >
+                            {row.reconciled ? "Unclear" : "Reconcile"}
+                          </button>
+                          {row.type === "expense" && !(row.whtAmount || 0) ? (
+                            <button
+                              type="button"
+                              className="link-btn"
+                              onClick={async () => {
+                                const res = await fetch("/api/accounting", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ kind: "wht", id: row._id }),
+                                });
+                                const data = await res.json();
+                                if (!res.ok) alert(data.error || "WHT failed");
+                                load();
+                              }}
+                            >
+                              Apply WHT
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -808,6 +1286,137 @@ export default function AccountingPage() {
       </ModalForm>
 
       {selected ? <VoucherPrint voucher={selected} branches={branches} /> : null}
+    </>
+  );
+}
+
+const REPORT_TITLES: Record<Tab, string> = {
+  overview: "Financial Overview",
+  vouchers: "Voucher Register",
+  coa: "Chart of Accounts",
+  ledger: "General Ledger",
+  daybook: "Day Book",
+  trial: "Trial Balance",
+  pnl: "Income & Expenditure Statement",
+  balance: "Statement of Financial Position",
+  bank: "Bank Reconciliation & WHT",
+};
+
+const PERIOD_PRESETS = [
+  {
+    label: "This month",
+    range: () => {
+      const now = new Date();
+      return {
+        from: toDateInput(new Date(now.getFullYear(), now.getMonth(), 1)),
+        to: toDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+      };
+    },
+  },
+  {
+    label: "This quarter",
+    range: () => {
+      const now = new Date();
+      const startMonth = Math.floor(now.getMonth() / 3) * 3;
+      return {
+        from: toDateInput(new Date(now.getFullYear(), startMonth, 1)),
+        to: toDateInput(new Date(now.getFullYear(), startMonth + 3, 0)),
+      };
+    },
+  },
+  {
+    label: "This year",
+    range: () => {
+      const year = new Date().getFullYear();
+      return {
+        from: toDateInput(new Date(year, 0, 1)),
+        to: toDateInput(new Date(year, 11, 31)),
+      };
+    },
+  },
+];
+
+/** Blank dashes read better than zeros in a printed statement. */
+function amount(value: number) {
+  return value ? formatNumber(value) : "—";
+}
+
+function signedBalance(value: number) {
+  if (!value) return "0.00";
+  return `${formatNumber(Math.abs(value))} ${value > 0 ? "Dr" : "Cr"}`;
+}
+
+function ReportHeading({
+  title,
+  branch,
+  from,
+  to,
+}: {
+  title: string;
+  branch: string;
+  from: string;
+  to: string;
+}) {
+  const period =
+    from || to
+      ? `${from ? prettyDate(from) : "Inception"} to ${to ? prettyDate(to) : "date"}`
+      : "Since inception (all periods)";
+  return (
+    <div className="report-heading">
+      <div>
+        <h2>{title}</h2>
+        <p>{branch}</p>
+      </div>
+      <div className="report-heading-period">
+        <span>Period</span>
+        <strong>{period}</strong>
+      </div>
+    </div>
+  );
+}
+
+function SectionTable({ title, section }: { title: string; section: Section }) {
+  if (!section.groups.length) {
+    return (
+      <div className="statement-section">
+        <div className="form-section-title">{title}</div>
+        <EmptyState message={`No ${title.toLowerCase()} recorded for this period.`} />
+      </div>
+    );
+  }
+  return (
+    <div className="statement-section">
+      <div className="form-section-title">{title}</div>
+      <table className="reg report-table">
+        <tbody>
+          {section.groups.map((group) => (
+            <FragmentGroup key={group.code} group={group} />
+          ))}
+          <tr className="total-row">
+            <td><strong>Total {title}</strong></td>
+            <td className="num"><strong>{formatNumber(section.total)}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FragmentGroup({ group }: { group: ReportGroup }) {
+  return (
+    <>
+      <tr className="group-row">
+        <td><strong>{group.name}</strong></td>
+        <td className="num"><strong>{formatNumber(group.total)}</strong></td>
+      </tr>
+      {group.accounts.map((account) => (
+        <tr key={account.code}>
+          <td style={{ paddingLeft: 28 }}>
+            <span className="num">{account.code}</span> — {account.name}
+          </td>
+          <td className="num">{formatNumber(account.amount)}</td>
+        </tr>
+      ))}
     </>
   );
 }

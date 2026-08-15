@@ -38,6 +38,13 @@ type Course = {
   endDate?: string;
   status: string;
   liveLink?: string;
+  outline?: {
+    week: number;
+    title: string;
+    type: string;
+    description?: string;
+    deliverable?: string;
+  }[];
 };
 
 type Lecture = {
@@ -78,7 +85,7 @@ type Diploma = {
   status: string;
 };
 
-type Tab = "courses" | "lectures" | "enrollments" | "diplomas";
+type Tab = "courses" | "lectures" | "enrollments" | "diplomas" | "quizzes";
 
 const courseBlank = {
   code: "",
@@ -152,6 +159,23 @@ export default function DistanceLearningPage() {
   const [lectures, setLectures] = useState<Lecture[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [diplomas, setDiplomas] = useState<Diploma[]>([]);
+  const [quizzes, setQuizzes] = useState<
+    {
+      _id: string;
+      title: string;
+      passPercent: number;
+      questions: { prompt: string; options: string[]; correctIndex: number }[];
+      courseId: { _id: string; code: string; title: string } | string;
+    }[]
+  >([]);
+  const [quizForm, setQuizForm] = useState({
+    courseId: "",
+    title: "",
+    passPercent: 50,
+    prompt: "",
+    options: "A, B, C, D",
+    correctIndex: 0,
+  });
   const [teachers, setTeachers] = useState<TeacherItem[]>([]);
   const [students, setStudents] = useState<StudentItem[]>([]);
   const [open, setOpen] = useState(false);
@@ -171,17 +195,19 @@ export default function DistanceLearningPage() {
     const me = await fetch("/api/auth/me").then((r) => r.json()).catch(() => ({}));
     const myRole = me.user?.role || "admin";
     setRole(myRole);
-    const [c, l, e, d] = await Promise.all([
+    const [c, l, e, d, q] = await Promise.all([
       fetch("/api/elearning?kind=course").then((r) => r.json()),
       fetch("/api/elearning?kind=lecture").then((r) => r.json()),
       fetch("/api/elearning?kind=enrollment").then((r) => r.json()),
       fetch("/api/elearning?kind=diploma").then((r) => r.json()),
+      fetch("/api/elearning?kind=quiz").then((r) => r.json()),
     ]);
     setStats(c.stats || l.stats || { courses: 0, lectures: 0, enrollments: 0, diplomas: 0, liveNow: 0 });
     setCourses(c.courses || []);
     setLectures(l.lectures || []);
     setEnrollments(e.enrollments || []);
     setDiplomas(d.diplomas || []);
+    setQuizzes(q.quizzes || []);
     if (myRole === "admin" || myRole === "teacher") {
       const [t, s] = await Promise.all([
         fetch("/api/teachers").then((r) => r.json()),
@@ -222,6 +248,16 @@ export default function DistanceLearningPage() {
         title: courses[0] ? `Diploma — ${courses[0].title}` : "",
         diplomaNo: `DL-${Date.now().toString().slice(-6)}`,
         issueDate: toDateInput(new Date()),
+      });
+    }
+    if (tab === "quizzes") {
+      setQuizForm({
+        courseId: courses[0]?._id || "",
+        title: "",
+        passPercent: 50,
+        prompt: "",
+        options: "A, B, C, D",
+        correctIndex: 0,
       });
     }
     setOpen(true);
@@ -273,6 +309,22 @@ export default function DistanceLearningPage() {
       kind = "enrollment";
       body = enrollForm;
       url = "/api/elearning?kind=enrollment";
+    } else if (tab === "quizzes") {
+      kind = "quiz";
+      body = {
+        courseId: quizForm.courseId,
+        title: quizForm.title,
+        passPercent: quizForm.passPercent,
+        questions: [
+          {
+            prompt: quizForm.prompt,
+            options: quizForm.options.split(",").map((s) => s.trim()).filter(Boolean),
+            correctIndex: quizForm.correctIndex,
+          },
+        ],
+        active: true,
+      };
+      url = "/api/elearning?kind=quiz";
     } else {
       kind = "diploma";
       body = diplomaForm;
@@ -386,7 +438,9 @@ export default function DistanceLearningPage() {
         ? "Add Lecture"
         : tab === "enrollments"
           ? "Enroll Student"
-          : "Issue Diploma";
+          : tab === "quizzes"
+            ? "New Quiz"
+            : "Issue Diploma";
 
   async function uploadRecording(file: File) {
     setUploading(true);
@@ -406,6 +460,26 @@ export default function DistanceLearningPage() {
     }
   }
 
+  async function importProjectLibrary() {
+    if (!confirm("Import default project courses (robotics, IoT, Python, web, design thinking, STEM)?")) {
+      return;
+    }
+    setErr("");
+    const res = await fetch("/api/elearning?kind=course", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "project-library" }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setErr(data.error || "Import failed");
+      return;
+    }
+    setErr("");
+    alert(`Project library ready: ${data.created} new · ${data.updated} updated`);
+    load();
+  }
+
   return (
     <>
       <Hero
@@ -420,6 +494,14 @@ export default function DistanceLearningPage() {
         actionLabel={canManage ? actionLabel : undefined}
         onAction={canManage ? openCreate : undefined}
       />
+
+      {role === "admin" && tab === "courses" ? (
+        <div className="form-actions no-print" style={{ marginTop: 0, marginBottom: 14 }}>
+          <button type="button" className="btn-ghost" onClick={importProjectLibrary}>
+            Import project course library
+          </button>
+        </div>
+      ) : null}
 
       <div className="pay-stat-row">
         <div className="pay-stat">
@@ -451,6 +533,7 @@ export default function DistanceLearningPage() {
             ["lectures", "Live & Recorded"],
             ["enrollments", "Enrollments"],
             ["diplomas", "Diplomas"],
+            ["quizzes", "Quizzes"],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -492,6 +575,7 @@ export default function DistanceLearningPage() {
                         <div style={{ fontWeight: 600 }}>{c.title}</div>
                         <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
                           {c.durationWeeks} weeks
+                          {c.outline?.length ? ` · ${c.outline.length}-module outline` : ""}
                           {c.liveLink ? (
                             <>
                               {" · "}
@@ -898,6 +982,76 @@ export default function DistanceLearningPage() {
         </Panel>
       ) : null}
 
+      {tab === "quizzes" ? (
+        <Panel title="Course quizzes" meta={`${quizzes.length} QUIZZES`}>
+          {!quizzes.length ? (
+            <EmptyState message="No quizzes yet. Create a short MCQ quiz linked to a distance course." />
+          ) : (
+            <div className="table-scroll">
+              <table className="reg">
+                <thead>
+                  <tr>
+                    <th>Quiz</th>
+                    <th>Course</th>
+                    <th>Questions</th>
+                    <th>Pass %</th>
+                    {canManage ? <th className="right">Actions</th> : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {quizzes.map((quiz) => (
+                    <tr key={quiz._id}>
+                      <td>{quiz.title}</td>
+                      <td>{courseLabel(quiz.courseId as RefCourse)}</td>
+                      <td className="num">{quiz.questions?.length || 0}</td>
+                      <td className="num">{quiz.passPercent}%</td>
+                      <td>
+                        <div className="row-actions">
+                          {isStudent ? (
+                            <button
+                              type="button"
+                              className="link-btn"
+                              onClick={async () => {
+                                const answers = (quiz.questions || []).map((q) => {
+                                  const pick = prompt(`${q.prompt}\n${q.options.map((o, i) => `${i}: ${o}`).join("\n")}`, "0");
+                                  return Number(pick || 0);
+                                });
+                                const res = await fetch("/api/elearning?kind=quiz-attempt", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ quizId: quiz._id, answers }),
+                                });
+                                const data = await res.json();
+                                alert(
+                                  res.ok
+                                    ? `Score ${data.attempt?.percent}% — ${data.attempt?.passed ? "PASS" : "FAIL"}`
+                                    : data.error || "Submit failed"
+                                );
+                              }}
+                            >
+                              Attempt
+                            </button>
+                          ) : null}
+                          {canManage ? (
+                            <button
+                              type="button"
+                              className="link-btn danger"
+                              onClick={() => remove("quiz", quiz._id, "quiz")}
+                            >
+                              Delete
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      ) : null}
+
       <ModalForm
         open={open}
         onClose={() => {
@@ -914,7 +1068,9 @@ export default function DistanceLearningPage() {
               ? "Add Live / Recorded Lecture"
               : tab === "enrollments"
                 ? "Enroll Distance Learner"
-                : "Issue Diploma / Certificate"
+                : tab === "quizzes"
+                  ? "New Course Quiz"
+                  : "Issue Diploma / Certificate"
         }
         submitLabel={
           tab === "courses"
@@ -925,7 +1081,9 @@ export default function DistanceLearningPage() {
               ? "Save Lecture"
               : tab === "enrollments"
                 ? "Enroll"
-                : "Issue"
+                : tab === "quizzes"
+                  ? "Create Quiz"
+                  : "Issue"
         }
         wide
       >
@@ -1345,6 +1503,66 @@ export default function DistanceLearningPage() {
                 placeholder="A / Distinction / Pass"
                 value={diplomaForm.grade}
                 onChange={(e) => setDiplomaForm({ ...diplomaForm, grade: e.target.value })}
+              />
+            </Field>
+          </div>
+        ) : null}
+
+        {tab === "quizzes" ? (
+          <div className="form-grid">
+            <Field label="Course" required>
+              <select
+                className={inputClass}
+                value={quizForm.courseId}
+                onChange={(e) => setQuizForm({ ...quizForm, courseId: e.target.value })}
+                required
+              >
+                <option value="">Select course</option>
+                {courses.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.code} — {c.title}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Quiz title" required>
+              <input
+                className={inputClass}
+                value={quizForm.title}
+                onChange={(e) => setQuizForm({ ...quizForm, title: e.target.value })}
+                required
+              />
+            </Field>
+            <Field label="Pass %">
+              <input
+                type="number"
+                className={inputClass}
+                value={quizForm.passPercent}
+                onChange={(e) => setQuizForm({ ...quizForm, passPercent: Number(e.target.value) })}
+              />
+            </Field>
+            <Field label="Question" required>
+              <input
+                className={inputClass}
+                value={quizForm.prompt}
+                onChange={(e) => setQuizForm({ ...quizForm, prompt: e.target.value })}
+                required
+              />
+            </Field>
+            <Field label="Options (comma-separated)" required>
+              <input
+                className={inputClass}
+                value={quizForm.options}
+                onChange={(e) => setQuizForm({ ...quizForm, options: e.target.value })}
+                required
+              />
+            </Field>
+            <Field label="Correct option index (0-based)">
+              <input
+                type="number"
+                className={inputClass}
+                value={quizForm.correctIndex}
+                onChange={(e) => setQuizForm({ ...quizForm, correctIndex: Number(e.target.value) })}
               />
             </Field>
           </div>

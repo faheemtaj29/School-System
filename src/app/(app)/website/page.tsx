@@ -332,7 +332,7 @@ export default function WebsitePage() {
       {tab === "leads" ? (
         <Panel title="Admission applications" meta={`${apps.length} RECORDS`}>
           <div className="chips" style={{ marginBottom: 14 }}>
-            {["", "new", "contacted", "enrolled", "rejected"].map((f) => (
+            {["", "new", "contacted", "test", "merit", "waiting", "offered", "enrolled", "rejected"].map((f) => (
               <button
                 key={f || "all"}
                 type="button"
@@ -412,22 +412,58 @@ export default function WebsitePage() {
                               >
                                 {open ? "Hide" : "View"}
                               </button>
-                              {a.status === "new" ? (
+                              {a.status === "new" || a.status === "contacted" ? (
                                 <button
                                   type="button"
                                   className="link-btn"
-                                  onClick={() => setStatus(a._id, "contacted")}
+                                  onClick={() => setStatus(a._id, "test")}
                                 >
-                                  Contacted
+                                  Entry test
                                 </button>
                               ) : null}
-                              {a.status !== "enrolled" ? (
+                              {a.status === "test" ? (
+                                <button
+                                  type="button"
+                                  className="link-btn"
+                                  onClick={() => setStatus(a._id, "merit")}
+                                >
+                                  Merit list
+                                </button>
+                              ) : null}
+                              {a.status === "merit" ? (
+                                <button
+                                  type="button"
+                                  className="link-btn"
+                                  onClick={() => setStatus(a._id, "waiting")}
+                                >
+                                  Waiting
+                                </button>
+                              ) : null}
+                              {a.status === "merit" || a.status === "waiting" ? (
+                                <button
+                                  type="button"
+                                  className="link-btn"
+                                  onClick={() => setStatus(a._id, "offered")}
+                                >
+                                  Offer letter
+                                </button>
+                              ) : null}
+                              {a.status !== "enrolled" && a.status !== "rejected" ? (
                                 <button
                                   type="button"
                                   className="link-btn"
                                   onClick={() => setStatus(a._id, "enrolled")}
                                 >
                                   Enrolled
+                                </button>
+                              ) : null}
+                              {a.status !== "rejected" ? (
+                                <button
+                                  type="button"
+                                  className="link-btn danger"
+                                  onClick={() => setStatus(a._id, "rejected")}
+                                >
+                                  Reject
                                 </button>
                               ) : null}
                               <button

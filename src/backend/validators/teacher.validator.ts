@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const teacherSchema = z.object({
-  employeeId: z.string().min(1),
+  employeeId: z.string().optional().or(z.literal("")),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   email: z.string().email(),

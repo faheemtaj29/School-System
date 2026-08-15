@@ -10,7 +10,7 @@ export const ADMIN_PAGES = [
 ];
 
 /** Finance / ops — admin + campus staff */
-export const OPS_PAGES = ["/fees", "/inventory", "/hr"];
+export const OPS_PAGES = ["/fees", "/inventory", "/hr", "/campus", "/approvals"];
 
 /** Teaching academics — admin + teacher */
 export const ACADEMIC_PAGES = [
@@ -20,6 +20,8 @@ export const ACADEMIC_PAGES = [
   "/attendance",
   "/exams",
   "/reports",
+  "/campus",
+  "/approvals",
 ];
 
 /** Everyone signed in */
@@ -42,11 +44,13 @@ export function canOpenPage(role: string, pathname: string) {
     if (hit(OPS_PAGES.filter((p) => p !== "/hr"))) return true;
     if (pathname === "/fees" || pathname.startsWith("/fees/")) return true;
     if (pathname === "/inventory" || pathname.startsWith("/inventory/")) return true;
+    if (pathname === "/approvals" || pathname.startsWith("/approvals/")) return true;
     return false;
   }
 
   if (role === "student" || role === "parent") {
     if (pathname === "/fees" || pathname.startsWith("/fees/")) return true;
+    if (pathname === "/reports" || pathname.startsWith("/reports/")) return true;
     return false;
   }
 

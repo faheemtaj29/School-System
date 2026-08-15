@@ -26,6 +26,8 @@ import {
   lectureSchema,
   enrollmentSchema,
   diplomaSchema,
+  quizSchema,
+  quizAttemptSchema,
   siteContentSchema,
   admissionSchema,
   admissionStatusSchema,
@@ -208,6 +210,14 @@ export const accountingController = {
           201
         );
       }
+      if (body.kind === "reconcile") {
+        return jsonOk({
+          entry: await accountingService.setReconciled(body.id, Boolean(body.reconciled)),
+        });
+      }
+      if (body.kind === "wht") {
+        return jsonOk({ entry: await accountingService.applyWht(body.id) });
+      }
       const parsed = ledgerSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
       const entry = await accountingService.create(parsed.data, session!.id);
@@ -383,13 +393,13 @@ export const hrController = {
         if (!teacher) return jsonError("Teacher profile not linked", 400);
         data.teacherId = String(teacher._id);
       }
-      return jsonOk({ leave: await hrService.createLeave(data) }, 201);
+      return jsonOk({ leave: await hrService.createLeave(data, session) }, 201);
     } catch (e) {
       return fromServiceError(e);
     }
   },
   async updateLeave(req: Request, ctx: Ctx) {
-    const { session, error } = await requireAuth(["admin"]);
+    const { session, error } = await requireAuth(["admin", "staff"]);
     if (error) return error;
     try {
       const { id } = await ctx.params;
@@ -485,11 +495,44 @@ export const noticeController = {
 
 export const reportsController = {
   async run(req: Request) {
-    const { error } = await requireAuth(["admin", "teacher"]);
+    const { session, error } = await requireAuth(["admin", "teacher", "student", "parent"]);
     if (error) return error;
     try {
-      const type = new URL(req.url).searchParams.get("type") || "overview";
+      const params = new URL(req.url).searchParams;
+      const type = params.get("type") || "overview";
+      if (
+        (session!.role === "student" || session!.role === "parent") &&
+        type !== "transcript" &&
+        type !== "result-cards"
+      ) {
+        return jsonError("Parents and students can open transcripts and result cards only", 403);
+      }
       switch (type) {
+        case "result-cards": {
+          const classId = params.get("classId") || "all";
+          return jsonOk({
+            report: "result-cards",
+            data: await reportsService.resultCardsBatch({
+              classId,
+              examType: params.get("examType"),
+              branchCode: params.get("branch"),
+            }),
+          });
+        }
+        case "transcript": {
+          let studentId = params.get("studentId");
+          if (session!.role === "student" || session!.role === "parent") {
+            const { resolveStudent } = await import("@/backend/lib/portal");
+            const student = await resolveStudent(session!);
+            if (!student) return jsonError("No linked student profile", 400);
+            studentId = String(student._id);
+          }
+          if (!studentId) return jsonError("studentId is required", 400);
+          return jsonOk({
+            report: "transcript",
+            data: await reportsService.transcript(studentId),
+          });
+        }
         case "students":
           return jsonOk({ report: "students", rows: await reportsService.studentsByClass() });
         case "fees":
@@ -522,15 +565,22 @@ export const reportsController = {
   },
 };
 
-type EKind = "course" | "lecture" | "enrollment" | "diploma";
+type EKind = "course" | "lecture" | "enrollment" | "diploma" | "quiz" | "quiz-attempt";
 
 function eKind(req: Request): EKind {
   const k = new URL(req.url).searchParams.get("kind") || "course";
-  if (k === "lecture" || k === "enrollment" || k === "diploma") return k;
+  if (
+    k === "lecture" ||
+    k === "enrollment" ||
+    k === "diploma" ||
+    k === "quiz" ||
+    k === "quiz-attempt"
+  )
+    return k;
   return "course";
 }
 
-/** Distance learning — one controller, ?kind=course|lecture|enrollment|diploma */
+/** Distance learning — one controller, ?kind=course|lecture|enrollment|diploma|quiz */
 export const elearningController = {
   async list(req: Request) {
     const { session, error } = await requireAuth();
@@ -538,6 +588,7 @@ export const elearningController = {
     try {
       const kind = eKind(req);
       const courseId = new URL(req.url).searchParams.get("courseId");
+      const quizId = new URL(req.url).searchParams.get("quizId");
       const portal = await elearningService.scopeFor(session!);
       const scope =
         portal.role === "teacher" && portal.teacherId
@@ -546,10 +597,28 @@ export const elearningController = {
             ? { studentId: portal.studentId }
             : undefined;
       if (portal.role === "teacher" && !portal.teacherId) {
-        return jsonOk({ kind, stats: await elearningService.stats(scope), courses: [], lectures: [], enrollments: [], diplomas: [], portal });
+        return jsonOk({
+          kind,
+          stats: await elearningService.stats(scope),
+          courses: [],
+          lectures: [],
+          enrollments: [],
+          diplomas: [],
+          quizzes: [],
+          portal,
+        });
       }
       if (portal.role === "student" && !portal.studentId) {
-        return jsonOk({ kind, stats: await elearningService.stats(scope), courses: [], lectures: [], enrollments: [], diplomas: [], portal });
+        return jsonOk({
+          kind,
+          stats: await elearningService.stats(scope),
+          courses: [],
+          lectures: [],
+          enrollments: [],
+          diplomas: [],
+          quizzes: [],
+          portal,
+        });
       }
       const stats = await elearningService.stats(scope);
       if (kind === "lecture") {
@@ -576,6 +645,22 @@ export const elearningController = {
           diplomas: await elearningService.listDiplomas(scope),
         });
       }
+      if (kind === "quiz") {
+        return jsonOk({
+          kind,
+          stats,
+          portal,
+          quizzes: await elearningService.listQuizzes(courseId, scope),
+        });
+      }
+      if (kind === "quiz-attempt") {
+        return jsonOk({
+          kind,
+          stats,
+          portal,
+          attempts: await elearningService.listAttempts(quizId, scope),
+        });
+      }
       return jsonOk({
         kind,
         stats,
@@ -588,12 +673,23 @@ export const elearningController = {
   },
 
   async create(req: Request) {
-    const { session, error } = await requireAuth(["admin", "teacher"]);
+    const { session, error } = await requireAuth(["admin", "teacher", "student", "parent"]);
     if (error) return error;
     try {
       const kind = eKind(req);
       const body = await req.json();
       const portal = await elearningService.scopeFor(session!);
+      if (kind === "quiz-attempt") {
+        const parsed = quizAttemptSchema.safeParse(body);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        return jsonOk(
+          { attempt: await elearningService.submitQuiz(parsed.data, session!) },
+          201
+        );
+      }
+      if (session!.role === "student" || session!.role === "parent") {
+        return jsonError("Students can only submit quiz attempts", 403);
+      }
       if (kind === "lecture") {
         const parsed = lectureSchema.safeParse(body);
         if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
@@ -618,6 +714,17 @@ export const elearningController = {
         const parsed = diplomaSchema.safeParse(body);
         if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
         return jsonOk({ diploma: await elearningService.issueDiploma(parsed.data) }, 201);
+      }
+      if (kind === "quiz") {
+        const parsed = quizSchema.safeParse(body);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        return jsonOk({ quiz: await elearningService.createQuiz(parsed.data) }, 201);
+      }
+      if (body.kind === "project-library") {
+        if (session!.role !== "admin") {
+          return jsonError("Only admins can import the project course library", 403);
+        }
+        return jsonOk(await elearningService.seedProjectLibrary(), 201);
       }
       const parsed = courseSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
@@ -696,6 +803,7 @@ export const elearningController = {
       if (kind === "lecture") return jsonOk(await elearningService.removeLecture(id));
       if (kind === "enrollment") return jsonOk(await elearningService.removeEnrollment(id));
       if (kind === "diploma") return jsonOk(await elearningService.removeDiploma(id));
+      if (kind === "quiz") return jsonOk(await elearningService.removeQuiz(id));
       return jsonOk(await elearningService.removeCourse(id));
     } catch (e) {
       return fromServiceError(e);

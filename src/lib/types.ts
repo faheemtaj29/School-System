@@ -94,6 +94,10 @@ export type StudentItem = {
   admissionDate?: string;
   status: "active" | "inactive" | "graduated";
   branchCode?: string;
+  discountType?: string;
+  discountPercent?: number;
+  linkedTeacherId?: TeacherItem | string | null;
+  custom?: Record<string, unknown>;
 };
 
 /** Campus selected in the top bar (shared across admin pages). */
@@ -134,7 +138,12 @@ export type FeeItem = {
   _id: string;
   studentId: StudentItem | string;
   title: string;
+  lines?: { head: string; amount: number }[];
+  originalAmount?: number;
   amount: number;
+  discountPercent?: number;
+  discountAmount?: number;
+  discountType?: string;
   dueDate: string;
   status: "pending" | "paid" | "overdue" | "partial";
   paidAmount: number;

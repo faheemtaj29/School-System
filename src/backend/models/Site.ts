@@ -143,7 +143,7 @@ export interface IAdmission {
   howHeard?: string;
   message?: string;
   declaration: boolean;
-  status: "new" | "contacted" | "enrolled" | "rejected";
+  status: "new" | "contacted" | "test" | "merit" | "waiting" | "offered" | "enrolled" | "rejected";
   createdAt: Date;
   updatedAt: Date;
 }
@@ -197,7 +197,7 @@ const AdmissionSchema = new Schema<IAdmission>(
     declaration: { type: Boolean, default: false },
     status: {
       type: String,
-      enum: ["new", "contacted", "enrolled", "rejected"],
+      enum: ["new", "contacted", "test", "merit", "waiting", "offered", "enrolled", "rejected"],
       default: "new",
     },
   },

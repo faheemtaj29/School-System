@@ -33,7 +33,8 @@ const navGroups = [
     label: "Overview",
     items: [
       { href: "/dashboard", label: "Dashboard", Icon: DashboardIcon },
-      { href: "/reports", label: "Reports & Print", Icon: ReportsIcon, roles: ["admin", "teacher"] },
+      { href: "/reports", label: "Reports & Print", Icon: ReportsIcon, roles: ["admin", "teacher", "student", "parent"] },
+      { href: "/approvals", label: "Approvals", Icon: NoticeIcon, roles: ["admin", "staff", "teacher"] },
     ],
   },
   {
@@ -61,6 +62,7 @@ const navGroups = [
       { href: "/fees", label: "Fee Vouchers", Icon: FeesIcon, roles: ["admin", "staff", "student", "parent"] },
       { href: "/accounting", label: "Accounting", Icon: AccountingIcon, roles: ["admin"] },
       { href: "/inventory", label: "Inventory", Icon: InventoryIcon, roles: ["admin", "staff"] },
+      { href: "/campus", label: "Campus Ops", Icon: InventoryIcon, roles: ["admin", "staff", "teacher"] },
     ],
   },
   {

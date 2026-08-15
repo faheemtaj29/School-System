@@ -20,6 +20,14 @@ export interface ICourse {
   liveLink?: string;
   thumbnail?: string;
   branchCode?: string;
+  /** Weekly course outline — lectures, labs, projects, assessments. */
+  outline?: {
+    week: number;
+    title: string;
+    type: "lecture" | "lab" | "project" | "assessment";
+    description?: string;
+    deliverable?: string;
+  }[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -49,6 +57,19 @@ const CourseSchema = new Schema<ICourse>(
     liveLink: String,
     thumbnail: String,
     branchCode: { type: String, uppercase: true, trim: true },
+    outline: [
+      {
+        week: { type: Number, required: true },
+        title: { type: String, required: true },
+        type: {
+          type: String,
+          enum: ["lecture", "lab", "project", "assessment"],
+          default: "lecture",
+        },
+        description: String,
+        deliverable: String,
+      },
+    ],
   },
   { timestamps: true }
 );
@@ -160,3 +181,68 @@ const DiplomaSchema = new Schema<IDiploma>(
 );
 
 export const Diploma = models.Diploma || model<IDiploma>("Diploma", DiplomaSchema);
+
+export interface IQuizQuestion {
+  prompt: string;
+  options: string[];
+  correctIndex: number;
+}
+
+export interface IQuiz {
+  courseId: Types.ObjectId;
+  title: string;
+  passPercent: number;
+  questions: IQuizQuestion[];
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const QuizSchema = new Schema<IQuiz>(
+  {
+    courseId: { type: Schema.Types.ObjectId, ref: "Course", required: true },
+    title: { type: String, required: true, trim: true },
+    passPercent: { type: Number, default: 50, min: 1, max: 100 },
+    questions: [
+      {
+        prompt: { type: String, required: true },
+        options: { type: [String], default: [] },
+        correctIndex: { type: Number, default: 0 },
+      },
+    ],
+    active: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+export const Quiz = models.Quiz || model<IQuiz>("Quiz", QuizSchema);
+
+export interface IQuizAttempt {
+  quizId: Types.ObjectId;
+  studentId: Types.ObjectId;
+  answers: number[];
+  score: number;
+  percent: number;
+  passed: boolean;
+  submittedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const QuizAttemptSchema = new Schema<IQuizAttempt>(
+  {
+    quizId: { type: Schema.Types.ObjectId, ref: "Quiz", required: true },
+    studentId: { type: Schema.Types.ObjectId, ref: "Student", required: true },
+    answers: { type: [Number], default: [] },
+    score: { type: Number, default: 0 },
+    percent: { type: Number, default: 0 },
+    passed: { type: Boolean, default: false },
+    submittedAt: { type: Date, default: Date.now },
+  },
+  { timestamps: true }
+);
+
+QuizAttemptSchema.index({ quizId: 1, studentId: 1 });
+
+export const QuizAttempt =
+  models.QuizAttempt || model<IQuizAttempt>("QuizAttempt", QuizAttemptSchema);

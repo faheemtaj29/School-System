@@ -1,10 +1,11 @@
 import { dbConnect } from "@/backend/config/database";
 import { LeaveRequest, Payslip } from "@/backend/models/HR";
-import { ServiceError } from "@/backend/types";
+import { ServiceError, type SessionUser } from "@/backend/types";
 import { parseOptionalDate } from "@/backend/lib/http";
 import type { z } from "zod";
 import type { leaveSchema, payslipSchema } from "@/backend/validators/modules.validator";
 import { accountingService } from "@/backend/services/accounting.service";
+import { platformService } from "@/backend/services/platform.service";
 
 type LeaveInput = z.infer<typeof leaveSchema>;
 type PayslipInput = z.infer<typeof payslipSchema>;
@@ -55,13 +56,38 @@ export const hrService = {
       .lean();
   },
 
-  async createLeave(data: LeaveInput) {
+  async createLeave(data: LeaveInput, session?: SessionUser | null) {
     await dbConnect();
-    return LeaveRequest.create({
+    const leave = await LeaveRequest.create({
       ...data,
       fromDate: new Date(data.fromDate),
       toDate: new Date(data.toDate),
     });
+    if (session) {
+      try {
+        await platformService.seedDefaults();
+        await platformService.startWorkflow(
+          {
+            workflowCode: "LEAVE",
+            subjectType: "leave",
+            subjectId: String(leave._id),
+            title: `Leave · ${data.leaveType} · ${data.days} day(s)`,
+            payload: {
+              leaveType: data.leaveType,
+              fromDate: data.fromDate,
+              toDate: data.toDate,
+              days: data.days,
+              reason: data.reason,
+            },
+            note: data.reason,
+          },
+          session
+        );
+      } catch {
+        /* leave still saved if workflow seed missing */
+      }
+    }
+    return leave;
   },
 
   async updateLeaveStatus(id: string, status: "pending" | "approved" | "rejected", userId?: string) {

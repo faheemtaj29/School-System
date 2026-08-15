@@ -491,15 +491,17 @@ export function FeeForm({
 }) {
   const [form, setForm] = useState({
     studentId: "",
-    title: "",
-    amount: 0,
     dueDate: "",
     status: "pending",
     paidAmount: 0,
     paymentDate: "",
     method: "",
     notes: "",
+    installments: 1,
   });
+  const [lines, setLines] = useState<{ head: string; amount: number }[]>([
+    { head: "Tuition Fee", amount: 0 },
+  ]);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -507,37 +509,83 @@ export function FeeForm({
     if (initial) {
       setForm({
         studentId: idOf(initial.studentId),
-        title: initial.title,
-        amount: initial.amount,
         dueDate: toDateInput(initial.dueDate),
         status: initial.status,
         paidAmount: initial.paidAmount,
         paymentDate: toDateInput(initial.paymentDate),
         method: initial.method ?? "",
         notes: initial.notes ?? "",
+        installments: 1,
       });
+      setLines(
+        initial.lines?.length
+          ? initial.lines.map((l) => ({ head: l.head, amount: l.amount }))
+          : [{ head: initial.title, amount: initial.originalAmount ?? initial.amount }]
+      );
     } else {
       setForm({
         studentId: "",
-        title: "",
-        amount: 0,
-        dueDate: "",
+        dueDate: toDateInput(new Date()),
         status: "pending",
         paidAmount: 0,
         paymentDate: "",
         method: "",
         notes: "",
+        installments: 1,
       });
+      setLines([{ head: "Tuition Fee", amount: 0 }]);
     }
     setError("");
   }, [open, initial]);
 
+  const gross = lines.reduce((sum, line) => sum + (Number(line.amount) || 0), 0);
+
+  function setLine(index: number, patch: Partial<{ head: string; amount: number }>) {
+    setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)));
+  }
+
+  function addLine() {
+    setLines((prev) => [...prev, { head: "", amount: 0 }]);
+  }
+
+  function removeLine(index: number) {
+    setLines((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!initial && form.installments > 1) {
+      const res = await fetch("/api/fees", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "installments",
+          studentId: form.studentId,
+          firstDueDate: form.dueDate,
+          installments: form.installments,
+          lines: lines.filter((l) => l.head.trim()),
+          notes: form.notes,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to create installments");
+        return;
+      }
+      onSaved();
+      onClose();
+      return;
+    }
+    const payload = {
+      ...form,
+      method: form.method || undefined,
+      lines: lines.filter((l) => l.head.trim()),
+    };
+    delete (payload as { installments?: number }).installments;
     const res = await fetch(initial ? `/api/fees/${initial._id}` : "/api/fees", {
       method: initial ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -554,13 +602,19 @@ export function FeeForm({
       onClose={onClose}
       onSubmit={onSubmit}
       title={initial ? "Edit Voucher" : "Generate Fee Voucher"}
-      subtitle="Challan linked to a student record"
+      subtitle="Add each fee head on its own line — total is calculated automatically"
       submitLabel={initial ? "Save Changes" : "Create Voucher"}
+      wide
     >
       {error ? <div className="alert err">{error}</div> : null}
-      <div className="form-grid one">
+      <div className="form-grid">
         <Field label="Student" required>
-          <select className={inputClass} value={form.studentId} onChange={(e) => setForm({ ...form, studentId: e.target.value })} required>
+          <select
+            className={inputClass}
+            value={form.studentId}
+            onChange={(e) => setForm({ ...form, studentId: e.target.value })}
+            required
+          >
             <option value="">Select student</option>
             {students.map((s) => (
               <option key={s._id} value={s._id}>
@@ -569,32 +623,95 @@ export function FeeForm({
             ))}
           </select>
         </Field>
-        <Field label="Voucher Title" required>
-          <OptionSelect
-            listKey="feeHeads"
-            value={form.title}
-            onChange={(title) => setForm({ ...form, title })}
-            placeholder="Select fee head"
-            addLabel="Add fee head"
+        <Field label="Due Date" required>
+          <input
+            type="date"
+            className={inputClass}
+            value={form.dueDate}
+            onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
             required
           />
         </Field>
+        {!initial ? (
+          <Field label="Installments">
+            <input
+              type="number"
+              min={1}
+              max={12}
+              className={inputClass}
+              value={form.installments}
+              onChange={(e) => setForm({ ...form, installments: Number(e.target.value) || 1 })}
+            />
+          </Field>
+        ) : null}
       </div>
+
+      <div className="form-section-title" style={{ marginTop: 18 }}>
+        Fee heads
+      </div>
+      <div className="voucher-line-head fee-line-head">
+        <span>Fee head</span>
+        <span>Amount</span>
+        <span />
+      </div>
+      {lines.map((line, index) => (
+        <div className="voucher-line-row fee-line-row" key={index}>
+          <OptionSelect
+            listKey="feeHeads"
+            value={line.head}
+            onChange={(head) => setLine(index, { head })}
+            placeholder="Select or add fee head"
+            addLabel="Add fee head"
+            required
+          />
+          <input
+            type="number"
+            min={0}
+            className={inputClass}
+            value={line.amount}
+            onChange={(e) => setLine(index, { amount: Number(e.target.value) })}
+            required
+          />
+          <button
+            type="button"
+            className="link-btn danger"
+            onClick={() => removeLine(index)}
+            disabled={lines.length <= 1}
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+      <div className="form-actions" style={{ marginTop: 10, marginBottom: 4 }}>
+        <button type="button" className="btn-ghost" onClick={addLine}>
+          + Add another line
+        </button>
+        <div className="voucher-balance">Gross total · PKR {gross.toLocaleString()}</div>
+      </div>
+
       <div className="form-grid" style={{ marginTop: 16 }}>
-        <Field label="Amount" required>
-          <input type="number" className={inputClass} value={form.amount} onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })} required />
-        </Field>
         <Field label="Paid Amount">
-          <input type="number" className={inputClass} value={form.paidAmount} onChange={(e) => setForm({ ...form, paidAmount: Number(e.target.value) })} />
-        </Field>
-        <Field label="Due Date" required>
-          <input type="date" className={inputClass} value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} required />
+          <input
+            type="number"
+            className={inputClass}
+            value={form.paidAmount}
+            onChange={(e) => setForm({ ...form, paidAmount: Number(e.target.value) })}
+          />
         </Field>
         <Field label="Payment Date">
-          <input type="date" className={inputClass} value={form.paymentDate} onChange={(e) => setForm({ ...form, paymentDate: e.target.value })} />
+          <input
+            type="date"
+            className={inputClass}
+            value={form.paymentDate}
+            onChange={(e) => setForm({ ...form, paymentDate: e.target.value })}
+          />
         </Field>
         <Field label="Status">
-          <select className={inputClass} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+          <select
+            className={inputClass}
+            value={form.status}
+            onChange={(e) => setForm({ ...form, status: e.target.value })}
+          >
             <option value="pending">Pending</option>
             <option value="partial">Partial</option>
             <option value="paid">Paid</option>
@@ -602,7 +719,11 @@ export function FeeForm({
           </select>
         </Field>
         <Field label="Payment Method">
-          <select className={inputClass} value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}>
+          <select
+            className={inputClass}
+            value={form.method}
+            onChange={(e) => setForm({ ...form, method: e.target.value })}
+          >
             <option value="">Select</option>
             <option value="cash">Cash</option>
             <option value="card">Card</option>
@@ -613,7 +734,12 @@ export function FeeForm({
       </div>
       <div style={{ marginTop: 16 }}>
         <Field label="Notes">
-          <textarea className={inputClass} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          <textarea
+            className={inputClass}
+            rows={2}
+            value={form.notes}
+            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+          />
         </Field>
       </div>
     </ModalForm>

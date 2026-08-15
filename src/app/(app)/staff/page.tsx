@@ -30,6 +30,7 @@ type StaffItem = {
 
 const blank = {
   employeeId: "",
+  idMode: "auto",
   firstName: "",
   lastName: "",
   email: "",
@@ -58,30 +59,46 @@ export default function StaffPage() {
 
   useEffect(() => {
     if (!open) return;
-    setForm(
-      editing
-        ? {
-            employeeId: editing.employeeId,
-            firstName: editing.firstName,
-            lastName: editing.lastName,
-            email: editing.email,
-            phone: editing.phone || "",
-            department: editing.department,
-            designation: editing.designation,
-            status: editing.status,
-            branchCode: editing.branchCode || "",
-          }
-        : blank
-    );
+    if (editing) {
+      setForm({
+        employeeId: editing.employeeId,
+        idMode: "manual",
+        firstName: editing.firstName,
+        lastName: editing.lastName,
+        email: editing.email,
+        phone: editing.phone || "",
+        department: editing.department,
+        designation: editing.designation,
+        status: editing.status,
+        branchCode: editing.branchCode || "",
+      });
+    } else {
+      setForm(blank);
+      fetch("/api/numbers?kind=staff")
+        .then((r) => r.json())
+        .then((d) =>
+          setForm((prev) => ({
+            ...prev,
+            employeeId: d.next || "",
+            idMode: d.modes?.employeeIdMode === "manual" ? "manual" : "auto",
+          }))
+        )
+        .catch(() => undefined);
+    }
     setError("");
   }, [open, editing]);
 
   async function save(e: FormEvent) {
     e.preventDefault();
+    const { idMode, ...rest } = form;
+    const payload = {
+      ...rest,
+      employeeId: idMode === "auto" && !editing ? "" : form.employeeId,
+    };
     const res = await fetch(editing ? `/api/staff/${editing._id}` : "/api/staff", {
       method: editing ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -184,12 +201,45 @@ export default function StaffPage() {
         {error ? <div className="alert err">{error}</div> : null}
         <div className="form-grid">
           <Field label="Employee ID" required>
-            <input
-              className={inputClass}
-              value={form.employeeId}
-              onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
-              required
-            />
+            <div style={{ display: "grid", gap: 6 }}>
+              {!editing ? (
+                <div className="chips">
+                  <button
+                    type="button"
+                    className={`filter-chip${form.idMode === "auto" ? " active" : ""}`}
+                    onClick={() => {
+                      fetch("/api/numbers?kind=staff")
+                        .then((r) => r.json())
+                        .then((d) =>
+                          setForm((p) => ({
+                            ...p,
+                            employeeId: d.next || "",
+                            idMode: "auto",
+                          }))
+                        );
+                    }}
+                  >
+                    Auto
+                  </button>
+                  <button
+                    type="button"
+                    className={`filter-chip${form.idMode === "manual" ? " active" : ""}`}
+                    onClick={() => setForm({ ...form, idMode: "manual" })}
+                  >
+                    Manual
+                  </button>
+                </div>
+              ) : null}
+              <input
+                className={inputClass}
+                value={form.employeeId}
+                onChange={(e) =>
+                  setForm({ ...form, employeeId: e.target.value, idMode: "manual" })
+                }
+                required={form.idMode === "manual" || Boolean(editing)}
+                readOnly={!editing && form.idMode === "auto"}
+              />
+            </div>
           </Field>
           <Field label="First name" required>
             <input

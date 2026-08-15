@@ -22,3 +22,24 @@ export { Notice } from "./Notice";
 export { Course, Lecture, Enrollment, Diploma } from "./ELearning";
 export { SiteContent, Admission } from "./Site";
 export { Staff } from "./Staff";
+export {
+  Institution,
+  CustomField,
+  WorkflowDefinition,
+  WorkflowInstance,
+  AuditEvent,
+} from "./Platform";
+export {
+  TimetableSlot,
+  LibraryBook,
+  LibraryLoan,
+  TransportVehicle,
+  HostelRoom,
+  HostelAllocation,
+  MedicalVisit,
+  CafeItem,
+  CafeSale,
+  Asset,
+  ManagedDocument,
+  AiJob,
+} from "./CampusModules";

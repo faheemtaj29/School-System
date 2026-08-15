@@ -14,6 +14,8 @@ export interface ILedgerEntry {
   title: string;
   amount: number;
   taxAmount: number;
+  /** Withholding tax deducted on vendor payments. */
+  whtAmount?: number;
   date: Date;
   method?: "cash" | "bank" | "online" | "cheque";
   reference?: string;
@@ -22,6 +24,9 @@ export interface ILedgerEntry {
   sourceType: LedgerSource;
   sourceId?: Types.ObjectId | string;
   recordedBy?: Types.ObjectId;
+  /** Bank reconciliation flag for cash/bank lines. */
+  reconciled?: boolean;
+  reconciledAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +38,7 @@ const LedgerSchema = new Schema<ILedgerEntry>(
     title: { type: String, required: true, trim: true },
     amount: { type: Number, required: true, min: 0 },
     taxAmount: { type: Number, default: 0, min: 0 },
+    whtAmount: { type: Number, default: 0, min: 0 },
     date: { type: Date, required: true },
     method: { type: String, enum: ["cash", "bank", "online", "cheque"] },
     reference: String,
@@ -45,6 +51,8 @@ const LedgerSchema = new Schema<ILedgerEntry>(
     },
     sourceId: { type: Schema.Types.Mixed },
     recordedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    reconciled: { type: Boolean, default: false },
+    reconciledAt: Date,
   },
   { timestamps: true }
 );

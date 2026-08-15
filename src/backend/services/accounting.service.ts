@@ -249,6 +249,13 @@ async function movementsByAccount(match: Record<string, unknown>) {
   );
 }
 
+type ReportGroup = {
+  code: string;
+  name: string;
+  total: number;
+  accounts: { code: string; name: string; amount: number }[];
+};
+
 /** Resolves the level-2 reporting head (e.g. "Operating Income") for any account. */
 async function groupResolver() {
   const all = await Account.find().select("code name level parentCode type").lean();
@@ -666,16 +673,13 @@ export const accountingService = {
     };
 
     const buildSection = (type: "income" | "expense") => {
-      const groups = new Map<
-        string,
-        { code: string; name: string; total: number; accounts: { code: string; name: string; amount: number }[] }
-      >();
+      const groups = new Map<string, ReportGroup>();
       for (const row of tb.rows.filter((r) => r.type === type)) {
         const amount = valueOf(row, type === "income");
         if (!amount) continue;
         const group = groupOf(row.code);
         const key = group?.code || row.code;
-        const entry =
+        const entry: ReportGroup =
           groups.get(key) ||
           { code: key, name: group?.name || row.name, total: 0, accounts: [] };
         entry.accounts.push({ code: row.code, name: row.name, amount });
@@ -704,10 +708,7 @@ export const accountingService = {
 
     const buildSection = (type: "asset" | "liability" | "equity") => {
       const creditPositive = type !== "asset";
-      const groups = new Map<
-        string,
-        { code: string; name: string; total: number; accounts: { code: string; name: string; amount: number }[] }
-      >();
+      const groups = new Map<string, ReportGroup>();
       for (const row of tb.rows.filter((r) => r.type === type)) {
         const amount = round(
           creditPositive ? row.credit - row.debit : row.debit - row.credit
@@ -715,7 +716,7 @@ export const accountingService = {
         if (!amount) continue;
         const group = groupOf(row.code);
         const key = group?.code || row.code;
-        const entry =
+        const entry: ReportGroup =
           groups.get(key) ||
           { code: key, name: group?.name || row.name, total: 0, accounts: [] };
         entry.accounts.push({ code: row.code, name: row.name, amount });
@@ -1087,5 +1088,55 @@ export const accountingService = {
     }
     await item.deleteOne();
     return { ok: true };
+  },
+
+  async setReconciled(id: string, reconciled: boolean) {
+    await dbConnect();
+    const item = await LedgerEntry.findByIdAndUpdate(
+      id,
+      {
+        reconciled,
+        reconciledAt: reconciled ? new Date() : null,
+      },
+      { new: true }
+    );
+    if (!item) throw new ServiceError("NOT_FOUND", "Entry not found", 404);
+    return item;
+  },
+
+  /** Apply FBR-style withholding on an expense and post a WHT payable note. */
+  async applyWht(id: string) {
+    await dbConnect();
+    const settings = await Settings.findOne().lean();
+    const rate = settings?.whtRate ?? 0;
+    if (rate <= 0) {
+      throw new ServiceError("VALIDATION", "Set WHT rate in Settings → Tax & Finance first", 400);
+    }
+    const item = await LedgerEntry.findById(id);
+    if (!item) throw new ServiceError("NOT_FOUND", "Entry not found", 404);
+    if (item.type !== "expense") {
+      throw new ServiceError("VALIDATION", "WHT applies to expense payments only", 400);
+    }
+    if ((item.whtAmount || 0) > 0) {
+      throw new ServiceError("CONFLICT", "WHT already applied on this entry", 409);
+    }
+    const wht = Math.round(((item.amount * rate) / 100) * 100) / 100;
+    item.whtAmount = wht;
+    item.notes = `${item.notes ? `${item.notes} · ` : ""}WHT ${rate}% = ${wht}`;
+    await item.save();
+    return item;
+  },
+
+  async bankReconSummary(branchCode?: string | null) {
+    await dbConnect();
+    const filter: Record<string, unknown> = {
+      method: { $in: ["bank", "online", "cheque"] },
+    };
+    if (branchCode) filter.branchCode = branchCode.toUpperCase();
+    const [open, done] = await Promise.all([
+      LedgerEntry.countDocuments({ ...filter, reconciled: { $ne: true } }),
+      LedgerEntry.countDocuments({ ...filter, reconciled: true }),
+    ]);
+    return { open, done, total: open + done };
   },
 };

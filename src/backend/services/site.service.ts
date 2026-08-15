@@ -14,6 +14,7 @@ import type {
   siteContentSchema,
   admissionSchema,
 } from "@/backend/validators/modules.validator";
+import { platformService } from "@/backend/services/platform.service";
 
 type SiteInput = z.infer<typeof siteContentSchema>;
 type AdmissionInput = z.infer<typeof admissionSchema>;
@@ -101,7 +102,16 @@ export const siteService = {
       Admission.find(filter).populate("courseId", "code title").sort({ createdAt: -1 }).lean(),
       Admission.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
     ]);
-    const stats = { new: 0, contacted: 0, enrolled: 0, rejected: 0 };
+    const stats = {
+      new: 0,
+      contacted: 0,
+      test: 0,
+      merit: 0,
+      waiting: 0,
+      offered: 0,
+      enrolled: 0,
+      rejected: 0,
+    };
     for (const c of counts) {
       if (c._id in stats) stats[c._id as keyof typeof stats] = c.count;
     }
@@ -110,7 +120,7 @@ export const siteService = {
 
   async apply(data: AdmissionInput) {
     await dbConnect();
-    return Admission.create({
+    const item = await Admission.create({
       ...data,
       dateOfBirth: parseOptionalDate(data.dateOfBirth),
       studentCnic: normalizeCnic(data.studentCnic),
@@ -122,6 +132,26 @@ export const siteService = {
       branchCode: data.branchCode.toUpperCase(),
       academicYear: data.academicYear || undefined,
     });
+    try {
+      await platformService.seedDefaults();
+      await platformService.startWorkflow(
+        {
+          workflowCode: "ADMISSION",
+          subjectType: "admission",
+          subjectId: String(item._id),
+          title: `Admission · ${item.applicantName}`,
+          payload: {
+            classApplied: item.classApplied,
+            phone: item.phone,
+            branchCode: item.branchCode,
+          },
+        },
+        { id: "public", name: "Public admissions", role: "admin" }
+      );
+    } catch {
+      /* application saved even if workflow not seeded */
+    }
+    return item;
   },
 
   async setAdmissionStatus(id: string, status: string) {

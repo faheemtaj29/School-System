@@ -10,7 +10,15 @@ import {
 } from "@/backend/lib/http";
 import { feeService } from "@/backend/services/fee.service";
 import { resolveStudent } from "@/backend/lib/portal";
-import { feeSchema } from "@/backend/validators/fee.validator";
+import { bulkFeeSchema, feeSchema, installmentFeeSchema } from "@/backend/validators/fee.validator";
+import { z } from "zod";
+
+const waiverSchema = z.object({
+  studentId: z.string().min(1),
+  percent: z.coerce.number().min(1).max(100),
+  discountType: z.string().optional(),
+  note: z.string().optional(),
+});
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -37,10 +45,31 @@ export const feeController = {
   },
 
   async create(req: Request) {
-    const { error } = await requireAuth(["admin", "staff"]);
+    const { session, error } = await requireAuth(["admin", "staff"]);
     if (error) return error;
     try {
       const body = await req.json();
+      if (body.kind === "bulk") {
+        const parsed = bulkFeeSchema.safeParse(body);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        return jsonOk(await feeService.generateBulk(parsed.data), 201);
+      }
+      if (body.kind === "installments") {
+        const parsed = installmentFeeSchema.safeParse(body);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        return jsonOk(await feeService.createInstallments(parsed.data), 201);
+      }
+      if (body.kind === "late-fees") {
+        return jsonOk(await feeService.applyLateFees());
+      }
+      if (body.kind === "waiver") {
+        const parsed = waiverSchema.safeParse(body);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        return jsonOk(
+          { instance: await feeService.requestWaiver(parsed.data, session!) },
+          201
+        );
+      }
       const parsed = feeSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
       return jsonOk({ fee: await feeService.create(parsed.data) }, 201);

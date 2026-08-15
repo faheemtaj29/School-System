@@ -1,7 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { EmptyState, Hero, NameCell, Panel, StatusBadge } from "@/components/ui";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  EmptyState,
+  Field,
+  Hero,
+  ModalForm,
+  NameCell,
+  OptionSelect,
+  Panel,
+  StatusBadge,
+  inputClass,
+} from "@/components/ui";
 import { FeeForm } from "@/components/forms/SchoolForms";
 import {
   FeeItem,
@@ -10,6 +20,7 @@ import {
   fullName,
   labelOfClass,
   prettyDate,
+  toDateInput,
 } from "@/lib/types";
 
 const filters = ["all", "pending", "partial", "paid", "overdue"] as const;
@@ -24,6 +35,16 @@ export default function FeesPage() {
   const [voucherId, setVoucherId] = useState("");
   const [role, setRole] = useState("admin");
   const canEdit = role === "admin" || role === "staff";
+  const [classes, setClasses] = useState<{ _id: string; name: string; section: string }[]>([]);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState("");
+  const [bulk, setBulk] = useState({
+    classId: "",
+    dueDate: toDateInput(new Date()),
+  });
+  const [bulkLines, setBulkLines] = useState<{ head: string; amount: number }[]>([
+    { head: "Tuition Fee", amount: 0 },
+  ]);
 
   const load = useCallback(async () => {
     const me = await fetch("/api/auth/me").then((r) => r.json()).catch(() => ({}));
@@ -32,10 +53,41 @@ export default function FeesPage() {
     const f = await fetch("/api/fees").then((r) => r.json());
     setFees(f.fees || []);
     if (myRole === "admin" || myRole === "staff") {
-      const s = await fetch("/api/students").then((r) => r.json());
+      const [s, c] = await Promise.all([
+        fetch("/api/students").then((r) => r.json()),
+        fetch("/api/classes").then((r) => r.json()),
+      ]);
       setStudents(s.students || []);
+      setClasses(c.classes || []);
     }
   }, []);
+
+  async function runBulk(e: FormEvent) {
+    e.preventDefault();
+    setBulkMsg("");
+    const res = await fetch("/api/fees", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "bulk",
+        classId: bulk.classId || null,
+        dueDate: bulk.dueDate,
+        lines: bulkLines.filter((l) => l.head.trim()),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setBulkMsg(data.error || "Could not generate vouchers");
+      return;
+    }
+    setBulkMsg(
+      `${data.created} voucher(s) raised · ${data.skipped} already billed · PKR ${formatNumber(data.billedAmount)} receivable` +
+        (data.discountTotal
+          ? ` · PKR ${formatNumber(data.discountTotal)} concessions applied`
+          : "")
+    );
+    load();
+  }
 
   useEffect(() => {
     load();
@@ -108,6 +160,71 @@ export default function FeesPage() {
           </div>
         </div>
 
+        {canEdit ? (
+          <div className="form-actions no-print" style={{ marginTop: 0, marginBottom: 14 }}>
+            <button
+              type="button"
+              className="btn-dark"
+              onClick={() => {
+                setBulkMsg("");
+                setBulkOpen(true);
+              }}
+            >
+              Auto-generate class vouchers
+            </button>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={async () => {
+                const res = await fetch("/api/fees", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ kind: "late-fees" }),
+                });
+                const data = await res.json();
+                setBulkMsg(
+                  res.ok
+                    ? `Late fees applied on ${data.updated || 0} voucher(s) (${data.percent}% after ${data.graceDays} grace days).`
+                    : data.error || "Late fee run failed"
+                );
+                load();
+              }}
+            >
+              Apply late fees
+            </button>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => {
+                const studentId = students[0]?._id || "";
+                const percent = Number(prompt("Waiver percent (1–100)", "30") || 0);
+                if (!studentId || !percent) return;
+                const sid = prompt("Student ID (paste from list)", studentId);
+                if (!sid) return;
+                fetch("/api/fees", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    kind: "waiver",
+                    studentId: sid,
+                    percent,
+                    discountType: "need_based",
+                  }),
+                }).then(async (res) => {
+                  const data = await res.json();
+                  setBulkMsg(
+                    res.ok
+                      ? "Fee waiver sent to Approvals inbox."
+                      : data.error || "Could not start waiver"
+                  );
+                });
+              }}
+            >
+              Request fee waiver
+            </button>
+          </div>
+        ) : null}
+
         <div className="chips" style={{ marginBottom: 18 }}>
           {filters.map((f) => (
             <button
@@ -157,7 +274,14 @@ export default function FeesPage() {
                           }
                         />
                       </td>
-                      <td>{fee.title}</td>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{fee.title}</div>
+                        {fee.lines?.length ? (
+                          <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
+                            {fee.lines.map((l) => l.head).join(" · ")}
+                          </div>
+                        ) : null}
+                      </td>
                       <td className="num">
                         {formatNumber(fee.paidAmount)} / {formatNumber(fee.amount)}
                       </td>
@@ -235,8 +359,27 @@ export default function FeesPage() {
                   {voucherStudent ? labelOfClass(voucherStudent.classId as never) : "—"}
                 </span>
               </div>
+              {(voucher.lines?.length
+                ? voucher.lines
+                : [{ head: voucher.title, amount: voucher.amount }]
+              ).map((line, i) => (
+                <div className="fee-row" key={`${line.head}-${i}`}>
+                  <span>{line.head}</span>
+                  <span className="mono">{formatNumber(line.amount)}</span>
+                </div>
+              ))}
+              {voucher.discountAmount ? (
+                <div className="fee-row">
+                  <span>
+                    Concession
+                    {voucher.discountType ? ` (${voucher.discountType})` : ""}
+                    {voucher.discountPercent ? ` ${voucher.discountPercent}%` : ""}
+                  </span>
+                  <span className="mono">- {formatNumber(voucher.discountAmount)}</span>
+                </div>
+              ) : null}
               <div className="fee-row">
-                <span>{voucher.title}</span>
+                <span>Net payable</span>
                 <span className="mono">{formatNumber(voucher.amount)}</span>
               </div>
               <div className="fee-row">
@@ -259,6 +402,107 @@ export default function FeesPage() {
           </div>
         </div>
       ) : null}
+
+      <ModalForm
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        onSubmit={runBulk}
+        title="Auto-generate Fee Vouchers"
+        subtitle="Add fee heads line by line — one multi-head challan per active student"
+        submitLabel="Generate Vouchers"
+        wide
+      >
+        {bulkMsg ? <div className="alert">{bulkMsg}</div> : null}
+        <div className="form-grid">
+          <Field label="Class">
+            <select
+              className={inputClass}
+              value={bulk.classId}
+              onChange={(e) => setBulk({ ...bulk, classId: e.target.value })}
+            >
+              <option value="">All classes</option>
+              {classes.map((c) => (
+                <option key={c._id} value={c._id}>
+                  {c.name} — {c.section}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Due Date" required>
+            <input
+              type="date"
+              className={inputClass}
+              value={bulk.dueDate}
+              onChange={(e) => setBulk({ ...bulk, dueDate: e.target.value })}
+              required
+            />
+          </Field>
+        </div>
+
+        <div className="form-section-title" style={{ marginTop: 16 }}>
+          Fee heads
+        </div>
+        <div className="voucher-line-head fee-line-head">
+          <span>Fee head</span>
+          <span>Amount</span>
+          <span />
+        </div>
+        {bulkLines.map((line, index) => (
+          <div className="voucher-line-row fee-line-row" key={index}>
+            <OptionSelect
+              listKey="feeHeads"
+              value={line.head}
+              onChange={(head) =>
+                setBulkLines((prev) =>
+                  prev.map((row, i) => (i === index ? { ...row, head } : row))
+                )
+              }
+              placeholder="Select or add fee head"
+              addLabel="Add fee head"
+              required
+            />
+            <input
+              type="number"
+              min={0}
+              className={inputClass}
+              value={line.amount}
+              onChange={(e) =>
+                setBulkLines((prev) =>
+                  prev.map((row, i) =>
+                    i === index ? { ...row, amount: Number(e.target.value) } : row
+                  )
+                )
+              }
+              required
+            />
+            <button
+              type="button"
+              className="link-btn danger"
+              onClick={() =>
+                setBulkLines((prev) =>
+                  prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)
+                )
+              }
+              disabled={bulkLines.length <= 1}
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+        <div className="form-actions" style={{ marginTop: 10 }}>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => setBulkLines((prev) => [...prev, { head: "", amount: 0 }])}
+          >
+            + Add fee head line
+          </button>
+          <div className="voucher-balance">
+            Per student · PKR{" "}
+            {formatNumber(bulkLines.reduce((sum, l) => sum + (Number(l.amount) || 0), 0))}
+          </div>
+        </div>
+      </ModalForm>
 
       <FeeForm
         open={open}

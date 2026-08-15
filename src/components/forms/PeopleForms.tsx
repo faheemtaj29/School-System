@@ -21,6 +21,7 @@ type Props = {
 
 const empty = {
   admissionNo: "",
+  idMode: "auto",
   firstName: "",
   lastName: "",
   email: "",
@@ -36,6 +37,10 @@ const empty = {
   admissionDate: "",
   status: "active",
   branchCode: "",
+  discountType: "none",
+  discountPercent: "0",
+  linkedTeacherId: "",
+  custom: {} as Record<string, string>,
 };
 
 /** Campus list shared by both people forms. */
@@ -53,13 +58,30 @@ function useBranches() {
 export function StudentForm({ open, onClose, onSaved, initial, classes }: Props) {
   const [form, setForm] = useState(empty);
   const [error, setError] = useState("");
+  const [teachers, setTeachers] = useState<TeacherItem[]>([]);
+  const [customDefs, setCustomDefs] = useState<
+    { key: string; label: string; fieldType: string; options?: string[]; required?: boolean; helpText?: string }[]
+  >([]);
   const branches = useBranches();
+
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/teachers")
+      .then((r) => r.json())
+      .then((d) => setTeachers(d.teachers || []))
+      .catch(() => undefined);
+    fetch("/api/platform?view=fields&entity=student")
+      .then((r) => r.json())
+      .then((d) => setCustomDefs(d.fields || []))
+      .catch(() => undefined);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     if (initial) {
       setForm({
         admissionNo: initial.admissionNo,
+        idMode: "manual",
         firstName: initial.firstName,
         lastName: initial.lastName,
         email: initial.email ?? "",
@@ -75,9 +97,23 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
         admissionDate: toDateInput(initial.admissionDate),
         status: initial.status,
         branchCode: initial.branchCode ?? "",
+        discountType: initial.discountType ?? "none",
+        discountPercent: String(initial.discountPercent ?? 0),
+        linkedTeacherId: idOf(initial.linkedTeacherId as never) || "",
+        custom: (initial.custom as Record<string, string>) || {},
       });
     } else {
       setForm(empty);
+      fetch("/api/numbers?kind=student")
+        .then((r) => r.json())
+        .then((d) => {
+          setForm((prev) => ({
+            ...prev,
+            admissionNo: d.next || "",
+            idMode: d.modes?.studentIdMode === "manual" ? "manual" : "auto",
+          }));
+        })
+        .catch(() => undefined);
     }
     setError("");
   }, [open, initial]);
@@ -89,10 +125,17 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    const payload = {
+      ...form,
+      admissionNo: form.idMode === "auto" && !initial ? "" : form.admissionNo,
+      discountPercent: Number(form.discountPercent || 0),
+      linkedTeacherId: form.linkedTeacherId || null,
+    };
+    delete (payload as { idMode?: string }).idMode;
     const res = await fetch(initial ? `/api/students/${initial._id}` : "/api/students", {
       method: initial ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -109,7 +152,7 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
       onClose={onClose}
       onSubmit={onSubmit}
       title={initial ? "Edit Student" : "New Admission Form"}
-      subtitle="Personal, academic and guardian details"
+      subtitle="Personal, academic, guardian and fee concession details"
       wide
       submitLabel={initial ? "Update Student" : "Enroll Student"}
     >
@@ -148,7 +191,42 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
       <div className="form-section-title">Academic Details</div>
       <div className="form-grid">
         <Field label="Admission No." required>
-          <input className={inputClass} value={form.admissionNo} onChange={(e) => set("admissionNo", e.target.value)} placeholder="e.g. ADM-0441" required />
+          <div style={{ display: "grid", gap: 6 }}>
+            {!initial ? (
+              <div className="chips">
+                <button
+                  type="button"
+                  className={`filter-chip${form.idMode === "auto" ? " active" : ""}`}
+                  onClick={() => {
+                    set("idMode", "auto");
+                    fetch("/api/numbers?kind=student")
+                      .then((r) => r.json())
+                      .then((d) => set("admissionNo", d.next || ""));
+                  }}
+                >
+                  Auto
+                </button>
+                <button
+                  type="button"
+                  className={`filter-chip${form.idMode === "manual" ? " active" : ""}`}
+                  onClick={() => set("idMode", "manual")}
+                >
+                  Manual
+                </button>
+              </div>
+            ) : null}
+            <input
+              className={inputClass}
+              value={form.admissionNo}
+              onChange={(e) => {
+                set("admissionNo", e.target.value);
+                if (!initial) set("idMode", "manual");
+              }}
+              placeholder="STD-MAIN-2026-00001"
+              required={form.idMode === "manual" || Boolean(initial)}
+              readOnly={!initial && form.idMode === "auto"}
+            />
+          </div>
         </Field>
         <Field label="Roll Number">
           <input className={inputClass} value={form.rollNumber} onChange={(e) => set("rollNumber", e.target.value)} placeholder="e.g. 081" />
@@ -197,11 +275,132 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
           <input type="email" className={inputClass} value={form.parentEmail} onChange={(e) => set("parentEmail", e.target.value)} />
         </Field>
       </div>
+
+      <div className="form-section-title">Fee Concession</div>
+      <div className="form-grid">
+        <Field label="Concession type">
+          <select
+            className={inputClass}
+            value={form.discountType}
+            onChange={(e) => {
+              const type = e.target.value;
+              const defaults: Record<string, string> = {
+                none: "0",
+                teacher_child: "50",
+                staff_child: "40",
+                sibling: "25",
+                merit: "100",
+                need_based: "30",
+                custom: form.discountPercent || "0",
+              };
+              setForm((prev) => ({
+                ...prev,
+                discountType: type,
+                discountPercent: defaults[type] ?? "0",
+              }));
+            }}
+          >
+            <option value="none">No discount</option>
+            <option value="teacher_child">Teacher&apos;s son / daughter (50%)</option>
+            <option value="staff_child">Staff child (40%)</option>
+            <option value="sibling">Sibling concession (25%)</option>
+            <option value="merit">Merit scholarship (100%)</option>
+            <option value="need_based">Need-based (30%)</option>
+            <option value="custom">Custom percent</option>
+          </select>
+        </Field>
+        <Field label="Discount %">
+          <input
+            type="number"
+            min="0"
+            max="100"
+            className={inputClass}
+            value={form.discountPercent}
+            onChange={(e) => set("discountPercent", e.target.value)}
+            disabled={form.discountType === "none"}
+          />
+        </Field>
+        {form.discountType === "teacher_child" || form.discountType === "staff_child" ? (
+          <Field label="Linked teacher / employee">
+            <select
+              className={inputClass}
+              value={form.linkedTeacherId}
+              onChange={(e) => set("linkedTeacherId", e.target.value)}
+            >
+              <option value="">Select employee</option>
+              {teachers.map((t) => (
+                <option key={t._id} value={t._id}>
+                  {t.firstName} {t.lastName} · {t.employeeId}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
+      </div>
+
+      {customDefs.length ? (
+        <>
+          <div className="form-section-title">Custom fields</div>
+          <div className="form-grid">
+            {customDefs.map((def) => (
+              <Field key={def.key} label={def.label} required={def.required}>
+                {def.fieldType === "select" ? (
+                  <select
+                    className={inputClass}
+                    value={form.custom[def.key] || ""}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        custom: { ...prev.custom, [def.key]: e.target.value },
+                      }))
+                    }
+                    required={def.required}
+                  >
+                    <option value="">Select</option>
+                    {(def.options || []).map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                ) : def.fieldType === "boolean" ? (
+                  <select
+                    className={inputClass}
+                    value={form.custom[def.key] || ""}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        custom: { ...prev.custom, [def.key]: e.target.value },
+                      }))
+                    }
+                  >
+                    <option value="">—</option>
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                  </select>
+                ) : (
+                  <input
+                    className={inputClass}
+                    type={def.fieldType === "number" ? "number" : def.fieldType === "date" ? "date" : "text"}
+                    value={form.custom[def.key] || ""}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        custom: { ...prev.custom, [def.key]: e.target.value },
+                      }))
+                    }
+                    required={def.required}
+                    placeholder={def.helpText || ""}
+                  />
+                )}
+              </Field>
+            ))}
+          </div>
+        </>
+      ) : null}
     </ModalForm>
   );
 }
-
-type TeacherProps = {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -212,6 +411,7 @@ type TeacherProps = {
 
 const teacherEmpty = {
   employeeId: "",
+  idMode: "auto",
   firstName: "",
   lastName: "",
   email: "",
@@ -244,6 +444,7 @@ export function TeacherForm({
     if (initial) {
       setForm({
         employeeId: initial.employeeId,
+        idMode: "manual",
         firstName: initial.firstName,
         lastName: initial.lastName,
         email: initial.email,
@@ -260,6 +461,16 @@ export function TeacherForm({
       });
     } else {
       setForm(teacherEmpty);
+      fetch("/api/numbers?kind=teacher")
+        .then((r) => r.json())
+        .then((d) => {
+          setForm((prev) => ({
+            ...prev,
+            employeeId: d.next || "",
+            idMode: d.modes?.employeeIdMode === "manual" ? "manual" : "auto",
+          }));
+        })
+        .catch(() => undefined);
     }
     setError("");
   }, [open, initial]);
@@ -277,10 +488,15 @@ export function TeacherForm({
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    const { idMode, ...rest } = form;
+    const payload = {
+      ...rest,
+      employeeId: idMode === "auto" && !initial ? "" : form.employeeId,
+    };
     const res = await fetch(initial ? `/api/teachers/${initial._id}` : "/api/teachers", {
       method: initial ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -306,7 +522,41 @@ export function TeacherForm({
       <div className="form-section-title">Staff Information</div>
       <div className="form-grid">
         <Field label="Employee ID" required>
-          <input className={inputClass} value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} placeholder="e.g. EMP-1042" required />
+          <div style={{ display: "grid", gap: 6 }}>
+            {!initial ? (
+              <div className="chips">
+                <button
+                  type="button"
+                  className={`filter-chip${form.idMode === "auto" ? " active" : ""}`}
+                  onClick={() => {
+                    setForm((p) => ({ ...p, idMode: "auto" }));
+                    fetch("/api/numbers?kind=teacher")
+                      .then((r) => r.json())
+                      .then((d) => setForm((p) => ({ ...p, employeeId: d.next || "", idMode: "auto" })));
+                  }}
+                >
+                  Auto
+                </button>
+                <button
+                  type="button"
+                  className={`filter-chip${form.idMode === "manual" ? " active" : ""}`}
+                  onClick={() => setForm((p) => ({ ...p, idMode: "manual" }))}
+                >
+                  Manual
+                </button>
+              </div>
+            ) : null}
+            <input
+              className={inputClass}
+              value={form.employeeId}
+              onChange={(e) =>
+                setForm({ ...form, employeeId: e.target.value, idMode: "manual" })
+              }
+              placeholder="TCH-MAIN-2026-00001"
+              required={form.idMode === "manual" || Boolean(initial)}
+              readOnly={!initial && form.idMode === "auto"}
+            />
+          </div>
         </Field>
         <Field label="Email" required>
           <input type="email" className={inputClass} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />

@@ -39,6 +39,15 @@ export const settingsSchema = z.object({
       solid: z.boolean().default(true),
     })
     .optional(),
+  institutionCode: z.string().optional(),
+  institutionType: z.enum(["school", "college", "university", "academy"]).optional(),
+  passPercent: z.coerce.number().min(1).max(100).optional(),
+  attendanceAlertPercent: z.coerce.number().min(1).max(100).optional(),
+  studentIdMode: z.enum(["auto", "manual"]).optional(),
+  employeeIdMode: z.enum(["auto", "manual"]).optional(),
+  lateFeePercent: z.coerce.number().min(0).max(100).optional(),
+  lateFeeGraceDays: z.coerce.number().min(0).max(90).optional(),
+  whtRate: z.coerce.number().min(0).max(100).optional(),
   optionLists: z
     .object({
       ledgerCategories: z.array(z.string()).default([]),
@@ -253,6 +262,18 @@ export const courseSchema = z.object({
   status: z.enum(["draft", "open", "ongoing", "closed"]).default("open"),
   liveLink: z.string().optional(),
   branchCode: z.string().optional(),
+  outline: z
+    .array(
+      z.object({
+        week: z.coerce.number().min(1),
+        title: z.string().min(1),
+        type: z.enum(["lecture", "lab", "project", "assessment"]).default("lecture"),
+        description: z.string().optional(),
+        deliverable: z.string().optional(),
+      })
+    )
+    .optional()
+    .default([]),
 });
 
 export const lectureSchema = z.object({
@@ -287,6 +308,28 @@ export const diplomaSchema = z.object({
   grade: z.string().optional(),
   status: z.enum(["issued", "revoked"]).default("issued"),
   notes: z.string().optional(),
+});
+
+export const quizSchema = z.object({
+  courseId: z.string().min(1),
+  title: z.string().min(1),
+  passPercent: z.coerce.number().min(1).max(100).default(50),
+  questions: z
+    .array(
+      z.object({
+        prompt: z.string().min(1),
+        options: z.array(z.string()).min(2),
+        correctIndex: z.coerce.number().min(0),
+      })
+    )
+    .min(1),
+  active: z.boolean().default(true),
+});
+
+export const quizAttemptSchema = z.object({
+  quizId: z.string().min(1),
+  studentId: z.string().optional(),
+  answers: z.array(z.coerce.number()).min(1),
 });
 
 /** Public website (CMS) */
@@ -383,5 +426,14 @@ export const admissionSchema = z.object({
 });
 
 export const admissionStatusSchema = z.object({
-  status: z.enum(["new", "contacted", "enrolled", "rejected"]),
+  status: z.enum([
+    "new",
+    "contacted",
+    "test",
+    "merit",
+    "waiting",
+    "offered",
+    "enrolled",
+    "rejected",
+  ]),
 });

@@ -6,10 +6,12 @@ import { Teacher } from "@/backend/models/Teacher";
 import { parseOptionalDate } from "@/backend/lib/http";
 import { ServiceError } from "@/backend/types";
 import type { TeacherInput } from "@/backend/validators/teacher.validator";
+import { numberingService } from "@/backend/services/numbering.service";
 
 function toPayload(data: TeacherInput) {
   return {
     ...data,
+    employeeId: data.employeeId || undefined,
     branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
     dateOfBirth: parseOptionalDate(data.dateOfBirth),
     joinDate: parseOptionalDate(data.joinDate),
@@ -43,7 +45,19 @@ export const teacherService = {
 
   async create(data: TeacherInput) {
     await dbConnect();
-    const item = await Teacher.create(toPayload(data));
+    const modes = await numberingService.idModes();
+    const employeeId = await numberingService.resolveCode({
+      kind: "teacher",
+      provided: data.employeeId,
+      mode: modes.employeeIdMode,
+      branch: data.branchCode,
+      label: "Employee ID",
+    });
+    const exists = await Teacher.findOne({ employeeId }).lean();
+    if (exists) {
+      throw new ServiceError("VALIDATION", `Employee ID ${employeeId} already exists`, 409);
+    }
+    const item = await Teacher.create({ ...toPayload(data), employeeId });
     return populated(String(item._id));
   },
 

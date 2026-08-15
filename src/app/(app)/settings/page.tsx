@@ -39,6 +39,47 @@ type Settings = {
   defaultBranchCode: string;
   branches: Branch[];
   theme: Theme;
+  institutionCode?: string;
+  institutionType?: "school" | "college" | "university" | "academy";
+  passPercent?: number;
+  attendanceAlertPercent?: number;
+  studentIdMode?: "auto" | "manual";
+  employeeIdMode?: "auto" | "manual";
+  lateFeePercent?: number;
+  lateFeeGraceDays?: number;
+  whtRate?: number;
+};
+
+type PlatformOverview = {
+  institution?: { code: string; name: string; type: string; modules?: string[] };
+  stats?: { fields: number; workflows: number; pending: number; audits: number };
+  roadmap?: { key: string; label: string; status: string }[];
+};
+
+type CustomFieldRow = {
+  _id: string;
+  entity: string;
+  key: string;
+  label: string;
+  fieldType: string;
+  options?: string[];
+};
+
+type WorkflowRow = {
+  _id: string;
+  code: string;
+  name: string;
+  category: string;
+  steps: { key: string; label: string; role: string }[];
+};
+
+type AuditRow = {
+  _id: string;
+  action: string;
+  entity?: string;
+  summary?: string;
+  createdAt?: string;
+  actorName?: string;
 };
 
 function suggestNextYear(current: string) {
@@ -71,6 +112,15 @@ const empty: Settings = {
   defaultBranchCode: "MAIN",
   branches: [{ code: "MAIN", name: "Main Campus" }],
   theme: DEFAULT_THEME,
+  institutionCode: "MAIN",
+  institutionType: "school",
+  passPercent: 40,
+  attendanceAlertPercent: 75,
+  studentIdMode: "auto",
+  employeeIdMode: "auto",
+  lateFeePercent: 5,
+  lateFeeGraceDays: 7,
+  whtRate: 0,
 };
 
 function ColorField({
@@ -105,10 +155,14 @@ export default function SettingsPage() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [tab, setTab] = useState<
-    "profile" | "sessions" | "appearance" | "finance" | "branches" | "notify"
+    "profile" | "sessions" | "appearance" | "finance" | "branches" | "notify" | "platform"
   >("profile");
   const [newBranch, setNewBranch] = useState({ code: "", name: "", address: "", phone: "" });
   const [busy, setBusy] = useState(false);
+  const [platform, setPlatform] = useState<PlatformOverview | null>(null);
+  const [fields, setFields] = useState<CustomFieldRow[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowRow[]>([]);
+  const [audits, setAudits] = useState<AuditRow[]>([]);
   const [sessionForm, setSessionForm] = useState({
     name: "",
     startDate: "",
@@ -117,6 +171,19 @@ export default function SettingsPage() {
     activate: true,
     copyClassesFrom: "",
   });
+
+  const loadPlatform = useCallback(async () => {
+    const [ov, fl, wf, au] = await Promise.all([
+      fetch("/api/platform").then((r) => r.json()),
+      fetch("/api/platform?view=fields").then((r) => r.json()),
+      fetch("/api/platform?view=workflows").then((r) => r.json()),
+      fetch("/api/platform?view=audit").then((r) => r.json()),
+    ]);
+    setPlatform(ov);
+    setFields(fl.fields || []);
+    setWorkflows(wf.workflows || []);
+    setAudits(au.events || []);
+  }, []);
 
   const load = useCallback(async () => {
     const d = await fetch("/api/settings").then((r) => r.json());
@@ -142,6 +209,9 @@ export default function SettingsPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (tab === "platform") loadPlatform();
+  }, [tab, loadPlatform]);
   // Live preview: inline variables win over the server-rendered theme style tag.
   useEffect(() => {
     const root = document.documentElement;
@@ -256,6 +326,27 @@ export default function SettingsPage() {
     await load();
   }
 
+  async function seedPlatform() {
+    setBusy(true);
+    setMsg("");
+    setErr("");
+    const res = await fetch("/api/platform", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "seed" }),
+    });
+    const data = await res.json();
+    setBusy(false);
+    if (!res.ok) {
+      setErr(data.error || "Could not seed platform defaults");
+      return;
+    }
+    setMsg(
+      `Platform seeded — ${data.workflows || 0} workflows, ${data.fields || 0} custom fields.`
+    );
+    await loadPlatform();
+  }
+
   function addBranch() {
     if (!newBranch.code.trim() || !newBranch.name.trim()) return;
     const code = newBranch.code.toUpperCase().trim();
@@ -308,6 +399,7 @@ export default function SettingsPage() {
               ["finance", "Tax & Finance"],
               ["branches", "Branches"],
               ["notify", "Notifications"],
+              ["platform", "Platform"],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -671,6 +763,30 @@ export default function SettingsPage() {
                   <option value="exclusive">Exclusive (tax added on top)</option>
                 </select>
               </Field>
+              <Field label="Late fee %">
+                <input
+                  type="number"
+                  className={inputClass}
+                  value={form.lateFeePercent ?? 5}
+                  onChange={(e) => setForm({ ...form, lateFeePercent: Number(e.target.value) })}
+                />
+              </Field>
+              <Field label="Late fee grace days">
+                <input
+                  type="number"
+                  className={inputClass}
+                  value={form.lateFeeGraceDays ?? 7}
+                  onChange={(e) => setForm({ ...form, lateFeeGraceDays: Number(e.target.value) })}
+                />
+              </Field>
+              <Field label="WHT rate % (FBR-style)">
+                <input
+                  type="number"
+                  className={inputClass}
+                  value={form.whtRate ?? 0}
+                  onChange={(e) => setForm({ ...form, whtRate: Number(e.target.value) })}
+                />
+              </Field>
               <div className="form-grid one" style={{ gridColumn: "1 / -1" }}>
                 <p style={{ fontSize: 12.5, color: "var(--text-dim)", margin: 0 }}>
                   When fees, inventory, or distance enrollments post to Accounting, tax is calculated from these settings.
@@ -777,6 +893,245 @@ export default function SettingsPage() {
                 </div>
               ))}
             </div>
+          ) : null}
+
+          {tab === "platform" ? (
+            <>
+              <div className="form-section-title">Institution & thresholds</div>
+              <p style={{ margin: "0 0 14px", fontSize: 12.5, color: "var(--text-dim)" }}>
+                Extensible Education ERP foundation — custom fields, approval workflows, and audit
+                trail so future modules (Library, Transport, Hostel, GPA…) plug in without rebuilding
+                the core database.
+              </p>
+              <div className="form-grid">
+                <Field label="Institution code">
+                  <input
+                    className={inputClass}
+                    value={form.institutionCode || "MAIN"}
+                    onChange={(e) =>
+                      setForm({ ...form, institutionCode: e.target.value.toUpperCase() })
+                    }
+                  />
+                </Field>
+                <Field label="Institution type">
+                  <select
+                    className={inputClass}
+                    value={form.institutionType || "school"}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        institutionType: e.target.value as Settings["institutionType"],
+                      })
+                    }
+                  >
+                    <option value="school">School</option>
+                    <option value="college">College</option>
+                    <option value="university">University</option>
+                    <option value="academy">Academy</option>
+                  </select>
+                </Field>
+                <Field label="Pass mark % (promotion)">
+                  <input
+                    type="number"
+                    className={inputClass}
+                    value={form.passPercent ?? 40}
+                    onChange={(e) => setForm({ ...form, passPercent: Number(e.target.value) })}
+                  />
+                </Field>
+                <Field label="Attendance alert below %">
+                  <input
+                    type="number"
+                    className={inputClass}
+                    value={form.attendanceAlertPercent ?? 75}
+                    onChange={(e) =>
+                      setForm({ ...form, attendanceAlertPercent: Number(e.target.value) })
+                    }
+                  />
+                </Field>
+                <Field label="Student ID mode">
+                  <select
+                    className={inputClass}
+                    value={form.studentIdMode || "auto"}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        studentIdMode: e.target.value as Settings["studentIdMode"],
+                      })
+                    }
+                  >
+                    <option value="auto">Auto (suggested + allocated)</option>
+                    <option value="manual">Manual only</option>
+                  </select>
+                </Field>
+                <Field label="Employee ID mode">
+                  <select
+                    className={inputClass}
+                    value={form.employeeIdMode || "auto"}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        employeeIdMode: e.target.value as Settings["employeeIdMode"],
+                      })
+                    }
+                  >
+                    <option value="auto">Auto (suggested + allocated)</option>
+                    <option value="manual">Manual only</option>
+                  </select>
+                </Field>
+              </div>
+
+              <div className="form-section-title" style={{ marginTop: 22 }}>
+                Extensibility hub
+              </div>
+              {platform?.stats ? (
+                <div className="kpi-row four" style={{ marginBottom: 14 }}>
+                  <div className="kpi c1">
+                    <div className="num">{platform.stats.fields}</div>
+                    <div className="tag">Custom fields</div>
+                  </div>
+                  <div className="kpi c2">
+                    <div className="num">{platform.stats.workflows}</div>
+                    <div className="tag">Workflows</div>
+                  </div>
+                  <div className="kpi c3">
+                    <div className="num">{platform.stats.pending}</div>
+                    <div className="tag">Pending approvals</div>
+                  </div>
+                  <div className="kpi c4">
+                    <div className="num">{platform.stats.audits}</div>
+                    <div className="tag">Audit events</div>
+                  </div>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                className="btn-dark"
+                disabled={busy}
+                onClick={seedPlatform}
+                style={{ marginBottom: 16 }}
+              >
+                {busy ? "Seeding…" : "Seed default workflows & fields"}
+              </button>
+
+              <div className="form-section-title">Module roadmap</div>
+              <div className="table-wrap" style={{ marginBottom: 16 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Module</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(platform?.roadmap || []).map((row) => (
+                      <tr key={row.key}>
+                        <td>{row.label}</td>
+                        <td>
+                          <StatusBadge status={row.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="form-section-title">Custom fields</div>
+              <div className="table-wrap" style={{ marginBottom: 16 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Entity</th>
+                      <th>Key</th>
+                      <th>Label</th>
+                      <th>Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fields.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} style={{ color: "var(--text-dim)" }}>
+                          No fields yet — seed defaults above.
+                        </td>
+                      </tr>
+                    ) : (
+                      fields.map((f) => (
+                        <tr key={f._id}>
+                          <td>{f.entity}</td>
+                          <td>
+                            <code>{f.key}</code>
+                          </td>
+                          <td>{f.label}</td>
+                          <td>{f.fieldType}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="form-section-title">Approval workflows</div>
+              <div className="table-wrap" style={{ marginBottom: 16 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Code</th>
+                      <th>Name</th>
+                      <th>Steps</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {workflows.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} style={{ color: "var(--text-dim)" }}>
+                          No workflows — seed defaults to install Leave, Fee Waiver, Purchase,
+                          Scholarship, Admission.
+                        </td>
+                      </tr>
+                    ) : (
+                      workflows.map((w) => (
+                        <tr key={w._id}>
+                          <td>
+                            <code>{w.code}</code>
+                          </td>
+                          <td>{w.name}</td>
+                          <td>{(w.steps || []).map((s) => s.label).join(" → ")}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="form-section-title">Recent audit</div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Action</th>
+                      <th>Entity</th>
+                      <th>When</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {audits.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} style={{ color: "var(--text-dim)" }}>
+                          Audit trail empty — sensitive actions will appear here as modules wire in.
+                        </td>
+                      </tr>
+                    ) : (
+                      audits.slice(0, 12).map((a) => (
+                        <tr key={a._id}>
+                          <td>{a.action}</td>
+                          <td>{a.entity || a.summary || "—"}</td>
+                          <td>{a.createdAt ? prettyDate(a.createdAt) : "—"}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : null}
 
           {tab !== "sessions" ? (

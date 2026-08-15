@@ -52,6 +52,20 @@ export interface ISettings {
   optionLists: IOptionLists;
   /** Look & feel applied across the dashboard, login and public site. */
   theme: ITheme;
+  /** Multi-tenant prep — maps this deployment to an Institution code. */
+  institutionCode?: string;
+  institutionType?: "school" | "college" | "university" | "academy";
+  /** Automation thresholds used across promotion & attendance alerts. */
+  passPercent?: number;
+  attendanceAlertPercent?: number;
+  /** Business ID generation — auto suggests/allocates; manual requires typed code. */
+  studentIdMode?: "auto" | "manual";
+  employeeIdMode?: "auto" | "manual";
+  /** Late fee engine — percent of unpaid balance after grace days. */
+  lateFeePercent?: number;
+  lateFeeGraceDays?: number;
+  /** Withholding tax % for vendor payments (FBR-style). */
+  whtRate?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -121,6 +135,19 @@ const SettingsSchema = new Schema<ISettings>(
       radius: { type: Number, default: 14, min: 0, max: 28 },
       solid: { type: Boolean, default: true },
     },
+    institutionCode: { type: String, uppercase: true, trim: true, default: "MAIN" },
+    institutionType: {
+      type: String,
+      enum: ["school", "college", "university", "academy"],
+      default: "school",
+    },
+    passPercent: { type: Number, default: 40, min: 1, max: 100 },
+    attendanceAlertPercent: { type: Number, default: 75, min: 1, max: 100 },
+    studentIdMode: { type: String, enum: ["auto", "manual"], default: "auto" },
+    employeeIdMode: { type: String, enum: ["auto", "manual"], default: "auto" },
+    lateFeePercent: { type: Number, default: 5, min: 0, max: 100 },
+    lateFeeGraceDays: { type: Number, default: 7, min: 0, max: 90 },
+    whtRate: { type: Number, default: 0, min: 0, max: 100 },
   },
   { timestamps: true }
 );

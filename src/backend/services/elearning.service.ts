@@ -2,7 +2,7 @@
  * Distance learning business logic (courses, lectures, enrollments, diplomas).
  */
 import { dbConnect } from "@/backend/config/database";
-import { Course, Lecture, Enrollment, Diploma } from "@/backend/models/ELearning";
+import { Course, Lecture, Enrollment, Diploma, Quiz, QuizAttempt } from "@/backend/models/ELearning";
 import { Fee } from "@/backend/models/Fee";
 import { parseOptionalDate } from "@/backend/lib/http";
 import { ServiceError, type SessionUser } from "@/backend/types";
@@ -15,12 +15,16 @@ import type {
   lectureSchema,
   enrollmentSchema,
   diplomaSchema,
+  quizSchema,
+  quizAttemptSchema,
 } from "@/backend/validators/modules.validator";
 
 type CourseInput = z.infer<typeof courseSchema>;
 type LectureInput = z.infer<typeof lectureSchema>;
 type EnrollmentInput = z.infer<typeof enrollmentSchema>;
 type DiplomaInput = z.infer<typeof diplomaSchema>;
+type QuizInput = z.infer<typeof quizSchema>;
+type QuizAttemptInput = z.infer<typeof quizAttemptSchema>;
 
 /** Post distance-learning fees to Accounting + optional Fee voucher. */
 async function syncEnrollmentFinance(
@@ -184,6 +188,7 @@ export const elearningService = {
       teacherId: data.teacherId || undefined,
       startDate: parseOptionalDate(data.startDate ?? undefined),
       endDate: parseOptionalDate(data.endDate ?? undefined),
+      outline: data.outline || [],
     });
   },
 
@@ -197,11 +202,44 @@ export const elearningService = {
         teacherId: data.teacherId || null,
         startDate: parseOptionalDate(data.startDate ?? undefined),
         endDate: parseOptionalDate(data.endDate ?? undefined),
+        outline: data.outline || [],
       },
       { new: true }
     ).populate("teacherId", "firstName lastName employeeId");
     if (!item) throw new ServiceError("NOT_FOUND", "Course not found", 404);
     return item;
+  },
+
+  /** Upsert research-backed project / maker course library with weekly outlines. */
+  async seedProjectLibrary() {
+    await dbConnect();
+    const { PROJECT_COURSE_TEMPLATES } = await import("@/backend/data/courseOutlines");
+    let created = 0;
+    let updated = 0;
+    for (const template of PROJECT_COURSE_TEMPLATES) {
+      const existing = await Course.findOne({ code: template.code });
+      if (existing) {
+        await Course.findByIdAndUpdate(existing._id, {
+          title: template.title,
+          description: template.description,
+          mode: template.mode,
+          level: template.level,
+          durationWeeks: template.durationWeeks,
+          fee: template.fee,
+          maxSeats: template.maxSeats,
+          outline: template.outline,
+          status: existing.status === "draft" ? "open" : existing.status,
+        });
+        updated += 1;
+      } else {
+        await Course.create({
+          ...template,
+          status: "open",
+        });
+        created += 1;
+      }
+    }
+    return { created, updated, total: PROJECT_COURSE_TEMPLATES.length };
   },
 
   async removeCourse(id: string) {
@@ -443,5 +481,86 @@ export const elearningService = {
     const item = await Diploma.findByIdAndDelete(id);
     if (!item) throw new ServiceError("NOT_FOUND", "Diploma not found", 404);
     return { ok: true };
+  },
+
+  async listQuizzes(courseId?: string | null, scope?: { teacherId?: string; studentId?: string }) {
+    await dbConnect();
+    const filter: Record<string, unknown> = { active: true };
+    if (courseId) filter.courseId = courseId;
+    if (scope?.teacherId) {
+      const courseIds = (
+        await Course.find({ teacherId: scope.teacherId }).select("_id").lean()
+      ).map((c) => c._id);
+      filter.courseId = courseId ? courseId : { $in: courseIds };
+    }
+    if (scope?.studentId) {
+      const enrolled = (
+        await Enrollment.find({ studentId: scope.studentId, status: { $in: ["active", "completed"] } })
+          .select("courseId")
+          .lean()
+      ).map((e) => e.courseId);
+      filter.courseId = courseId ? courseId : { $in: enrolled };
+    }
+    return Quiz.find(filter)
+      .populate("courseId", "code title")
+      .sort({ updatedAt: -1 })
+      .lean();
+  },
+
+  async createQuiz(data: QuizInput) {
+    await dbConnect();
+    return Quiz.create(data);
+  },
+
+  async removeQuiz(id: string) {
+    await dbConnect();
+    const item = await Quiz.findByIdAndDelete(id);
+    if (!item) throw new ServiceError("NOT_FOUND", "Quiz not found", 404);
+    await QuizAttempt.deleteMany({ quizId: id });
+    return { ok: true };
+  },
+
+  async submitQuiz(data: QuizAttemptInput, session: SessionUser) {
+    await dbConnect();
+    const quiz = await Quiz.findById(data.quizId).lean();
+    if (!quiz) throw new ServiceError("NOT_FOUND", "Quiz not found", 404);
+
+    let studentId = data.studentId;
+    if (session.role === "student" || session.role === "parent") {
+      const student = await resolveStudent(session);
+      if (!student) throw new ServiceError("VALIDATION", "Student profile not linked", 400);
+      studentId = String(student._id);
+    }
+    if (!studentId) throw new ServiceError("VALIDATION", "studentId is required", 400);
+
+    let score = 0;
+    quiz.questions.forEach((q, i) => {
+      if (Number(data.answers[i]) === q.correctIndex) score += 1;
+    });
+    const total = quiz.questions.length || 1;
+    const percent = Math.round((score / total) * 100);
+    const passed = percent >= (quiz.passPercent || 50);
+
+    return QuizAttempt.create({
+      quizId: data.quizId,
+      studentId,
+      answers: data.answers,
+      score,
+      percent,
+      passed,
+      submittedAt: new Date(),
+    });
+  },
+
+  async listAttempts(quizId?: string | null, scope?: { studentId?: string }) {
+    await dbConnect();
+    const filter: Record<string, unknown> = {};
+    if (quizId) filter.quizId = quizId;
+    if (scope?.studentId) filter.studentId = scope.studentId;
+    return QuizAttempt.find(filter)
+      .populate("studentId", "firstName lastName admissionNo")
+      .populate("quizId", "title passPercent")
+      .sort({ submittedAt: -1 })
+      .lean();
   },
 };

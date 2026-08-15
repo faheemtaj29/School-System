@@ -1,5 +1,5 @@
 /**
- * Student HTTP handlers.
+ * Student HTTP handlers — CRUD plus class promotion of passed students.
  */
 import {
   firstZodError,
@@ -9,7 +9,7 @@ import {
   requireAuth,
 } from "@/backend/lib/http";
 import { studentService } from "@/backend/services/student.service";
-import { studentSchema } from "@/backend/validators/student.validator";
+import { promoteSchema, studentSchema } from "@/backend/validators/student.validator";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -46,6 +46,11 @@ export const studentController = {
     if (error) return error;
     try {
       const body = await req.json();
+      if (body.kind === "promote") {
+        const parsed = promoteSchema.safeParse(body);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        return jsonOk(await studentService.promotePassed(parsed.data), 201);
+      }
       const parsed = studentSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
       const student = await studentService.create(parsed.data);

@@ -11,6 +11,8 @@ export { examController } from "./exam.controller";
 export { feeController } from "./fee.controller";
 export { dashboardController } from "./dashboard.controller";
 export { staffController } from "./staff.controller";
+export { platformController } from "./platform.controller";
+export { campusController } from "./campus.controller";
 export {
   settingsController,
   sessionController,

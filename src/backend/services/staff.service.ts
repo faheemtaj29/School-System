@@ -6,6 +6,7 @@ import { Staff } from "@/backend/models/Staff";
 import { ServiceError } from "@/backend/types";
 import { parseOptionalDate } from "@/backend/lib/http";
 import type { StaffInput } from "@/backend/validators/auth.validator";
+import { numberingService } from "@/backend/services/numbering.service";
 
 export const staffService = {
   async list(branchCode?: string | null) {
@@ -17,8 +18,21 @@ export const staffService = {
 
   async create(data: StaffInput) {
     await dbConnect();
+    const modes = await numberingService.idModes();
+    const employeeId = await numberingService.resolveCode({
+      kind: "staff",
+      provided: data.employeeId,
+      mode: modes.employeeIdMode,
+      branch: data.branchCode,
+      label: "Employee ID",
+    });
+    const exists = await Staff.findOne({ employeeId }).lean();
+    if (exists) {
+      throw new ServiceError("VALIDATION", `Employee ID ${employeeId} already exists`, 409);
+    }
     return Staff.create({
       ...data,
+      employeeId,
       email: data.email.toLowerCase(),
       joinDate: parseOptionalDate(data.joinDate),
       branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
