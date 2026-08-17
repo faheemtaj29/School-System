@@ -148,6 +148,26 @@ async function ensureInstitution() {
   return inst;
 }
 
+function withAuditMeta(
+  phase: "before" | "after",
+  payload: Record<string, unknown> | undefined,
+  meta: { action: string; entity: string; entityId?: string; summary: string }
+) {
+  if (!payload) return undefined;
+  return {
+    ...payload,
+    _meta: {
+      schema: "audit.v1",
+      phase,
+      action: meta.action,
+      entity: meta.entity,
+      entityId: meta.entityId,
+      summary: meta.summary,
+      at: new Date().toISOString(),
+    },
+  };
+}
+
 export const platformService = {
   async overview() {
     const inst = await ensureInstitution();
@@ -369,6 +389,19 @@ export const platformService = {
 
     const steps = [...def.steps].sort((a, b) => a.order - b.order);
     const current = steps.find((s) => s.order === instance.currentStep) || steps[0];
+    if (!current) {
+      throw new ServiceError("VALIDATION", "Workflow definition has no steps", 400);
+    }
+
+    const requiredRole = String(current.role || "").toLowerCase();
+    const actorRole = String(session.role || "").toLowerCase();
+    if (actorRole !== "admin" && requiredRole && actorRole !== requiredRole) {
+      throw new ServiceError(
+        "FORBIDDEN",
+        `Only '${requiredRole}' can process this workflow step`,
+        403
+      );
+    }
 
     if (input.action === "reject") {
       instance.status = "rejected";
@@ -467,6 +500,12 @@ export const platformService = {
     after?: Record<string, unknown>;
   }) {
     const inst = await ensureInstitution();
+    const meta = {
+      action: input.action,
+      entity: input.entity,
+      entityId: input.entityId,
+      summary: input.summary,
+    };
     return AuditEvent.create({
       institutionCode: inst.code,
       actorId: input.session?.id,
@@ -476,8 +515,8 @@ export const platformService = {
       entity: input.entity,
       entityId: input.entityId,
       summary: input.summary,
-      before: input.before,
-      after: input.after,
+      before: withAuditMeta("before", input.before, meta),
+      after: withAuditMeta("after", input.after, meta),
     });
   },
 };

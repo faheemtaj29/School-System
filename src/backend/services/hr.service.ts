@@ -1,5 +1,7 @@
 import { dbConnect } from "@/backend/config/database";
 import { LeaveRequest, Payslip } from "@/backend/models/HR";
+import { Settings } from "@/backend/models/Settings";
+import { Teacher } from "@/backend/models/Teacher";
 import { ServiceError, type SessionUser } from "@/backend/types";
 import { parseOptionalDate } from "@/backend/lib/http";
 import type { z } from "zod";
@@ -9,6 +11,41 @@ import { platformService } from "@/backend/services/platform.service";
 
 type LeaveInput = z.infer<typeof leaveSchema>;
 type PayslipInput = z.infer<typeof payslipSchema>;
+
+function normalizeBranch(code?: string | null) {
+  const clean = code?.trim();
+  return clean ? clean.toUpperCase() : undefined;
+}
+
+async function resolveBranchCode(input: {
+  branchCode?: string | null;
+  teacherId?: string;
+}) {
+  const settings = await Settings.findOne().select("branches defaultBranchCode").lean();
+  const configuredBranches = (settings?.branches || [])
+    .map((branch) => normalizeBranch(branch.code))
+    .filter(Boolean);
+  const allowedBranches = new Set(configuredBranches.length ? configuredBranches : ["MAIN"]);
+  const teacherBranch = input.teacherId
+    ? normalizeBranch(
+        (
+          await Teacher.findById(input.teacherId).select("branchCode").lean()
+        )?.branchCode
+      )
+    : undefined;
+  const resolved =
+    normalizeBranch(input.branchCode) ||
+    teacherBranch ||
+    normalizeBranch(settings?.defaultBranchCode) ||
+    "MAIN";
+  if (!allowedBranches.has(resolved)) {
+    throw new ServiceError("VALIDATION", `Unknown branch code '${resolved}'`, 400);
+  }
+  if (teacherBranch && resolved !== teacherBranch) {
+    throw new ServiceError("VALIDATION", "Payslip branch must match teacher branch", 400);
+  }
+  return resolved;
+}
 
 async function syncPayslipLedger(slip: {
   _id: { toString(): string };
@@ -127,9 +164,10 @@ export const hrService = {
   async createPayslip(data: PayslipInput) {
     await dbConnect();
     const net = data.basic + data.allowances - data.deductions;
+    const branchCode = await resolveBranchCode({ branchCode: data.branchCode, teacherId: data.teacherId });
     const slip = await Payslip.create({
       ...data,
-      branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
+      branchCode,
       net,
       paidOn: parseOptionalDate(data.paidOn ?? undefined),
     });
@@ -140,11 +178,12 @@ export const hrService = {
   async updatePayslip(id: string, data: PayslipInput) {
     await dbConnect();
     const net = data.basic + data.allowances - data.deductions;
+    const branchCode = await resolveBranchCode({ branchCode: data.branchCode, teacherId: data.teacherId });
     const item = await Payslip.findByIdAndUpdate(
       id,
       {
         ...data,
-        branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
+        branchCode,
         net,
         paidOn: parseOptionalDate(data.paidOn ?? undefined),
       },

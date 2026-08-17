@@ -9,7 +9,11 @@ import {
   requireAuth,
 } from "@/backend/lib/http";
 import { studentService } from "@/backend/services/student.service";
-import { promoteSchema, studentSchema } from "@/backend/validators/student.validator";
+import {
+  promoteSchema,
+  studentEnrollmentSchema,
+  studentSchema,
+} from "@/backend/validators/student.validator";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -42,14 +46,14 @@ export const studentController = {
   },
 
   async create(req: Request) {
-    const { error } = await requireAuth(["admin", "teacher"]);
+    const { session, error } = await requireAuth(["admin", "teacher"]);
     if (error) return error;
     try {
       const body = await req.json();
       if (body.kind === "promote") {
         const parsed = promoteSchema.safeParse(body);
         if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
-        return jsonOk(await studentService.promotePassed(parsed.data), 201);
+        return jsonOk(await studentService.promotePassed(parsed.data, session!), 201);
       }
       const parsed = studentSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
@@ -66,6 +70,12 @@ export const studentController = {
     try {
       const { id } = await ctx.params;
       const body = await req.json();
+      if (body.kind === "enrollment") {
+        const parsedEnrollment = studentEnrollmentSchema.safeParse(body);
+        if (!parsedEnrollment.success) return jsonError(firstZodError(parsedEnrollment.error.issues));
+        const student = await studentService.addEnrollmentRecord(id, parsedEnrollment.data);
+        return jsonOk({ student });
+      }
       const parsed = studentSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
       const student = await studentService.update(id, parsed.data);

@@ -4,6 +4,9 @@
 import { dbConnect } from "@/backend/config/database";
 import { Course, Lecture, Enrollment, Diploma, Quiz, QuizAttempt } from "@/backend/models/ELearning";
 import { Fee } from "@/backend/models/Fee";
+import { Settings } from "@/backend/models/Settings";
+import { Student } from "@/backend/models/Student";
+import { Teacher } from "@/backend/models/Teacher";
 import { parseOptionalDate } from "@/backend/lib/http";
 import { ServiceError, type SessionUser } from "@/backend/types";
 import { accountingService } from "@/backend/services/accounting.service";
@@ -25,6 +28,58 @@ type EnrollmentInput = z.infer<typeof enrollmentSchema>;
 type DiplomaInput = z.infer<typeof diplomaSchema>;
 type QuizInput = z.infer<typeof quizSchema>;
 type QuizAttemptInput = z.infer<typeof quizAttemptSchema>;
+
+function normalizeBranch(code?: string | null) {
+  const clean = code?.trim();
+  return clean ? clean.toUpperCase() : undefined;
+}
+
+async function resolveScopedBranch(input: {
+  branchCode?: string | null;
+  fallbackBranchCode?: string | null;
+  teacherId?: string | null;
+}) {
+  const settings = await Settings.findOne().select("branches defaultBranchCode").lean();
+  const allowed = new Set(
+    (settings?.branches || []).map((branch) => normalizeBranch(branch.code)).filter(Boolean) || ["MAIN"]
+  );
+  const teacherBranch = input.teacherId
+    ? normalizeBranch((await Teacher.findById(input.teacherId).select("branchCode").lean())?.branchCode)
+    : undefined;
+  const resolved =
+    normalizeBranch(input.branchCode) ||
+    teacherBranch ||
+    normalizeBranch(input.fallbackBranchCode) ||
+    normalizeBranch(settings?.defaultBranchCode) ||
+    "MAIN";
+  if (!allowed.has(resolved)) {
+    throw new ServiceError("VALIDATION", `Unknown branch code '${resolved}'`, 400);
+  }
+  if (teacherBranch && resolved !== teacherBranch) {
+    throw new ServiceError("VALIDATION", "Course branch must match teacher branch", 400);
+  }
+  return resolved;
+}
+
+async function resolveCourseBranch(courseId: string) {
+  const settings = await Settings.findOne().select("branches defaultBranchCode").lean();
+  const allowed = new Set(
+    (settings?.branches || []).map((branch) => normalizeBranch(branch.code)).filter(Boolean) || ["MAIN"]
+  );
+  const course = await Course.findById(courseId).select("branchCode").lean();
+  if (!course) throw new ServiceError("NOT_FOUND", "Course not found", 404);
+  const branchCode = normalizeBranch(course.branchCode) || normalizeBranch(settings?.defaultBranchCode) || "MAIN";
+  if (!allowed.has(branchCode)) {
+    throw new ServiceError("VALIDATION", `Unknown branch code '${branchCode}'`, 400);
+  }
+  return branchCode;
+}
+
+async function resolveStudentBranch(studentId: string) {
+  const student = await Student.findById(studentId).select("branchCode").lean();
+  if (!student) throw new ServiceError("NOT_FOUND", "Student not found", 404);
+  return normalizeBranch(student.branchCode);
+}
 
 /** Post distance-learning fees to Accounting + optional Fee voucher. */
 async function syncEnrollmentFinance(
@@ -88,6 +143,33 @@ async function syncEnrollmentFinance(
 }
 
 export const elearningService = {
+  async assertTeacherOwnsCourse(courseId: string, teacherId: string) {
+    await dbConnect();
+    const course = await Course.findById(courseId).select("teacherId").lean();
+    if (!course) throw new ServiceError("NOT_FOUND", "Course not found", 404);
+    if (!course.teacherId || String(course.teacherId) !== teacherId) {
+      throw new ServiceError("FORBIDDEN", "You can only manage your own courses", 403);
+    }
+  },
+
+  async assertTeacherOwnsLecture(lectureId: string, teacherId: string) {
+    await dbConnect();
+    const lecture = await Lecture.findById(lectureId).select("teacherId courseId").lean();
+    if (!lecture) throw new ServiceError("NOT_FOUND", "Lecture not found", 404);
+    if (lecture.teacherId && String(lecture.teacherId) === teacherId) return;
+    const course = await Course.findById(lecture.courseId).select("teacherId").lean();
+    if (!course?.teacherId || String(course.teacherId) !== teacherId) {
+      throw new ServiceError("FORBIDDEN", "You can only manage your own lectures", 403);
+    }
+  },
+
+  async assertTeacherOwnsQuiz(quizId: string, teacherId: string) {
+    await dbConnect();
+    const quiz = await Quiz.findById(quizId).select("courseId").lean();
+    if (!quiz) throw new ServiceError("NOT_FOUND", "Quiz not found", 404);
+    await this.assertTeacherOwnsCourse(String(quiz.courseId), teacherId);
+  },
+
   async stats(scope?: { teacherId?: string; studentId?: string }) {
     await dbConnect();
     if (scope?.teacherId) {
@@ -182,9 +264,10 @@ export const elearningService = {
 
   async createCourse(data: CourseInput) {
     await dbConnect();
+    const branchCode = await resolveScopedBranch({ branchCode: data.branchCode, teacherId: data.teacherId });
     return Course.create({
       ...data,
-      branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
+      branchCode,
       teacherId: data.teacherId || undefined,
       startDate: parseOptionalDate(data.startDate ?? undefined),
       endDate: parseOptionalDate(data.endDate ?? undefined),
@@ -194,11 +277,18 @@ export const elearningService = {
 
   async updateCourse(id: string, data: CourseInput) {
     await dbConnect();
+    const existing = await Course.findById(id).select("branchCode teacherId").lean();
+    if (!existing) throw new ServiceError("NOT_FOUND", "Course not found", 404);
+    const branchCode = await resolveScopedBranch({
+      branchCode: data.branchCode,
+      fallbackBranchCode: existing.branchCode,
+      teacherId: data.teacherId || (existing.teacherId ? String(existing.teacherId) : undefined),
+    });
     const item = await Course.findByIdAndUpdate(
       id,
       {
         ...data,
-        branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
+        branchCode,
         teacherId: data.teacherId || null,
         startDate: parseOptionalDate(data.startDate ?? undefined),
         endDate: parseOptionalDate(data.endDate ?? undefined),
@@ -206,7 +296,6 @@ export const elearningService = {
       },
       { new: true }
     ).populate("teacherId", "firstName lastName employeeId");
-    if (!item) throw new ServiceError("NOT_FOUND", "Course not found", 404);
     return item;
   },
 
@@ -244,8 +333,10 @@ export const elearningService = {
 
   async removeCourse(id: string) {
     await dbConnect();
-    const item = await Course.findByIdAndDelete(id);
+    const item = await Course.findById(id).select("branchCode").lean();
     if (!item) throw new ServiceError("NOT_FOUND", "Course not found", 404);
+    await resolveCourseBranch(id);
+    await Course.findByIdAndDelete(id);
     await Lecture.deleteMany({ courseId: id });
     await Enrollment.deleteMany({ courseId: id });
     return { ok: true };
@@ -283,6 +374,15 @@ export const elearningService = {
 
   async createLecture(data: LectureInput) {
     await dbConnect();
+    const course = await Course.findById(data.courseId).select("branchCode teacherId").lean();
+    if (!course) throw new ServiceError("NOT_FOUND", "Course not found", 404);
+    const courseBranch = normalizeBranch(course.branchCode);
+    const teacherBranch = data.teacherId
+      ? normalizeBranch((await Teacher.findById(data.teacherId).select("branchCode").lean())?.branchCode)
+      : undefined;
+    if (courseBranch && teacherBranch && courseBranch !== teacherBranch) {
+      throw new ServiceError("VALIDATION", "Lecture teacher branch must match course branch", 400);
+    }
     return Lecture.create({
       ...data,
       teacherId: data.teacherId || undefined,
@@ -292,6 +392,19 @@ export const elearningService = {
 
   async updateLecture(id: string, data: LectureInput) {
     await dbConnect();
+    const existing = await Lecture.findById(id).select("courseId teacherId").lean();
+    if (!existing) throw new ServiceError("NOT_FOUND", "Lecture not found", 404);
+    const course = await Course.findById(existing.courseId).select("branchCode teacherId").lean();
+    if (!course) throw new ServiceError("NOT_FOUND", "Course not found", 404);
+    const courseBranch = normalizeBranch(course.branchCode);
+    const teacherBranch = data.teacherId
+      ? normalizeBranch((await Teacher.findById(data.teacherId).select("branchCode").lean())?.branchCode)
+      : existing.teacherId
+        ? normalizeBranch((await Teacher.findById(existing.teacherId).select("branchCode").lean())?.branchCode)
+        : undefined;
+    if (courseBranch && teacherBranch && courseBranch !== teacherBranch) {
+      throw new ServiceError("VALIDATION", "Lecture teacher branch must match course branch", 400);
+    }
     const item = await Lecture.findByIdAndUpdate(
       id,
       {
@@ -309,8 +422,10 @@ export const elearningService = {
 
   async removeLecture(id: string) {
     await dbConnect();
-    const item = await Lecture.findByIdAndDelete(id);
+    const item = await Lecture.findById(id).select("courseId").lean();
     if (!item) throw new ServiceError("NOT_FOUND", "Lecture not found", 404);
+    await resolveCourseBranch(String(item.courseId));
+    await Lecture.findByIdAndDelete(id);
     return { ok: true };
   },
 
@@ -338,8 +453,13 @@ export const elearningService = {
 
   async enroll(data: EnrollmentInput) {
     await dbConnect();
-    const course = await Course.findById(data.courseId);
+    const course = await Course.findById(data.courseId).select("maxSeats branchCode").lean();
     if (!course) throw new ServiceError("NOT_FOUND", "Course not found", 404);
+    const courseBranch = await resolveCourseBranch(data.courseId);
+    const studentBranch = await resolveStudentBranch(data.studentId);
+    if (studentBranch && studentBranch !== courseBranch) {
+      throw new ServiceError("VALIDATION", "Student branch must match course branch", 400);
+    }
     const count = await Enrollment.countDocuments({
       courseId: data.courseId,
       status: { $in: ["pending", "active"] },
@@ -365,6 +485,11 @@ export const elearningService = {
 
   async updateEnrollment(id: string, data: EnrollmentInput) {
     await dbConnect();
+    const courseBranch = await resolveCourseBranch(data.courseId);
+    const studentBranch = await resolveStudentBranch(data.studentId);
+    if (studentBranch && studentBranch !== courseBranch) {
+      throw new ServiceError("VALIDATION", "Student branch must match course branch", 400);
+    }
     const item = await Enrollment.findByIdAndUpdate(id, data, { new: true })
       .populate("courseId", "code title fee level mode branchCode")
       .populate("studentId", "firstName lastName admissionNo");
@@ -443,8 +568,10 @@ export const elearningService = {
 
   async removeEnrollment(id: string) {
     await dbConnect();
-    const item = await Enrollment.findByIdAndDelete(id);
+    const item = await Enrollment.findById(id).select("courseId").lean();
     if (!item) throw new ServiceError("NOT_FOUND", "Enrollment not found", 404);
+    await resolveCourseBranch(String(item.courseId));
+    await Enrollment.findByIdAndDelete(id);
     await accountingService.removeBySource("elearning", id);
     await Fee.deleteMany({ notes: `EL-${id}` });
     return { ok: true };
@@ -470,6 +597,11 @@ export const elearningService = {
 
   async issueDiploma(data: DiplomaInput) {
     await dbConnect();
+    const courseBranch = await resolveCourseBranch(data.courseId);
+    const studentBranch = await resolveStudentBranch(data.studentId);
+    if (studentBranch && studentBranch !== courseBranch) {
+      throw new ServiceError("VALIDATION", "Student branch must match course branch", 400);
+    }
     return Diploma.create({
       ...data,
       issueDate: parseOptionalDate(data.issueDate) ?? new Date(),
@@ -478,8 +610,10 @@ export const elearningService = {
 
   async removeDiploma(id: string) {
     await dbConnect();
-    const item = await Diploma.findByIdAndDelete(id);
+    const item = await Diploma.findById(id).select("courseId").lean();
     if (!item) throw new ServiceError("NOT_FOUND", "Diploma not found", 404);
+    await resolveCourseBranch(String(item.courseId));
+    await Diploma.findByIdAndDelete(id);
     return { ok: true };
   },
 
@@ -509,13 +643,17 @@ export const elearningService = {
 
   async createQuiz(data: QuizInput) {
     await dbConnect();
+    const course = await Course.findById(data.courseId).select("branchCode teacherId").lean();
+    if (!course) throw new ServiceError("NOT_FOUND", "Course not found", 404);
     return Quiz.create(data);
   },
 
   async removeQuiz(id: string) {
     await dbConnect();
-    const item = await Quiz.findByIdAndDelete(id);
+    const item = await Quiz.findById(id).select("courseId").lean();
     if (!item) throw new ServiceError("NOT_FOUND", "Quiz not found", 404);
+    await resolveCourseBranch(String(item.courseId));
+    await Quiz.findByIdAndDelete(id);
     await QuizAttempt.deleteMany({ quizId: id });
     return { ok: true };
   },

@@ -9,6 +9,7 @@ export { ClassModel } from "./Class";
 export { Subject } from "./Subject";
 export { Teacher } from "./Teacher";
 export { Student } from "./Student";
+export { StudentEnrollment } from "./StudentEnrollment";
 export { Attendance } from "./Attendance";
 export { Exam } from "./Exam";
 export { Fee } from "./Fee";

@@ -74,11 +74,14 @@ export type TeacherItem = {
   qualification?: string;
   status: "active" | "inactive";
   branchCode?: string;
+  photoUrl?: string;
 };
 
 export type StudentItem = {
   _id: string;
   admissionNo: string;
+  studentId?: string;
+  formBNo?: string;
   firstName: string;
   lastName: string;
   email?: string;
@@ -97,6 +100,7 @@ export type StudentItem = {
   discountType?: string;
   discountPercent?: number;
   linkedTeacherId?: TeacherItem | string | null;
+  photoUrl?: string;
   custom?: Record<string, unknown>;
 };
 
@@ -110,6 +114,10 @@ export type AttendanceItem = {
   _id: string;
   classId: ClassItem | string;
   date: string;
+  endDate?: string;
+  examTime?: string;
+  endTime?: string;
+  room?: string;
   records: {
     studentId: StudentItem | string;
     status: "present" | "absent" | "late" | "excused";
@@ -120,7 +128,8 @@ export type AttendanceItem = {
 export type ExamItem = {
   _id: string;
   title: string;
-  examType: "quiz" | "midterm" | "final" | "assignment";
+  examType: string;
+  marksStatus?: "draft" | "submitted" | "verified" | "approved" | "locked" | "published";
   classId: ClassItem | string;
   subjectId: SubjectItem | string;
   teacherId?: TeacherItem | string | null;
@@ -166,6 +175,24 @@ export function labelOfClass(c: ClassItem | string | null | undefined) {
 
 export function fullName(person: { firstName: string; lastName: string }) {
   return `${person.firstName} ${person.lastName}`;
+}
+
+export function calculateAge(date?: string | Date | null) {
+  if (!date) return null;
+  const value = new Date(date);
+  if (Number.isNaN(value.getTime())) return null;
+  const today = new Date();
+  let years = today.getFullYear() - value.getFullYear();
+  const monthDiff = today.getMonth() - value.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < value.getDate())) {
+    years -= 1;
+  }
+  return Math.max(years, 0);
+}
+
+export function ageLabel(date?: string | Date | null) {
+  const age = calculateAge(date);
+  return age == null ? "—" : `${age} yrs`;
 }
 
 export function formatCompact(value: number) {

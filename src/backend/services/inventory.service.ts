@@ -49,6 +49,11 @@ function round(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+function normalizeBranch(code?: string | null) {
+  const clean = code?.trim();
+  return clean ? clean.toUpperCase() : undefined;
+}
+
 function statusFromQty(qty: number, reorder: number) {
   if (qty <= 0) return "out" as const;
   if (qty <= reorder) return "low" as const;
@@ -58,7 +63,28 @@ function statusFromQty(qty: number, reorder: number) {
 async function defaultBranch() {
   await dbConnect();
   const settings = await Settings.findOne().lean();
-  return (settings?.defaultBranchCode || "MAIN").toUpperCase();
+  return normalizeBranch(settings?.defaultBranchCode) || "MAIN";
+}
+
+async function resolveScopedBranch(input: {
+  branchCode?: string;
+  fallbackBranchCode?: string;
+}) {
+  await dbConnect();
+  const settings = await Settings.findOne().select("branches defaultBranchCode").lean();
+  const configured = (settings?.branches || [])
+    .map((b) => normalizeBranch(b.code))
+    .filter(Boolean);
+  const allowed = new Set(configured.length ? configured : ["MAIN"]);
+  const fallback =
+    normalizeBranch(input.fallbackBranchCode) ||
+    normalizeBranch(settings?.defaultBranchCode) ||
+    "MAIN";
+  const resolved = normalizeBranch(input.branchCode) || fallback;
+  if (!allowed.has(resolved)) {
+    throw new ServiceError("VALIDATION", `Unknown branch code '${resolved}'`, 400);
+  }
+  return resolved;
 }
 
 type StockDoc = {
@@ -194,7 +220,10 @@ export const inventoryService = {
 
   async create(data: InventoryInput) {
     await dbConnect();
-    const branchCode = (data.branchCode || (await defaultBranch())).toUpperCase();
+    const branchCode = await resolveScopedBranch({
+      branchCode: data.branchCode,
+      fallbackBranchCode: await defaultBranch(),
+    });
     const item = await InventoryItem.create({
       ...data,
       branchCode,
@@ -227,10 +256,14 @@ export const inventoryService = {
     await dbConnect();
     const item = await InventoryItem.findById(id);
     if (!item) throw new ServiceError("NOT_FOUND", "Item not found", 404);
+    const branchCode = await resolveScopedBranch({
+      branchCode: data.branchCode,
+      fallbackBranchCode: item.branchCode,
+    });
     const { quantity: _ignored, ...rest } = data;
     Object.assign(item, {
       ...rest,
-      branchCode: data.branchCode ? data.branchCode.toUpperCase() : item.branchCode,
+      branchCode,
       status: statusFromQty(item.quantity, data.reorderLevel),
     });
     await item.save();
@@ -279,8 +312,13 @@ export const inventoryService = {
 
   async createVoucher(data: StockVoucherInput, userId?: string) {
     await dbConnect();
-    const branchCode = (data.branchCode || (await defaultBranch())).toUpperCase();
-    const toBranchCode = data.toBranchCode ? data.toBranchCode.toUpperCase() : undefined;
+    const branchCode = await resolveScopedBranch({
+      branchCode: data.branchCode,
+      fallbackBranchCode: await defaultBranch(),
+    });
+    const toBranchCode = data.toBranchCode
+      ? await resolveScopedBranch({ branchCode: data.toBranchCode })
+      : undefined;
     if (data.voucherType === "transfer") {
       if (!toBranchCode) {
         throw new ServiceError("VALIDATION", "Stock transfer needs a destination campus", 400);

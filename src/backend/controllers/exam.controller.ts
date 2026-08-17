@@ -9,7 +9,7 @@ import {
   requireAuth,
 } from "@/backend/lib/http";
 import { examService } from "@/backend/services/exam.service";
-import { examSchema } from "@/backend/validators/exam.validator";
+import { examSchema, examWorkflowSchema } from "@/backend/validators/exam.validator";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -25,27 +25,32 @@ export const examController = {
   },
 
   async create(req: Request) {
-    const { error } = await requireAuth(["admin", "teacher"]);
+    const { session, error } = await requireAuth(["admin", "teacher"]);
     if (error) return error;
     try {
       const body = await req.json();
       const parsed = examSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
-      return jsonOk({ exam: await examService.create(parsed.data) }, 201);
+      return jsonOk({ exam: await examService.create(parsed.data, session!) }, 201);
     } catch (e) {
       return fromServiceError(e);
     }
   },
 
   async update(req: Request, ctx: Ctx) {
-    const { error } = await requireAuth(["admin", "teacher"]);
+    const { session, error } = await requireAuth(["admin", "teacher"]);
     if (error) return error;
     try {
       const { id } = await ctx.params;
       const body = await req.json();
+      if (body?.kind === "workflow") {
+        const flow = examWorkflowSchema.safeParse(body);
+        if (!flow.success) return jsonError(firstZodError(flow.error.issues));
+        return jsonOk({ exam: await examService.applyWorkflow(id, flow.data, session!) });
+      }
       const parsed = examSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
-      return jsonOk({ exam: await examService.update(id, parsed.data) });
+      return jsonOk({ exam: await examService.update(id, parsed.data, session!) });
     } catch (e) {
       return fromServiceError(e);
     }

@@ -23,11 +23,38 @@ import type { SessionUser } from "@/backend/types";
 import { Student } from "@/backend/models/Student";
 import { Teacher } from "@/backend/models/Teacher";
 import { Staff } from "@/backend/models/Staff";
+import { ClassModel } from "@/backend/models/Class";
+import { Settings } from "@/backend/models/Settings";
 import { numberingService } from "@/backend/services/numbering.service";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
 type PersonKind = "student" | "teacher" | "staff";
+
+function normalizeBranch(code?: string | null) {
+  const clean = code?.trim();
+  return clean ? clean.toUpperCase() : undefined;
+}
+
+async function resolveScopedBranch(input: {
+  branchCode?: string;
+  fallbackBranchCode?: string;
+}) {
+  const settings = await Settings.findOne().select("branches defaultBranchCode").lean();
+  const configured = (settings?.branches || [])
+    .map((b) => normalizeBranch(b.code))
+    .filter(Boolean);
+  const allowed = new Set(configured.length ? configured : ["MAIN"]);
+  const fallback =
+    normalizeBranch(input.fallbackBranchCode) ||
+    normalizeBranch(settings?.defaultBranchCode) ||
+    "MAIN";
+  const resolved = normalizeBranch(input.branchCode) || fallback;
+  if (!allowed.has(resolved)) {
+    throw new ServiceError("VALIDATION", `Unknown branch code '${resolved}'`, 400);
+  }
+  return resolved;
+}
 
 /** Resolve a master record so campus modules store linked IDs, not free-typed names. */
 async function resolvePerson(opts: {
@@ -271,9 +298,36 @@ export const campusService = {
     if (conflicts.length) {
       throw new ServiceError("VALIDATION", `Conflict: ${conflicts.join("; ")}`, 400);
     }
+
+    let classBranch: string | undefined;
+    if (data.classId) {
+      const cls = await ClassModel.findById(data.classId).select("branchCode").lean();
+      if (!cls) throw new ServiceError("NOT_FOUND", "Class not found", 404);
+      classBranch = normalizeBranch(cls.branchCode);
+    }
+
+    let teacherBranch: string | undefined;
+    if (data.teacherId) {
+      const teacher = await Teacher.findById(data.teacherId).select("branchCode").lean();
+      if (!teacher) throw new ServiceError("NOT_FOUND", "Teacher not found", 404);
+      teacherBranch = normalizeBranch(teacher.branchCode);
+    }
+
+    const branchCode = await resolveScopedBranch({
+      branchCode: data.branchCode,
+      fallbackBranchCode: classBranch || teacherBranch,
+    });
+    if (classBranch && branchCode !== classBranch) {
+      throw new ServiceError("VALIDATION", "Timetable branch must match class branch", 400);
+    }
+    if (teacherBranch && branchCode !== teacherBranch) {
+      throw new ServiceError("VALIDATION", "Timetable branch must match teacher branch", 400);
+    }
+
     return TimetableSlot.create({
       ...data,
       day,
+      branchCode,
       classId: data.classId || undefined,
       subjectId: data.subjectId || undefined,
       teacherId: data.teacherId || undefined,

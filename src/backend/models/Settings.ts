@@ -26,6 +26,14 @@ export interface ITheme {
   solid: boolean;
 }
 
+export interface IGradeBand {
+  minPercent: number;
+  maxPercent: number;
+  label: string;
+  gradePoint: number;
+  pass: boolean;
+}
+
 /** Singleton-style school settings — profile, tax, branches, theme (lean hub). */
 export interface ISettings {
   schoolName: string;
@@ -66,9 +74,21 @@ export interface ISettings {
   lateFeeGraceDays?: number;
   /** Withholding tax % for vendor payments (FBR-style). */
   whtRate?: number;
+  gradingScale?: IGradeBand[];
   createdAt: Date;
   updatedAt: Date;
 }
+
+const GradeBandSchema = new Schema<IGradeBand>(
+  {
+    minPercent: { type: Number, required: true, min: 0, max: 100 },
+    maxPercent: { type: Number, required: true, min: 0, max: 100 },
+    label: { type: String, required: true, trim: true },
+    gradePoint: { type: Number, required: true, min: 0, max: 5 },
+    pass: { type: Boolean, default: true },
+  },
+  { _id: false }
+);
 
 const BranchSchema = new Schema<IBranch>(
   {
@@ -148,6 +168,22 @@ const SettingsSchema = new Schema<ISettings>(
     lateFeePercent: { type: Number, default: 5, min: 0, max: 100 },
     lateFeeGraceDays: { type: Number, default: 7, min: 0, max: 90 },
     whtRate: { type: Number, default: 0, min: 0, max: 100 },
+    gradingScale: {
+      type: [GradeBandSchema],
+      default: [
+        { minPercent: 85, maxPercent: 100, label: "A+", gradePoint: 4, pass: true },
+        { minPercent: 80, maxPercent: 84.99, label: "A", gradePoint: 3.7, pass: true },
+        { minPercent: 75, maxPercent: 79.99, label: "B+", gradePoint: 3.3, pass: true },
+        { minPercent: 70, maxPercent: 74.99, label: "B", gradePoint: 3, pass: true },
+        { minPercent: 65, maxPercent: 69.99, label: "C+", gradePoint: 2.7, pass: true },
+        { minPercent: 60, maxPercent: 64.99, label: "C", gradePoint: 2.3, pass: true },
+        { minPercent: 55, maxPercent: 59.99, label: "D+", gradePoint: 2, pass: true },
+        { minPercent: 50, maxPercent: 54.99, label: "D", gradePoint: 1.7, pass: true },
+        { minPercent: 45, maxPercent: 49.99, label: "E", gradePoint: 1.3, pass: true },
+        { minPercent: 40, maxPercent: 44.99, label: "P", gradePoint: 1, pass: true },
+        { minPercent: 0, maxPercent: 39.99, label: "F", gradePoint: 0, pass: false },
+      ],
+    },
   },
   { timestamps: true }
 );
