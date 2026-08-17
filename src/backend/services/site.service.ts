@@ -19,35 +19,6 @@ import { platformService } from "@/backend/services/platform.service";
 type SiteInput = z.infer<typeof siteContentSchema>;
 type AdmissionInput = z.infer<typeof admissionSchema>;
 
-function normalizeBranch(code?: string | null) {
-  const clean = code?.trim();
-  return clean ? clean.toUpperCase() : undefined;
-}
-
-async function resolveScopedBranch(input: {
-  branchCode?: string;
-  fallbackBranchCode?: string;
-}) {
-  const settings = await Settings.findOne().select("branches defaultBranchCode").lean();
-  const configured = (settings?.branches || [])
-    .map((b) => normalizeBranch(b.code))
-    .filter(Boolean);
-  const allowed = new Set(configured.length ? configured : ["MAIN"]);
-  const fallback =
-    normalizeBranch(input.fallbackBranchCode) ||
-    normalizeBranch(settings?.defaultBranchCode) ||
-    "MAIN";
-  const resolved = normalizeBranch(input.branchCode) || fallback;
-  if (!allowed.has(resolved)) {
-    throw new ServiceError("VALIDATION", `Unknown branch code '${resolved}'`, 400);
-  }
-  return resolved;
-}
-
-async function resolveCurrentBranchCode() {
-  return resolveScopedBranch({});
-}
-
 function normalizeCnic(value?: string) {
   if (!value) return undefined;
   const digits = value.replace(/\D/g, "");
@@ -69,11 +40,10 @@ export const siteService = {
   /** Everything the public website renders: content, branches, open courses. */
   async publicData() {
     await dbConnect();
-    const branchCode = await resolveCurrentBranchCode();
     const [content, settings, courses, activeSession] = await Promise.all([
       this.content(),
       Settings.findOne().lean(),
-      Course.find({ status: { $in: ["open", "ongoing"] }, branchCode })
+      Course.find({ status: { $in: ["open", "ongoing"] } })
         .select("code title description mode level fee durationWeeks branchCode startDate")
         .sort({ createdAt: -1 })
         .limit(24)
@@ -82,11 +52,11 @@ export const siteService = {
     ]);
     const academicYear = activeSession?.name || settings?.academicYear || "";
     const classes = academicYear
-      ? await ClassModel.find({ academicYear, branchCode })
+      ? await ClassModel.find({ academicYear })
           .select("name section stage stream level")
           .sort({ level: 1, name: 1, section: 1 })
           .lean()
-      : await ClassModel.find({ branchCode })
+      : await ClassModel.find()
           .select("name section stage stream level academicYear")
           .sort({ level: 1, name: 1 })
           .limit(80)
@@ -127,15 +97,10 @@ export const siteService = {
     await dbConnect();
     const filter: Record<string, unknown> = {};
     if (status) filter.status = status;
-    if (branchCode) {
-      filter.branchCode = await resolveScopedBranch({ branchCode });
-    }
+    if (branchCode) filter.branchCode = branchCode.toUpperCase();
     const [applications, counts] = await Promise.all([
       Admission.find(filter).populate("courseId", "code title").sort({ createdAt: -1 }).lean(),
-      Admission.aggregate([
-        ...(filter.branchCode ? [{ $match: { branchCode: filter.branchCode } }] : []),
-        { $group: { _id: "$status", count: { $sum: 1 } } },
-      ]),
+      Admission.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
     ]);
     const stats = {
       new: 0,
@@ -155,7 +120,6 @@ export const siteService = {
 
   async apply(data: AdmissionInput) {
     await dbConnect();
-    const branchCode = await resolveScopedBranch({ branchCode: data.branchCode });
     const item = await Admission.create({
       ...data,
       dateOfBirth: parseOptionalDate(data.dateOfBirth),
@@ -165,7 +129,7 @@ export const siteService = {
       email: data.email || undefined,
       guardianEmail: data.guardianEmail || undefined,
       courseId: data.courseId || undefined,
-      branchCode,
+      branchCode: data.branchCode.toUpperCase(),
       academicYear: data.academicYear || undefined,
     });
     try {

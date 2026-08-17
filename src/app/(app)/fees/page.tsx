@@ -38,30 +38,13 @@ export default function FeesPage() {
   const [classes, setClasses] = useState<{ _id: string; name: string; section: string }[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkMsg, setBulkMsg] = useState("");
-  const [waiverOpen, setWaiverOpen] = useState(false);
-  const [waiverMsg, setWaiverMsg] = useState("");
   const [bulk, setBulk] = useState({
     classId: "",
     dueDate: toDateInput(new Date()),
-    frequency: "one_time",
-    occurrences: 1,
   });
   const [bulkLines, setBulkLines] = useState<{ head: string; amount: number }[]>([
     { head: "Tuition Fee", amount: 0 },
   ]);
-  const [waiver, setWaiver] = useState({
-    studentId: "",
-    percent: 30,
-    discountType: "need_based",
-    note: "",
-  });
-  const [quickPlanIndex, setQuickPlanIndex] = useState(0);
-
-  const quickPlans = [
-    { label: "Monthly x12", frequency: "monthly", occurrences: 12 },
-    { label: "6-Month x2", frequency: "half_yearly", occurrences: 2 },
-    { label: "Yearly x1", frequency: "yearly", occurrences: 1 },
-  ] as const;
 
   const load = useCallback(async () => {
     const me = await fetch("/api/auth/me").then((r) => r.json()).catch(() => ({}));
@@ -89,8 +72,6 @@ export default function FeesPage() {
         kind: "bulk",
         classId: bulk.classId || null,
         dueDate: bulk.dueDate,
-        frequency: bulk.frequency,
-        occurrences: bulk.frequency === "one_time" ? 1 : Number(bulk.occurrences) || 1,
         lines: bulkLines.filter((l) => l.head.trim()),
       }),
     });
@@ -100,36 +81,12 @@ export default function FeesPage() {
       return;
     }
     setBulkMsg(
-      `${data.created} voucher(s) raised (${data.periods || 1} period(s), ${data.frequency || "one_time"}) · ${data.skipped} already billed · PKR ${formatNumber(data.billedAmount)} receivable` +
+      `${data.created} voucher(s) raised · ${data.skipped} already billed · PKR ${formatNumber(data.billedAmount)} receivable` +
         (data.discountTotal
           ? ` · PKR ${formatNumber(data.discountTotal)} concessions applied`
           : "")
     );
     load();
-  }
-
-  async function requestWaiver(e: FormEvent) {
-    e.preventDefault();
-    setWaiverMsg("");
-    if (!waiver.studentId || !waiver.percent) {
-      setWaiverMsg("Select a student and enter waiver percent.");
-      return;
-    }
-    const res = await fetch("/api/fees", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        kind: "waiver",
-        studentId: waiver.studentId,
-        percent: waiver.percent,
-        discountType: waiver.discountType,
-        note: waiver.note,
-      }),
-    });
-    const data = await res.json();
-    setWaiverMsg(
-      res.ok ? "Fee waiver sent to Approvals inbox." : data.error || "Could not start waiver"
-    );
   }
 
   useEffect(() => {
@@ -239,14 +196,28 @@ export default function FeesPage() {
               type="button"
               className="btn-ghost"
               onClick={() => {
-                setWaiverMsg("");
-                setWaiver({
-                  studentId: students[0]?._id || "",
-                  percent: 30,
-                  discountType: "need_based",
-                  note: "",
+                const studentId = students[0]?._id || "";
+                const percent = Number(prompt("Waiver percent (1–100)", "30") || 0);
+                if (!studentId || !percent) return;
+                const sid = prompt("Student ID (paste from list)", studentId);
+                if (!sid) return;
+                fetch("/api/fees", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    kind: "waiver",
+                    studentId: sid,
+                    percent,
+                    discountType: "need_based",
+                  }),
+                }).then(async (res) => {
+                  const data = await res.json();
+                  setBulkMsg(
+                    res.ok
+                      ? "Fee waiver sent to Approvals inbox."
+                      : data.error || "Could not start waiver"
+                  );
                 });
-                setWaiverOpen(true);
               }}
             >
               Request fee waiver
@@ -466,61 +437,6 @@ export default function FeesPage() {
               required
             />
           </Field>
-          <Field label="Frequency" required>
-            <select
-              className={inputClass}
-              value={bulk.frequency}
-              onChange={(e) =>
-                setBulk((prev) => ({
-                  ...prev,
-                  frequency: e.target.value,
-                  occurrences: e.target.value === "one_time" ? 1 : Math.max(prev.occurrences, 1),
-                }))
-              }
-              required
-            >
-              <option value="one_time">One time</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="half_yearly">Every 6 months</option>
-              <option value="yearly">Yearly</option>
-            </select>
-          </Field>
-          <Field label="Periods" required>
-            <input
-              type="number"
-              min={1}
-              max={60}
-              className={inputClass}
-              value={bulk.frequency === "one_time" ? 1 : bulk.occurrences}
-              onChange={(e) =>
-                setBulk((prev) => ({
-                  ...prev,
-                  occurrences: Math.min(60, Math.max(1, Number(e.target.value) || 1)),
-                }))
-              }
-              disabled={bulk.frequency === "one_time"}
-              required
-            />
-          </Field>
-        </div>
-        <div className="form-actions" style={{ marginTop: 6, marginBottom: 6 }}>
-          <button
-            type="button"
-            className="btn-ghost"
-            onClick={() => {
-              const next = (quickPlanIndex + 1) % quickPlans.length;
-              const pick = quickPlans[next];
-              setQuickPlanIndex(next);
-              setBulk((prev) => ({
-                ...prev,
-                frequency: pick.frequency,
-                occurrences: pick.occurrences,
-              }));
-            }}
-          >
-            + Quick session plan ({quickPlans[quickPlanIndex].label})
-          </button>
         </div>
 
         <div className="form-section-title" style={{ marginTop: 16 }}>
@@ -585,75 +501,6 @@ export default function FeesPage() {
             Per student · PKR{" "}
             {formatNumber(bulkLines.reduce((sum, l) => sum + (Number(l.amount) || 0), 0))}
           </div>
-        </div>
-      </ModalForm>
-
-      <ModalForm
-        open={waiverOpen}
-        onClose={() => setWaiverOpen(false)}
-        onSubmit={requestWaiver}
-        title="Request Fee Waiver"
-        subtitle="Send concession approval request with student and percentage"
-        submitLabel="Send for Approval"
-      >
-        {waiverMsg ? <div className="alert">{waiverMsg}</div> : null}
-        <div className="form-grid">
-          <Field label="Student" required>
-            <select
-              className={inputClass}
-              value={waiver.studentId}
-              onChange={(e) => setWaiver((prev) => ({ ...prev, studentId: e.target.value }))}
-              required
-            >
-              <option value="">Select student</option>
-              {students.map((s) => (
-                <option key={s._id} value={s._id}>
-                  {fullName(s)} · {s.admissionNo} · {labelOfClass(s.classId as never)}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Waiver Percent" required>
-            <input
-              type="number"
-              min={1}
-              max={100}
-              className={inputClass}
-              value={waiver.percent}
-              onChange={(e) =>
-                setWaiver((prev) => ({
-                  ...prev,
-                  percent: Math.max(1, Math.min(100, Number(e.target.value) || 0)),
-                }))
-              }
-              required
-            />
-          </Field>
-          <Field label="Reason Type">
-            <select
-              className={inputClass}
-              value={waiver.discountType}
-              onChange={(e) => setWaiver((prev) => ({ ...prev, discountType: e.target.value }))}
-            >
-              <option value="need_based">Need based</option>
-              <option value="merit">Merit</option>
-              <option value="teacher_child">Teacher child</option>
-              <option value="staff_child">Staff child</option>
-              <option value="sibling">Sibling</option>
-              <option value="custom">Custom</option>
-            </select>
-          </Field>
-        </div>
-        <div style={{ marginTop: 12 }}>
-          <Field label="Note">
-            <textarea
-              className={inputClass}
-              rows={3}
-              value={waiver.note}
-              onChange={(e) => setWaiver((prev) => ({ ...prev, note: e.target.value }))}
-              placeholder="Optional reason for approval"
-            />
-          </Field>
         </div>
       </ModalForm>
 

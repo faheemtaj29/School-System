@@ -25,10 +25,6 @@ export const bulkFeeSchema = z.object({
   lines: z.array(feeLineSchema).min(1, "Add at least one fee head"),
   title: z.string().optional().or(z.literal("")),
   dueDate: z.string().min(1),
-  frequency: z
-    .enum(["one_time", "weekly", "monthly", "half_yearly", "yearly"])
-    .default("one_time"),
-  occurrences: z.coerce.number().int().min(1).max(60).default(1),
   branchCode: z.string().optional(),
 });
 

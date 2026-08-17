@@ -27,8 +27,6 @@ import {
   TeachersIcon,
 } from "@/components/Icons";
 
-let shellSettingsPromise: Promise<any> | null = null;
-
 /** `roles` limits an entry; leaving it out means every signed-in role sees it. */
 const navGroups = [
   {
@@ -36,7 +34,6 @@ const navGroups = [
     items: [
       { href: "/dashboard", label: "Dashboard", Icon: DashboardIcon },
       { href: "/reports", label: "Reports & Print", Icon: ReportsIcon, roles: ["admin", "teacher", "student", "parent"] },
-      { href: "/reports?type=result-cards", label: "Results & Result Cards", Icon: ExamsIcon, roles: ["admin", "teacher"] },
       { href: "/approvals", label: "Approvals", Icon: NoticeIcon, roles: ["admin", "staff", "teacher"] },
     ],
   },
@@ -47,15 +44,7 @@ const navGroups = [
       { href: "/classes", label: "Classes & Sections", Icon: ClassesIcon, roles: ["admin", "teacher"] },
       { href: "/subjects", label: "Subjects", Icon: SubjectsIcon, roles: ["admin", "teacher"] },
       { href: "/attendance", label: "Attendance", Icon: AttendanceIcon, roles: ["admin", "teacher"] },
-          {
-            href: "/exams",
-            label: "Exams & Results",
-            Icon: ExamsIcon,
-            roles: ["admin", "teacher"],
-            children: [
-              ["/exams?module=schedule", "Exam Schedule"],
-            ],
-          },
+      { href: "/exams", label: "Exams & Results", Icon: ExamsIcon, roles: ["admin", "teacher"] },
       { href: "/distance-learning", label: "Distance Learning", Icon: DistanceIcon },
     ],
   },
@@ -71,60 +60,9 @@ const navGroups = [
     label: "Finance & Ops",
     items: [
       { href: "/fees", label: "Fee Vouchers", Icon: FeesIcon, roles: ["admin", "staff", "student", "parent"] },
-      {
-        href: "/accounting",
-        label: "Accounting",
-        Icon: AccountingIcon,
-        roles: ["admin"],
-        children: [
-          ["/accounting?tab=overview", "Overview"],
-          ["/accounting?tab=vouchers&type=payment&mode=cash", "Cash Payment Vouchers"],
-          ["/accounting?tab=vouchers&type=payment&mode=bank", "Bank Payment Vouchers"],
-          ["/accounting?tab=vouchers&type=receipt&mode=cash", "Cash Receipt Vouchers"],
-          ["/accounting?tab=vouchers&type=receipt&mode=bank", "Bank Receipt Vouchers"],
-          ["/accounting?tab=vouchers&type=journal", "Journal Entry Vouchers"],
-          ["/accounting?tab=vouchers&type=contra", "Contra Entry Vouchers"],
-          ["/accounting?tab=coa", "Chart of Accounts"],
-          ["/accounting?tab=ledger", "General Ledger"],
-          ["/accounting?tab=daybook", "Day Book"],
-          ["/accounting?tab=trial", "Trial Balance"],
-          ["/accounting?tab=pnl", "Income & Expenditure"],
-          ["/accounting?tab=balance", "Balance Sheet"],
-          ["/accounting?tab=bank", "Bank & WHT"],
-        ],
-      },
-      {
-        href: "/inventory",
-        label: "Inventory",
-        Icon: InventoryIcon,
-        roles: ["admin", "staff"],
-        children: [
-          ["/inventory?tab=vouchers&type=purchase", "Purchase Invoices"],
-          ["/inventory?tab=vouchers&type=sales", "Sales Invoices"],
-          ["/inventory?tab=vouchers&type=purchase_return", "Purchase Returns"],
-          ["/inventory?tab=vouchers&type=sales_return", "Sales Returns"],
-          ["/inventory?tab=vouchers&type=transfer", "Stock Transfers"],
-          ["/inventory?tab=vouchers&type=adjustment", "Stock Adjustments"],
-          ["/inventory?tab=products", "Product Master"],
-        ],
-      },
-      {
-        href: "/campus",
-        label: "Campus Ops",
-        Icon: InventoryIcon,
-        roles: ["admin", "staff", "teacher"],
-        children: [
-          ["/campus?module=timetable", "Timetable"],
-          ["/campus?module=library", "Library"],
-          ["/campus?module=transport", "Transport"],
-          ["/campus?module=hostel", "Hostel"],
-          ["/campus?module=medical", "Medical"],
-          ["/campus?module=cafeteria", "Cafeteria"],
-          ["/campus?module=assets", "Assets"],
-          ["/campus?module=documents", "Documents"],
-          ["/campus?module=ai", "AI Layer"],
-        ],
-      },
+      { href: "/accounting", label: "Accounting", Icon: AccountingIcon, roles: ["admin"] },
+      { href: "/inventory", label: "Inventory", Icon: InventoryIcon, roles: ["admin", "staff"] },
+      { href: "/campus", label: "Campus Ops", Icon: InventoryIcon, roles: ["admin", "staff", "teacher"] },
     ],
   },
   {
@@ -178,8 +116,7 @@ export function AppShell({
           setBranches(list);
           const saved = typeof window !== "undefined" ? localStorage.getItem("sabaq_branch") : null;
           const def = saved || d.settings.defaultBranchCode || list[0].code;
-      shellSettingsPromise ||= fetch("/api/settings").then((r) => r.json());
-      shellSettingsPromise
+          setCampus(def);
         }
         const year =
           d.activeSession?.name || d.settings?.academicYear || "";
@@ -214,34 +151,18 @@ export function AppShell({
           {visibleGroups.map((group) => (
             <div className="nav-group" key={group.label}>
               <div className="nav-label">{group.label}</div>
-              {group.items.map(({ href, label, Icon, children }) => {
+              {group.items.map(({ href, label, Icon }) => {
                 const active = pathname === href || pathname.startsWith(`${href}/`);
                 return (
-                  <div className="nav-item-wrap" key={href}>
-                    <Link
-                      href={href}
-                      className={`nav-item${active ? " active" : ""}`}
-                      onClick={() => setOpen(false)}
-                    >
-                      <Icon />
-                      {label}
-                      {children ? <ChevronDownIcon className="nav-parent-chevron" /> : null}
-                    </Link>
-                    {children && active ? (
-                      <div className="nav-submenu">
-                        {children.map(([childHref, childLabel]) => (
-                          <Link
-                            key={childHref}
-                            href={childHref}
-                            className="nav-subitem"
-                            onClick={() => setOpen(false)}
-                          >
-                            {childLabel}
-                          </Link>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
+                  <Link
+                    key={href}
+                    href={href}
+                    className={`nav-item${active ? " active" : ""}`}
+                    onClick={() => setOpen(false)}
+                  >
+                    <Icon />
+                    {label}
+                  </Link>
                 );
               })}
             </div>
