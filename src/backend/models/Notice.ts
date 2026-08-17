@@ -5,7 +5,6 @@ export interface INotice {
   body: string;
   audience: "all" | "staff" | "students" | "parents" | "class";
   classId?: Types.ObjectId;
-  branchCode?: string;
   priority: "normal" | "high" | "urgent";
   publishDate: Date;
   expiryDate?: Date;
@@ -24,7 +23,6 @@ const NoticeSchema = new Schema<INotice>(
       default: "all",
     },
     classId: { type: Schema.Types.ObjectId, ref: "Class" },
-    branchCode: { type: String, uppercase: true, trim: true },
     priority: {
       type: String,
       enum: ["normal", "high", "urgent"],

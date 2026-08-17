@@ -34,7 +34,7 @@ export const attendanceController = {
       const body = await req.json();
       const parsed = attendanceSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
-      const attendance = await attendanceService.upsert(parsed.data, session!.id, session!);
+      const attendance = await attendanceService.upsert(parsed.data, session!.id);
       return jsonOk({ attendance }, 201);
     } catch (e) {
       return fromServiceError(e);

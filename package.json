@@ -6,11 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "seed:all": "node scripts/mongo/seed_all.js",
-    "seed:demo": "node scripts/mongo/seed_demo_data.js",
-    "docker:build": "docker build -t school-system:latest .",
-    "docker:run": "docker run --rm -p 3000:3000 school-system:latest"
+    "lint": "eslint"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.8.0",

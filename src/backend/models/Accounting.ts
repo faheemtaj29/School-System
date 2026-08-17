@@ -81,7 +81,6 @@ export interface IInvoiceItem {
 export interface IVoucher {
   number: string;
   voucherType: VoucherType;
-  paymentMode?: "cash" | "bank";
   status: "draft" | "posted" | "void";
   date: Date;
   dueDate?: Date;
@@ -141,7 +140,6 @@ const VoucherSchema = new Schema<IVoucher>(
       enum: ["journal", "receipt", "payment", "contra", "sales_invoice", "purchase_invoice"],
       required: true,
     },
-    paymentMode: { type: String, enum: ["cash", "bank"] },
     status: { type: String, enum: ["draft", "posted", "void"], default: "draft" },
     date: { type: Date, required: true },
     dueDate: Date,

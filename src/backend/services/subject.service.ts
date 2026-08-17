@@ -3,7 +3,6 @@
  */
 import { dbConnect } from "@/backend/config/database";
 import { Subject } from "@/backend/models/Subject";
-import { assertSessionWritableForSubject } from "@/backend/lib/sessionGuard";
 import { ServiceError } from "@/backend/types";
 import type { SubjectInput } from "@/backend/validators/subject.validator";
 
@@ -25,7 +24,6 @@ export const subjectService = {
 
   async update(id: string, data: SubjectInput) {
     await dbConnect();
-    await assertSessionWritableForSubject(id);
     const item = await Subject.findByIdAndUpdate(id, data, { new: true });
     if (!item) throw new ServiceError("NOT_FOUND", "Subject not found", 404);
     return item;
@@ -33,7 +31,6 @@ export const subjectService = {
 
   async remove(id: string) {
     await dbConnect();
-    await assertSessionWritableForSubject(id);
     const item = await Subject.findByIdAndDelete(id);
     if (!item) throw new ServiceError("NOT_FOUND", "Subject not found", 404);
     return { ok: true };

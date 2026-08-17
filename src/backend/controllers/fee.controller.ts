@@ -79,25 +79,25 @@ export const feeController = {
   },
 
   async update(req: Request, ctx: Ctx) {
-    const { session, error } = await requireAuth(["admin", "staff"]);
+    const { error } = await requireAuth(["admin", "staff"]);
     if (error) return error;
     try {
       const { id } = await ctx.params;
       const body = await req.json();
       const parsed = feeSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
-      return jsonOk({ fee: await feeService.update(id, parsed.data, session!) });
+      return jsonOk({ fee: await feeService.update(id, parsed.data) });
     } catch (e) {
       return fromServiceError(e);
     }
   },
 
   async remove(_: Request, ctx: Ctx) {
-    const { session, error } = await requireAuth(["admin"]);
+    const { error } = await requireAuth(["admin"]);
     if (error) return error;
     try {
       const { id } = await ctx.params;
-      return jsonOk(await feeService.remove(id, session!));
+      return jsonOk(await feeService.remove(id));
     } catch (e) {
       return fromServiceError(e);
     }

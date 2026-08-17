@@ -5,7 +5,6 @@
 import { dbConnect } from "@/backend/config/database";
 import { Fee } from "@/backend/models/Fee";
 import { Student } from "@/backend/models/Student";
-import { ClassModel } from "@/backend/models/Class";
 import { parseOptionalDate } from "@/backend/lib/http";
 import { ServiceError } from "@/backend/types";
 import type { BulkFeeInput, FeeInput, InstallmentFeeInput } from "@/backend/validators/fee.validator";
@@ -24,31 +23,6 @@ const studentPopulate = {
 
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
-}
-
-function normalizeBranch(code?: string | null) {
-  const clean = code?.trim();
-  return clean ? clean.toUpperCase() : undefined;
-}
-
-async function resolveScopedBranch(input: {
-  branchCode?: string;
-  fallbackBranchCode?: string;
-}) {
-  const settings = await Settings.findOne().select("branches defaultBranchCode").lean();
-  const configured = (settings?.branches || [])
-    .map((b) => normalizeBranch(b.code))
-    .filter(Boolean);
-  const allowed = new Set(configured.length ? configured : ["MAIN"]);
-  const fallback =
-    normalizeBranch(input.fallbackBranchCode) ||
-    normalizeBranch(settings?.defaultBranchCode) ||
-    "MAIN";
-  const resolved = normalizeBranch(input.branchCode) || fallback;
-  if (!allowed.has(resolved)) {
-    throw new ServiceError("VALIDATION", `Unknown branch code '${resolved}'`, 400);
-  }
-  return resolved;
 }
 
 function cleanLines(lines: { head: string; amount: number }[]) {
@@ -101,43 +75,6 @@ function applyConcession(
     discountAmount,
     discountType: type,
   };
-}
-
-function plusPeriods(date: Date, frequency: BulkFeeInput["frequency"], steps: number) {
-  const next = new Date(date);
-  if (frequency === "weekly") {
-    next.setDate(next.getDate() + steps * 7);
-    return next;
-  }
-  if (frequency === "monthly") {
-    next.setMonth(next.getMonth() + steps);
-    return next;
-  }
-  if (frequency === "half_yearly") {
-    next.setMonth(next.getMonth() + steps * 6);
-    return next;
-  }
-  if (frequency === "yearly") {
-    next.setFullYear(next.getFullYear() + steps);
-    return next;
-  }
-  return next;
-}
-
-function periodLabel(date: Date, frequency: BulkFeeInput["frequency"]) {
-  if (frequency === "weekly") {
-    return `Week of ${date.toLocaleDateString("en-GB")}`;
-  }
-  if (frequency === "monthly") {
-    return date.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
-  }
-  if (frequency === "half_yearly") {
-    return `H${date.getMonth() < 6 ? 1 : 2} ${date.getFullYear()}`;
-  }
-  if (frequency === "yearly") {
-    return `Year ${date.getFullYear()}`;
-  }
-  return date.toLocaleDateString("en-GB");
 }
 
 function toPayload(
@@ -221,15 +158,6 @@ export const feeService = {
       .select("discountType discountPercent branchCode")
       .lean();
     if (!student) throw new ServiceError("NOT_FOUND", "Student not found", 404);
-    const studentBranch = normalizeBranch(student.branchCode);
-    const requestedBranch = normalizeBranch(data.branchCode);
-    if (requestedBranch && studentBranch && requestedBranch !== studentBranch) {
-      throw new ServiceError("VALIDATION", "Fee branch must match student branch", 400);
-    }
-    const branchCode = await resolveScopedBranch({
-      branchCode: requestedBranch,
-      fallbackBranchCode: studentBranch,
-    });
 
     const lines = cleanLines(data.lines);
     const gross = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
@@ -247,30 +175,19 @@ export const feeService = {
         lines,
         ...priced,
         notes: note,
-        branchCode,
+        branchCode: data.branchCode || student.branchCode,
       })
     );
     await syncFeeLedger(item);
     return Fee.findById(item._id).populate(studentPopulate).lean();
   },
 
-  async update(id: string, data: FeeInput, session?: SessionUser) {
+  async update(id: string, data: FeeInput) {
     await dbConnect();
     const lines = cleanLines(data.lines);
     const gross = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
     const existing = await Fee.findById(id).lean();
     if (!existing) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
-    const student = await Student.findById(data.studentId).select("branchCode").lean();
-    if (!student) throw new ServiceError("NOT_FOUND", "Student not found", 404);
-    const studentBranch = normalizeBranch(student.branchCode);
-    const requestedBranch = normalizeBranch(data.branchCode);
-    if (requestedBranch && studentBranch && requestedBranch !== studentBranch) {
-      throw new ServiceError("VALIDATION", "Fee branch must match student branch", 400);
-    }
-    const branchCode = await resolveScopedBranch({
-      branchCode: requestedBranch,
-      fallbackBranchCode: studentBranch || normalizeBranch(existing.branchCode),
-    });
 
     /** Keep original concession ratio when editing heads, if one was applied. */
     let amount = gross;
@@ -296,7 +213,6 @@ export const feeService = {
           discountAmount,
           discountPercent,
           discountType,
-          branchCode,
         }),
         paymentDate: data.paymentDate ? new Date(data.paymentDate) : null,
       },
@@ -304,56 +220,14 @@ export const feeService = {
     ).populate(studentPopulate);
     if (!item) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
     await syncFeeLedger(item);
-    if (session) {
-      await platformService.audit({
-        session,
-        action: "fee.update",
-        entity: "fee",
-        entityId: id,
-        summary: `Updated fee voucher ${item.title}`,
-        before: {
-          title: existing.title,
-          amount: existing.amount,
-          paidAmount: existing.paidAmount,
-          status: existing.status,
-          dueDate: existing.dueDate,
-        },
-        after: {
-          title: item.title,
-          amount: item.amount,
-          paidAmount: item.paidAmount,
-          status: item.status,
-          dueDate: item.dueDate,
-        },
-      });
-    }
     return item;
   },
 
-  async remove(id: string, session?: SessionUser) {
+  async remove(id: string) {
     await dbConnect();
-    const existing = await Fee.findById(id).lean();
     const item = await Fee.findByIdAndDelete(id);
     if (!item) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
     await accountingService.removeBySource("fee", id);
-    if (session) {
-      await platformService.audit({
-        session,
-        action: "fee.delete",
-        entity: "fee",
-        entityId: id,
-        summary: `Deleted fee voucher ${item.title}`,
-        before: existing
-          ? {
-              title: existing.title,
-              amount: existing.amount,
-              paidAmount: existing.paidAmount,
-              status: existing.status,
-              dueDate: existing.dueDate,
-            }
-          : undefined,
-      });
-    }
     return { ok: true };
   },
 
@@ -366,26 +240,10 @@ export const feeService = {
     const lines = cleanLines(data.lines);
     const gross = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
     const title = titleFromLines(lines, data.title);
-    const frequency = data.frequency || "one_time";
-    const occurrences = frequency === "one_time" ? 1 : Math.max(1, data.occurrences || 1);
-    const branchCode = await resolveScopedBranch({ branchCode: data.branchCode });
-
-    if (data.classId) {
-      const cls = await ClassModel.findById(data.classId).select("branchCode").lean();
-      if (!cls) throw new ServiceError("NOT_FOUND", "Class not found", 404);
-      const classBranch = normalizeBranch(cls.branchCode);
-      if (classBranch && branchCode !== classBranch) {
-        throw new ServiceError(
-          "VALIDATION",
-          "Bulk fee branch must match the selected class branch",
-          400
-        );
-      }
-    }
 
     const studentQuery: Record<string, unknown> = { status: "active" };
     if (data.classId) studentQuery.classId = data.classId;
-    studentQuery.branchCode = branchCode;
+    if (data.branchCode) studentQuery.branchCode = data.branchCode.toUpperCase();
 
     const students = await Student.find(studentQuery)
       .select("_id branchCode discountType discountPercent")
@@ -394,83 +252,49 @@ export const feeService = {
       throw new ServiceError("VALIDATION", "No active students match this selection", 400);
     }
 
-    const baseDueDate = new Date(data.dueDate);
-    const dueDates = Array.from({ length: occurrences }, (_, index) =>
-      plusPeriods(baseDueDate, frequency, index)
-    );
-
-    const minDue = dueDates.reduce((min, dt) => (dt < min ? dt : min), dueDates[0]);
-    const maxDue = dueDates.reduce((max, dt) => (dt > max ? dt : max), dueDates[0]);
-    const maxDueEnd = new Date(maxDue);
-    maxDueEnd.setHours(23, 59, 59, 999);
-
+    const dueDate = new Date(data.dueDate);
+    const monthStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), 1);
+    const monthEnd = new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0, 23, 59, 59, 999);
     const already = await Fee.find({
       studentId: { $in: students.map((s) => s._id) },
-      dueDate: { $gte: minDue, $lte: maxDueEnd },
+      title,
+      dueDate: { $gte: monthStart, $lte: monthEnd },
     })
-      .select("studentId title dueDate")
+      .select("studentId")
       .lean();
-    const billed = new Set(
-      already.map((fee) => {
-        const keyDate = new Date(fee.dueDate).toISOString().slice(0, 10);
-        return `${String(fee.studentId)}|${fee.title}|${keyDate}`;
-      })
-    );
+    const billed = new Set(already.map((fee) => String(fee.studentId)));
 
+    const pending = students.filter((student) => !billed.has(String(student._id)));
     let billedAmount = 0;
     let discountTotal = 0;
-    const docs: {
-      studentId: unknown;
-      title: string;
-      lines: { head: string; amount: number }[];
-      originalAmount: number;
-      amount: number;
-      discountPercent: number;
-      discountAmount: number;
-      discountType: string;
-      dueDate: Date;
-      status: "pending";
-      paidAmount: number;
-      notes?: string;
-      branchCode?: string;
-    }[] = [];
-
-    for (const student of students) {
-      const priced = applyConcession(gross, student);
-      for (const dueDate of dueDates) {
-        const voucherTitle =
-          frequency === "one_time" ? title : `${title} · ${periodLabel(dueDate, frequency)}`;
-        const key = `${String(student._id)}|${voucherTitle}|${dueDate.toISOString().slice(0, 10)}`;
-        if (billed.has(key)) continue;
+    if (pending.length) {
+      const docs = pending.map((student) => {
+        const priced = applyConcession(gross, student);
         billedAmount += priced.amount;
         discountTotal += priced.discountAmount;
-        docs.push({
+        return {
           studentId: student._id,
-          title: voucherTitle,
+          title,
           lines,
           ...priced,
           dueDate,
-          status: "pending",
+          status: "pending" as const,
           paidAmount: 0,
           notes:
             priced.discountAmount > 0
               ? `${priced.discountType} ${priced.discountPercent}% concession`
               : undefined,
-          branchCode,
-        });
-      }
-    }
-
-    if (docs.length) {
+          branchCode:
+            (data.branchCode || student.branchCode || "").toUpperCase() || undefined,
+        };
+      });
       await Fee.insertMany(docs);
     }
 
     return {
-      created: docs.length,
-      skipped: students.length * dueDates.length - docs.length,
+      created: pending.length,
+      skipped: students.length - pending.length,
       students: students.length,
-      periods: dueDates.length,
-      frequency,
       billedAmount: roundMoney(billedAmount),
       discountTotal: roundMoney(discountTotal),
     };
@@ -483,15 +307,6 @@ export const feeService = {
       .select("discountType discountPercent branchCode firstName lastName admissionNo")
       .lean();
     if (!student) throw new ServiceError("NOT_FOUND", "Student not found", 404);
-    const studentBranch = normalizeBranch(student.branchCode);
-    const requestedBranch = normalizeBranch(data.branchCode);
-    if (requestedBranch && studentBranch && requestedBranch !== studentBranch) {
-      throw new ServiceError("VALIDATION", "Installment branch must match student branch", 400);
-    }
-    const branchCode = await resolveScopedBranch({
-      branchCode: requestedBranch,
-      fallbackBranchCode: studentBranch,
-    });
 
     const lines = cleanLines(data.lines);
     const gross = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
@@ -526,7 +341,7 @@ export const feeService = {
         dueDate: due,
         status: "pending",
         paidAmount: 0,
-        branchCode,
+        branchCode: data.branchCode || student.branchCode,
         installmentGroup: group,
         installmentNo: i + 1,
         installmentTotal: n,
