@@ -5,6 +5,7 @@ import { dbConnect } from "@/backend/config/database";
 import { ClassModel } from "@/backend/models/Class";
 import { Student } from "@/backend/models/Student";
 import { Subject } from "@/backend/models/Subject";
+import { assertSessionWritableForYear } from "@/backend/lib/sessionGuard";
 import { CURRICULUM, CURRICULUM_SUBJECTS, curriculumSummary } from "@/backend/data/curriculum";
 import { ServiceError } from "@/backend/types";
 import type { ClassInput, CurriculumImportInput } from "@/backend/validators/class.validator";
@@ -58,6 +59,7 @@ export const classService = {
 
   async create(data: ClassInput) {
     await dbConnect();
+    await assertSessionWritableForYear(data.academicYear);
     return ClassModel.create({
       ...data,
       branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
@@ -67,6 +69,16 @@ export const classService = {
 
   async update(id: string, data: ClassInput) {
     await dbConnect();
+    const existing = await ClassModel.findById(id).select("academicYear").lean();
+    if (!existing) throw new ServiceError("NOT_FOUND", "Class not found", 404);
+    const sourceYear = existing.academicYear?.trim();
+    const targetYear = data.academicYear?.trim() || sourceYear;
+    if (sourceYear) {
+      await assertSessionWritableForYear(sourceYear);
+    }
+    if (targetYear && targetYear !== sourceYear) {
+      await assertSessionWritableForYear(targetYear);
+    }
     const item = await ClassModel.findByIdAndUpdate(
       id,
       {
@@ -82,6 +94,10 @@ export const classService = {
 
   async remove(id: string) {
     await dbConnect();
+    const cls = await ClassModel.findById(id).select("academicYear").lean();
+    if (cls?.academicYear) {
+      await assertSessionWritableForYear(cls.academicYear);
+    }
     const enrolled = await Student.countDocuments({ classId: id });
     if (enrolled > 0) {
       throw new ServiceError(
@@ -113,6 +129,7 @@ export const classService = {
    */
   async importCurriculum(input: CurriculumImportInput) {
     await dbConnect();
+    await assertSessionWritableForYear(input.academicYear);
     const stages = CURRICULUM.filter((stage) => input.stages.includes(stage.key));
     if (!stages.length) throw new ServiceError("VALIDATION", "Unknown stage selection", 400);
 

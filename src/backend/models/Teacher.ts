@@ -15,6 +15,7 @@ export interface ITeacher {
   qualification?: string;
   status: "active" | "inactive";
   branchCode?: string;
+  photoUrl?: string;
   user?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -36,6 +37,7 @@ const TeacherSchema = new Schema<ITeacher>(
     qualification: String,
     status: { type: String, enum: ["active", "inactive"], default: "active" },
     branchCode: { type: String, uppercase: true, trim: true },
+    photoUrl: String,
     user: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }

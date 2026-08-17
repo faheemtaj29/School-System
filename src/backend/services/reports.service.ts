@@ -11,11 +11,88 @@ import { ClassModel } from "@/backend/models/Class";
 import { LedgerEntry } from "@/backend/models/Ledger";
 import { InventoryItem } from "@/backend/models/Inventory";
 import { Payslip } from "@/backend/models/HR";
+import { Settings } from "@/backend/models/Settings";
 import { ServiceError } from "@/backend/types";
+
+type GradeBand = {
+  minPercent: number;
+  maxPercent: number;
+  label: string;
+  gradePoint: number;
+  pass: boolean;
+};
+
+const DEFAULT_GRADING_SCALE: GradeBand[] = [
+  { minPercent: 85, maxPercent: 100, label: "A+", gradePoint: 4, pass: true },
+  { minPercent: 80, maxPercent: 84.99, label: "A", gradePoint: 3.7, pass: true },
+  { minPercent: 75, maxPercent: 79.99, label: "B+", gradePoint: 3.3, pass: true },
+  { minPercent: 70, maxPercent: 74.99, label: "B", gradePoint: 3, pass: true },
+  { minPercent: 65, maxPercent: 69.99, label: "C+", gradePoint: 2.7, pass: true },
+  { minPercent: 60, maxPercent: 64.99, label: "C", gradePoint: 2.3, pass: true },
+  { minPercent: 55, maxPercent: 59.99, label: "D+", gradePoint: 2, pass: true },
+  { minPercent: 50, maxPercent: 54.99, label: "D", gradePoint: 1.7, pass: true },
+  { minPercent: 45, maxPercent: 49.99, label: "E", gradePoint: 1.3, pass: true },
+  { minPercent: 40, maxPercent: 44.99, label: "P", gradePoint: 1, pass: true },
+  { minPercent: 0, maxPercent: 39.99, label: "F", gradePoint: 0, pass: false },
+];
+
+function normalizeBranch(code?: string | null) {
+  const clean = code?.trim();
+  return clean ? clean.toUpperCase() : undefined;
+}
+
+async function resolveCurrentBranchCode() {
+  const settings = await Settings.findOne().select("institutionCode defaultBranchCode").lean();
+  return normalizeBranch(settings?.institutionCode) || normalizeBranch(settings?.defaultBranchCode) || "MAIN";
+}
+
+async function resolveCurrentBranchClassIds() {
+  const branchCode = await resolveCurrentBranchCode();
+  const classes = await ClassModel.find({ branchCode }).select("_id").lean();
+  return { branchCode, classIds: classes.map((c) => c._id) };
+}
+
+async function gradingPolicy() {
+  const settings = await Settings.findOne().select("gradingScale passPercent").lean();
+  const raw = Array.isArray(settings?.gradingScale) && settings?.gradingScale.length
+    ? settings.gradingScale
+    : DEFAULT_GRADING_SCALE;
+  const scale = [...raw]
+    .map((item) => ({
+      minPercent: Number(item.minPercent),
+      maxPercent: Number(item.maxPercent),
+      label: String(item.label),
+      gradePoint: Number(item.gradePoint),
+      pass: Boolean(item.pass),
+    }))
+    .filter((item) => Number.isFinite(item.minPercent) && Number.isFinite(item.maxPercent))
+    .sort((a, b) => b.minPercent - a.minPercent);
+  return {
+    scale: scale.length ? scale : DEFAULT_GRADING_SCALE,
+    passPercent: Number(settings?.passPercent ?? 40),
+  };
+}
+
+function evaluateGrade(percent: number, scale: GradeBand[], passPercent: number) {
+  const band = scale.find((g) => percent >= g.minPercent && percent <= g.maxPercent);
+  if (!band) {
+    return {
+      label: percent >= passPercent ? "P" : "F",
+      points: percent >= passPercent ? 1 : 0,
+      pass: percent >= passPercent,
+    };
+  }
+  return {
+    label: band.label,
+    points: band.gradePoint,
+    pass: band.pass && percent >= passPercent,
+  };
+}
 
 export const reportsService = {
   async studentsByClass() {
     await dbConnect();
+    const branchCode = await resolveCurrentBranchCode();
     return Student.aggregate([
       {
         $lookup: {
@@ -26,6 +103,7 @@ export const reportsService = {
         },
       },
       { $unwind: { path: "$class", preserveNullAndEmptyArrays: true } },
+      { $match: { "class.branchCode": branchCode } },
       {
         $group: {
           _id: "$classId",
@@ -40,7 +118,11 @@ export const reportsService = {
 
   async feeDefaulters() {
     await dbConnect();
-    return Fee.find({ status: { $in: ["pending", "partial", "overdue"] } })
+    const { classIds } = await resolveCurrentBranchClassIds();
+    return Fee.find({
+      status: { $in: ["pending", "partial", "overdue"] },
+      studentId: { $in: await Student.find({ classId: { $in: classIds } }).distinct("_id") },
+    })
       .populate({
         path: "studentId",
         select: "firstName lastName admissionNo classId phone parentPhone",
@@ -52,7 +134,8 @@ export const reportsService = {
 
   async attendanceSummary() {
     await dbConnect();
-    const sheets = await Attendance.find()
+    const { classIds } = await resolveCurrentBranchClassIds();
+    const sheets = await Attendance.find({ classId: { $in: classIds } })
       .sort({ date: -1 })
       .limit(30)
       .populate("classId", "name section")
@@ -74,7 +157,8 @@ export const reportsService = {
 
   async examOverview() {
     await dbConnect();
-    return Exam.find()
+    const { classIds } = await resolveCurrentBranchClassIds();
+    return Exam.find({ classId: { $in: classIds } })
       .populate("classId", "name section")
       .populate("subjectId", "name code")
       .sort({ date: -1 })
@@ -84,12 +168,14 @@ export const reportsService = {
 
   async staffDirectory() {
     await dbConnect();
-    return Teacher.find().sort({ firstName: 1 }).lean();
+    const branchCode = await resolveCurrentBranchCode();
+    return Teacher.find({ branchCode }).sort({ firstName: 1 }).lean();
   },
 
   async classStrength() {
     await dbConnect();
-    const classes = await ClassModel.find().sort({ name: 1, section: 1 }).lean();
+    const branchCode = await resolveCurrentBranchCode();
+    const classes = await ClassModel.find({ branchCode }).sort({ name: 1, section: 1 }).lean();
     const counts = await Student.aggregate([
       { $group: { _id: "$classId", count: { $sum: 1 } } },
     ]);
@@ -102,8 +188,11 @@ export const reportsService = {
 
   async financeSnapshot() {
     await dbConnect();
+    const { branchCode, classIds } = await resolveCurrentBranchClassIds();
+    const studentIds = await Student.distinct("_id", { classId: { $in: classIds } });
     const [fees, ledger, payroll, stock, bySource] = await Promise.all([
       Fee.aggregate([
+        { $match: { studentId: { $in: studentIds } } },
         {
           $group: {
             _id: null,
@@ -113,6 +202,7 @@ export const reportsService = {
         },
       ]),
       LedgerEntry.aggregate([
+        { $match: { branchCode } },
         {
           $group: {
             _id: "$type",
@@ -122,12 +212,15 @@ export const reportsService = {
         },
       ]),
       Payslip.aggregate([
+        { $match: { branchCode } },
         { $group: { _id: "$status", total: { $sum: "$net" } } },
       ]),
       InventoryItem.aggregate([
+        { $match: { branchCode } },
         { $group: { _id: null, v: { $sum: { $multiply: ["$quantity", "$unitCost"] } } } },
       ]),
       LedgerEntry.aggregate([
+        { $match: { branchCode } },
         {
           $group: {
             _id: "$sourceType",
@@ -159,7 +252,8 @@ export const reportsService = {
 
   async inventoryReport() {
     await dbConnect();
-    return InventoryItem.find().sort({ category: 1, name: 1 }).lean();
+    const branchCode = await resolveCurrentBranchCode();
+    return InventoryItem.find({ branchCode }).sort({ category: 1, name: 1 }).lean();
   },
 
   /**
@@ -168,10 +262,15 @@ export const reportsService = {
    */
   async resultCards(classId: string, examType?: string | null) {
     await dbConnect();
+    const policy = await gradingPolicy();
+    const branchCode = await resolveCurrentBranchCode();
     const cls = await ClassModel.findById(classId).lean();
     if (!cls) throw new ServiceError("NOT_FOUND", "Class not found", 404);
+    if (normalizeBranch(cls.branchCode) !== branchCode) {
+      throw new ServiceError("NOT_FOUND", "Class not found", 404);
+    }
 
-    const examQuery: Record<string, unknown> = { classId };
+    const examQuery: Record<string, unknown> = { classId, marksStatus: "published" };
     if (examType) examQuery.examType = examType;
     const [students, exams] = await Promise.all([
       Student.find({ classId, status: "active" })
@@ -180,7 +279,7 @@ export const reportsService = {
       Exam.find(examQuery).populate("subjectId", "name code credits").sort({ date: 1 }).lean(),
     ]);
 
-    const cards = buildResultCards(students, exams);
+    const cards = buildResultCards(students, exams, policy.scale, policy.passPercent);
 
     return {
       class: {
@@ -206,9 +305,19 @@ export const reportsService = {
     branchCode?: string | null;
   }) {
     await dbConnect();
+    const policy = await gradingPolicy();
+    const branchCode = await resolveCurrentBranchCode();
     const classFilter: Record<string, unknown> = {};
     if (opts.classId && opts.classId !== "all") classFilter._id = opts.classId;
-    if (opts.branchCode) classFilter.branchCode = opts.branchCode.toUpperCase();
+    if (opts.branchCode) {
+      const requested = normalizeBranch(opts.branchCode);
+      if (requested && requested !== branchCode) {
+        throw new ServiceError("NOT_FOUND", "No classes found for this selection", 404);
+      }
+      classFilter.branchCode = branchCode;
+    } else {
+      classFilter.branchCode = branchCode;
+    }
 
     const classes = await ClassModel.find(classFilter).sort({ level: 1, name: 1, section: 1 }).lean();
     if (!classes.length) {
@@ -216,7 +325,10 @@ export const reportsService = {
     }
 
     const classIds = classes.map((c) => c._id);
-    const examQuery: Record<string, unknown> = { classId: { $in: classIds } };
+    const examQuery: Record<string, unknown> = {
+      classId: { $in: classIds },
+      marksStatus: "published",
+    };
     if (opts.examType) examQuery.examType = opts.examType;
 
     const [students, exams] = await Promise.all([
@@ -242,7 +354,7 @@ export const reportsService = {
       const classStudents = students.filter((s) => String(s.classId) === String(cls._id));
       if (!classStudents.length) continue;
       const classExams = examsByClass.get(String(cls._id)) || [];
-      const cards = buildResultCards(classStudents, classExams);
+      const cards = buildResultCards(classStudents, classExams, policy.scale, policy.passPercent);
       totalCards += cards.length;
       batches.push({
         class: {
@@ -283,12 +395,21 @@ export const reportsService = {
   /** Official transcript with GPA / CGPA for one student. */
   async transcript(studentId: string) {
     await dbConnect();
+    const policy = await gradingPolicy();
+    const branchCode = await resolveCurrentBranchCode();
+    const { classIds } = await resolveCurrentBranchClassIds();
     const student = await Student.findById(studentId)
       .populate("classId", "name section academicYear")
       .lean();
     if (!student) throw new ServiceError("NOT_FOUND", "Student not found", 404);
+    if (normalizeBranch((student as { branchCode?: string }).branchCode) !== branchCode) {
+      throw new ServiceError("NOT_FOUND", "Student not found", 404);
+    }
 
-    const exams = await Exam.find({ "results.studentId": student._id })
+    const exams = await Exam.find({
+      "results.studentId": student._id,
+      classId: { $in: classIds },
+    })
       .populate("subjectId", "name code credits")
       .populate("classId", "name section academicYear")
       .sort({ date: 1 })
@@ -312,7 +433,8 @@ export const reportsService = {
     >();
 
     for (const exam of exams) {
-      const result = exam.results?.find((r) => String(r.studentId) === String(student._id));
+      const results = exam.results as Array<{ studentId: unknown; marks?: number }> | undefined;
+      const result = results?.find((r) => String(r.studentId) === String(student._id));
       if (!result || result.marks == null) continue;
       const subject = exam.subjectId as unknown as {
         name?: string;
@@ -331,6 +453,7 @@ export const reportsService = {
       const obtained = result.marks || 0;
       const percent = max ? (obtained / max) * 100 : 0;
       const credits = subject?.credits && subject.credits > 0 ? subject.credits : 1;
+      const grade = evaluateGrade(percent, policy.scale, policy.passPercent);
       term.rows.push({
         subject: subject?.name || exam.title,
         code: subject?.code || "—",
@@ -338,8 +461,8 @@ export const reportsService = {
         maxMarks: max,
         obtained,
         percent: Math.round(percent),
-        grade: gradeOf(percent),
-        points: gpaPoints(percent),
+        grade: grade.label,
+        points: grade.points,
       });
       terms.set(termKey, term);
     }
@@ -389,7 +512,12 @@ type ExamDoc = {
   results?: { studentId: unknown; marks?: number }[];
 };
 
-function buildResultCards(students: StudentDoc[], exams: ExamDoc[]) {
+function buildResultCards(
+  students: StudentDoc[],
+  exams: ExamDoc[],
+  gradingScale: GradeBand[],
+  passPercent: number
+) {
   const cards = students.map((student) => {
     const subjects = new Map<
       string,
@@ -400,6 +528,7 @@ function buildResultCards(students: StudentDoc[], exams: ExamDoc[]) {
         maxMarks: number;
         obtained: number;
         graded: boolean;
+        components: { label: string; maxMarks: number; obtained: number | null }[];
       }
     >();
 
@@ -417,6 +546,7 @@ function buildResultCards(students: StudentDoc[], exams: ExamDoc[]) {
           maxMarks: 0,
           obtained: 0,
           graded: false,
+          components: [],
         };
       const result = exam.results?.find(
         (r) => String(r.studentId) === String(student._id)
@@ -426,6 +556,12 @@ function buildResultCards(students: StudentDoc[], exams: ExamDoc[]) {
         entry.obtained += result.marks || 0;
         entry.graded = true;
       }
+      entry.components.push({
+        examId: String(exam._id),
+        label: exam.examType || exam.title,
+        maxMarks: exam.maxMarks || 0,
+        obtained: result ? result.marks || 0 : null,
+      });
       subjects.set(key, entry);
     }
 
@@ -434,6 +570,7 @@ function buildResultCards(students: StudentDoc[], exams: ExamDoc[]) {
       .map((row) => {
         const percent =
           row.graded && row.maxMarks ? Math.round((row.obtained / row.maxMarks) * 100) : 0;
+        const grade = evaluateGrade(percent, gradingScale, passPercent);
         return {
           name: row.name,
           code: row.code,
@@ -441,8 +578,10 @@ function buildResultCards(students: StudentDoc[], exams: ExamDoc[]) {
           maxMarks: row.maxMarks,
           obtained: row.graded ? row.obtained : null,
           percent,
-          grade: row.graded ? gradeOf(percent) : "—",
-          points: row.graded ? gpaPoints(percent) : 0,
+          grade: row.graded ? grade.label : "—",
+          points: row.graded ? grade.points : 0,
+          pass: row.graded ? grade.pass : false,
+          components: row.components,
         };
       });
 
@@ -456,6 +595,7 @@ function buildResultCards(students: StudentDoc[], exams: ExamDoc[]) {
     );
     const gpa = creditSum ? Math.round((pointSum / creditSum) * 100) / 100 : 0;
 
+    const overall = evaluateGrade(percentage, gradingScale, passPercent);
     return {
       student: {
         _id: String(student._id),
@@ -469,15 +609,21 @@ function buildResultCards(students: StudentDoc[], exams: ExamDoc[]) {
       totalObtained,
       percentage,
       gpa,
-      grade: gradeOf(percentage),
-      result: percentage >= 40 ? "PASS" : "FAIL",
+      grade: overall.label,
+      result: overall.pass ? "PASS" : "FAIL",
       position: 0,
     };
   });
 
   const ranked = [...cards].sort((a, b) => b.percentage - a.percentage);
+  let rank = 0;
+  let prevPercent: number | null = null;
   ranked.forEach((card, index) => {
-    card.position = index + 1;
+    if (prevPercent == null || card.percentage !== prevPercent) {
+      rank = index + 1;
+      prevPercent = card.percentage;
+    }
+    card.position = rank;
   });
   /** Keep roll order in output, but with class positions applied. */
   const positionById = new Map(ranked.map((c) => [c.student._id, c.position]));
@@ -485,28 +631,4 @@ function buildResultCards(students: StudentDoc[], exams: ExamDoc[]) {
     ...card,
     position: positionById.get(card.student._id) || 0,
   }));
-}
-
-function gradeOf(percent: number) {
-  if (percent >= 80) return "A+";
-  if (percent >= 70) return "A";
-  if (percent >= 60) return "B";
-  if (percent >= 50) return "C";
-  if (percent >= 40) return "D";
-  return "F";
-}
-
-/** 4.0 scale used for GPA / CGPA on result cards and transcripts. */
-function gpaPoints(percent: number) {
-  if (percent >= 85) return 4.0;
-  if (percent >= 80) return 3.7;
-  if (percent >= 75) return 3.3;
-  if (percent >= 70) return 3.0;
-  if (percent >= 65) return 2.7;
-  if (percent >= 60) return 2.3;
-  if (percent >= 55) return 2.0;
-  if (percent >= 50) return 1.7;
-  if (percent >= 45) return 1.3;
-  if (percent >= 40) return 1.0;
-  return 0;
 }

@@ -38,12 +38,28 @@ const defaults = {
   lateFeePercent: 5,
   lateFeeGraceDays: 7,
   whtRate: 0,
+  gradingScale: [
+    { minPercent: 85, maxPercent: 100, label: "A+", gradePoint: 4, pass: true },
+    { minPercent: 80, maxPercent: 84.99, label: "A", gradePoint: 3.7, pass: true },
+    { minPercent: 75, maxPercent: 79.99, label: "B+", gradePoint: 3.3, pass: true },
+    { minPercent: 70, maxPercent: 74.99, label: "B", gradePoint: 3, pass: true },
+    { minPercent: 65, maxPercent: 69.99, label: "C+", gradePoint: 2.7, pass: true },
+    { minPercent: 60, maxPercent: 64.99, label: "C", gradePoint: 2.3, pass: true },
+    { minPercent: 55, maxPercent: 59.99, label: "D+", gradePoint: 2, pass: true },
+    { minPercent: 50, maxPercent: 54.99, label: "D", gradePoint: 1.7, pass: true },
+    { minPercent: 45, maxPercent: 49.99, label: "E", gradePoint: 1.3, pass: true },
+    { minPercent: 40, maxPercent: 44.99, label: "P", gradePoint: 1, pass: true },
+    { minPercent: 0, maxPercent: 39.99, label: "F", gradePoint: 0, pass: false },
+  ],
 };
 
 type OptionKey = keyof typeof defaults.optionLists;
 
+let settingsCache: { value: any; expiresAt: number } | null = null;
+
 export const settingsService = {
   async get() {
+    if (settingsCache && settingsCache.expiresAt > Date.now()) return settingsCache.value;
     await dbConnect();
     let doc = await Settings.findOne().lean();
     if (!doc) {
@@ -65,6 +81,7 @@ export const settingsService = {
       },
       theme: { ...DEFAULT_THEME, ...(doc.theme || {}) },
     };
+    settingsCache = { value: doc, expiresAt: Date.now() + 30_000 };
     return doc;
   },
 
@@ -100,20 +117,26 @@ export const settingsService = {
       new: true,
       setDefaultsOnInsert: true,
     });
+    settingsCache = null;
     return doc;
   },
 
   async addOption(key: OptionKey, value: string) {
     await dbConnect();
     const clean = value.trim();
+    if (!clean) return clean;
+
+    // Step 1: ensure a settings document exists.
+    // Keep this separate from nested optionLists update to avoid Mongo path conflicts.
     await Settings.findOneAndUpdate(
       {},
-      {
-        $setOnInsert: defaults,
-        $addToSet: { [`optionLists.${key}`]: clean },
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { $setOnInsert: defaults },
+      { upsert: true, setDefaultsOnInsert: true }
     );
+
+    // Step 2: update only the target option list key.
+    await Settings.updateOne({}, { $addToSet: { [`optionLists.${key}`]: clean } });
+    settingsCache = null;
     return clean;
   },
 };
