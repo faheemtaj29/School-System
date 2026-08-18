@@ -1,0 +1,243 @@
+{
+  "dbName": "school-system",
+  "uriMasked": "mongodb://127.0.0.1:27017/school-system",
+  "createdAt": "2026-08-17T11:01:32.626Z",
+  "collectionCount": 47,
+  "collections": [
+    {
+      "name": "ledgerentries",
+      "documentCount": 0,
+      "file": "collections/ledgerentries.ndjson"
+    },
+    {
+      "name": "staffs",
+      "documentCount": 0,
+      "file": "collections/staffs.ndjson"
+    },
+    {
+      "name": "fees",
+      "documentCount": 16,
+      "file": "collections/fees.ndjson"
+    },
+    {
+      "name": "inventoryitems",
+      "documentCount": 2,
+      "file": "collections/inventoryitems.ndjson"
+    },
+    {
+      "name": "accounts",
+      "documentCount": 70,
+      "file": "collections/accounts.ndjson"
+    },
+    {
+      "name": "academicsessions",
+      "documentCount": 2,
+      "file": "collections/academicsessions.ndjson"
+    },
+    {
+      "name": "classes",
+      "documentCount": 120,
+      "file": "collections/classes.ndjson"
+    },
+    {
+      "name": "cafesales",
+      "documentCount": 0,
+      "file": "collections/cafesales.ndjson"
+    },
+    {
+      "name": "quizattempts",
+      "documentCount": 0,
+      "file": "collections/quizattempts.ndjson"
+    },
+    {
+      "name": "attendances",
+      "documentCount": 2,
+      "file": "collections/attendances.ndjson"
+    },
+    {
+      "name": "accountingcounters",
+      "documentCount": 0,
+      "file": "collections/accountingcounters.ndjson"
+    },
+    {
+      "name": "courses",
+      "documentCount": 0,
+      "file": "collections/courses.ndjson"
+    },
+    {
+      "name": "medicalvisits",
+      "documentCount": 0,
+      "file": "collections/medicalvisits.ndjson"
+    },
+    {
+      "name": "settings",
+      "documentCount": 2,
+      "file": "collections/settings.ndjson"
+    },
+    {
+      "name": "quizzes",
+      "documentCount": 0,
+      "file": "collections/quizzes.ndjson"
+    },
+    {
+      "name": "workflowdefinitions",
+      "documentCount": 0,
+      "file": "collections/workflowdefinitions.ndjson"
+    },
+    {
+      "name": "hostelrooms",
+      "documentCount": 0,
+      "file": "collections/hostelrooms.ndjson"
+    },
+    {
+      "name": "auditevents",
+      "documentCount": 0,
+      "file": "collections/auditevents.ndjson"
+    },
+    {
+      "name": "manageddocuments",
+      "documentCount": 0,
+      "file": "collections/manageddocuments.ndjson"
+    },
+    {
+      "name": "notices",
+      "documentCount": 2,
+      "file": "collections/notices.ndjson"
+    },
+    {
+      "name": "institutions",
+      "documentCount": 0,
+      "file": "collections/institutions.ndjson"
+    },
+    {
+      "name": "exams",
+      "documentCount": 4,
+      "file": "collections/exams.ndjson"
+    },
+    {
+      "name": "enrollments",
+      "documentCount": 0,
+      "file": "collections/enrollments.ndjson"
+    },
+    {
+      "name": "sitecontents",
+      "documentCount": 1,
+      "file": "collections/sitecontents.ndjson"
+    },
+    {
+      "name": "payslips",
+      "documentCount": 0,
+      "file": "collections/payslips.ndjson"
+    },
+    {
+      "name": "stockvouchers",
+      "documentCount": 1,
+      "file": "collections/stockvouchers.ndjson"
+    },
+    {
+      "name": "workflowinstances",
+      "documentCount": 0,
+      "file": "collections/workflowinstances.ndjson"
+    },
+    {
+      "name": "admissions",
+      "documentCount": 0,
+      "file": "collections/admissions.ndjson"
+    },
+    {
+      "name": "diplomas",
+      "documentCount": 0,
+      "file": "collections/diplomas.ndjson"
+    },
+    {
+      "name": "transportvehicles",
+      "documentCount": 0,
+      "file": "collections/transportvehicles.ndjson"
+    },
+    {
+      "name": "_migrations",
+      "documentCount": 1,
+      "file": "collections/_migrations.ndjson"
+    },
+    {
+      "name": "subjects",
+      "documentCount": 160,
+      "file": "collections/subjects.ndjson"
+    },
+    {
+      "name": "hostelallocations",
+      "documentCount": 0,
+      "file": "collections/hostelallocations.ndjson"
+    },
+    {
+      "name": "teachers",
+      "documentCount": 2,
+      "file": "collections/teachers.ndjson"
+    },
+    {
+      "name": "customfields",
+      "documentCount": 0,
+      "file": "collections/customfields.ndjson"
+    },
+    {
+      "name": "timetableslots",
+      "documentCount": 0,
+      "file": "collections/timetableslots.ndjson"
+    },
+    {
+      "name": "staff",
+      "documentCount": 2,
+      "file": "collections/staff.ndjson"
+    },
+    {
+      "name": "libraryloans",
+      "documentCount": 0,
+      "file": "collections/libraryloans.ndjson"
+    },
+    {
+      "name": "lectures",
+      "documentCount": 0,
+      "file": "collections/lectures.ndjson"
+    },
+    {
+      "name": "leaverequests",
+      "documentCount": 0,
+      "file": "collections/leaverequests.ndjson"
+    },
+    {
+      "name": "users",
+      "documentCount": 1,
+      "file": "collections/users.ndjson"
+    },
+    {
+      "name": "aijobs",
+      "documentCount": 0,
+      "file": "collections/aijobs.ndjson"
+    },
+    {
+      "name": "cafeitems",
+      "documentCount": 0,
+      "file": "collections/cafeitems.ndjson"
+    },
+    {
+      "name": "vouchers",
+      "documentCount": 2,
+      "file": "collections/vouchers.ndjson"
+    },
+    {
+      "name": "students",
+      "documentCount": 16,
+      "file": "collections/students.ndjson"
+    },
+    {
+      "name": "assets",
+      "documentCount": 0,
+      "file": "collections/assets.ndjson"
+    },
+    {
+      "name": "librarybooks",
+      "documentCount": 0,
+      "file": "collections/librarybooks.ndjson"
+    }
+  ]
+}

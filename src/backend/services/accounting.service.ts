@@ -7,12 +7,28 @@ import { Account, AccountingCounter, Voucher } from "@/backend/models/Accounting
 import { LedgerEntry, type LedgerSource } from "@/backend/models/Ledger";
 import { Settings } from "@/backend/models/Settings";
 import { ServiceError } from "@/backend/types";
+import type { SessionUser } from "@/backend/types";
+import { recordAudit, getAuditTrail } from "@/backend/lib/audit";
 import type { z } from "zod";
 import type {
   accountSchema,
   ledgerSchema,
   voucherSchema,
 } from "@/backend/validators/modules.validator";
+
+function voucherSnapshot(v: Record<string, unknown>) {
+  return {
+    number: v.number,
+    voucherType: v.voucherType,
+    status: v.status,
+    date: v.date,
+    narration: v.narration,
+    partyName: v.partyName,
+    reference: v.reference,
+    grandTotal: v.grandTotal,
+    lines: v.lines,
+  };
+}
 
 type LedgerInput = z.infer<typeof ledgerSchema>;
 type AccountInput = z.infer<typeof accountSchema>;
@@ -284,6 +300,17 @@ async function nextVoucherNumber(type: string, branchCode: string, date: Date) {
   return `${prefix}-${branch}-${year}-${String(counter.seq).padStart(5, "0")}`;
 }
 
+async function previewVoucherNumber(type: string, branchCode: string, date: Date) {
+  await dbConnect();
+  const prefix = PREFIX[type] || "JV";
+  const year = date.getFullYear();
+  const branch = branchCode.toUpperCase();
+  const key = `${prefix}:${branch}:${year}`;
+  const counter = await AccountingCounter.findById(key).lean();
+  const next = Number(counter?.seq || 0) + 1;
+  return `${prefix}-${branch}-${year}-${String(next).padStart(5, "0")}`;
+}
+
 async function systemAccount(key: string) {
   await ensureSeeded();
   const account = await Account.findOne({ systemKey: key, isActive: true }).lean();
@@ -342,7 +369,13 @@ async function enrichAndValidateLines(
     throw new ServiceError("VALIDATION", "Contra voucher can only use Cash/Bank accounts", 400);
   }
   return {
-    lines: result.map(({ isCashBank: _cash, type: _type, ...line }) => line),
+    lines: result.map((line) => ({
+      accountCode: line.accountCode,
+      accountName: line.accountName,
+      debit: line.debit,
+      credit: line.credit,
+      narration: line.narration,
+    })),
     total: debit,
   };
 }
@@ -520,11 +553,96 @@ export const accountingService = {
       .lean();
   },
 
-  async createVoucher(data: VoucherInput, userId?: string) {
-    return createDoubleEntryVoucher(data, userId);
+  async nextVoucherNumberPreview(type: string, branchCode: string, date: string) {
+    await ensureSeeded();
+    return previewVoucherNumber(type, branchCode || "MAIN", new Date(date));
   },
 
-  async postVoucher(id: string, userId?: string) {
+  async auditTrail(voucherId: string) {
+    return getAuditTrail("accounting", "voucher", voucherId);
+  },
+
+  async createVoucher(data: VoucherInput, actor?: SessionUser) {
+    const voucher = await createDoubleEntryVoucher(data, actor?.id);
+    await recordAudit({
+      module: "accounting",
+      action: "created",
+      entity: "voucher",
+      entityId: String(voucher._id),
+      summary: `Created ${voucher.number} (${voucher.voucherType})`,
+      after: voucherSnapshot(voucher.toObject()),
+      actor,
+    });
+    return voucher;
+  },
+
+  async updateVoucherDraft(id: string, data: VoucherInput, actor?: SessionUser) {
+    await ensureSeeded();
+    const voucher = await Voucher.findById(id);
+    if (!voucher) throw new ServiceError("NOT_FOUND", "Voucher not found", 404);
+    if (voucher.status !== "draft") {
+      throw new ServiceError("CONFLICT", "Only draft vouchers can be updated", 409);
+    }
+    const before = voucherSnapshot(voucher.toObject());
+
+    const settings = await loadFinanceSettings();
+    const date = new Date(data.date);
+    const branchCode = (data.branchCode || settings.defaultBranchCode || "MAIN").toUpperCase();
+    const isInvoice =
+      data.voucherType === "sales_invoice" || data.voucherType === "purchase_invoice";
+    const invoice = isInvoice ? await invoiceLines(data) : null;
+    const checked = await enrichAndValidateLines(
+      invoice?.lines || data.lines,
+      data.voucherType
+    );
+    const posted = Boolean(data.postNow);
+
+    voucher.voucherType = data.voucherType;
+    voucher.date = date;
+    voucher.dueDate = data.dueDate ? new Date(data.dueDate) : undefined;
+    voucher.branchCode = branchCode;
+    voucher.partyType = data.partyType || undefined;
+    voucher.partyId = data.partyId || undefined;
+    voucher.partyName = data.partyName || undefined;
+    voucher.narration = data.narration;
+    voucher.reference = data.reference;
+    voucher.currency = settings.currency || "PKR";
+    voucher.subtotal = invoice?.subtotal || checked.total;
+    voucher.discountAmount = data.discountAmount;
+    voucher.taxAmount = data.taxAmount;
+    voucher.taxName = data.taxAmount > 0 ? settings.taxName || "Tax" : undefined;
+    voucher.grandTotal = invoice?.grandTotal || checked.total;
+    voucher.items = data.items.map((item) => ({
+      ...item,
+      amount: round(item.quantity * item.rate),
+    }));
+    voucher.lines = checked.lines;
+
+    if (posted) {
+      voucher.status = "posted";
+      voucher.postedAt = new Date();
+      voucher.postedBy = actor?.id as never;
+    } else {
+      voucher.status = "draft";
+      voucher.postedAt = undefined;
+      voucher.postedBy = undefined;
+    }
+
+    await voucher.save();
+    await recordAudit({
+      module: "accounting",
+      action: "updated",
+      entity: "voucher",
+      entityId: id,
+      summary: `Updated ${voucher.number}`,
+      before,
+      after: voucherSnapshot(voucher.toObject()),
+      actor,
+    });
+    return voucher;
+  },
+
+  async postVoucher(id: string, actor?: SessionUser) {
     const voucher = await Voucher.findById(id);
     if (!voucher) throw new ServiceError("NOT_FOUND", "Voucher not found", 404);
     if (voucher.status !== "draft") {
@@ -533,33 +651,86 @@ export const accountingService = {
     await enrichAndValidateLines(voucher.lines, voucher.voucherType);
     voucher.status = "posted";
     voucher.postedAt = new Date();
-    voucher.postedBy = userId as never;
+    voucher.postedBy = actor?.id as never;
     await voucher.save();
+    await recordAudit({
+      module: "accounting",
+      action: "posted",
+      entity: "voucher",
+      entityId: id,
+      summary: `Posted ${voucher.number}`,
+      after: voucherSnapshot(voucher.toObject()),
+      actor,
+    });
     return voucher;
   },
 
-  async voidVoucher(id: string, reason: string, userId?: string) {
+  async voidVoucher(id: string, reason: string, actor?: SessionUser) {
     const voucher = await Voucher.findById(id);
     if (!voucher) throw new ServiceError("NOT_FOUND", "Voucher not found", 404);
     if (voucher.status !== "posted") {
       throw new ServiceError("CONFLICT", "Only posted vouchers can be voided", 409);
     }
+    const before = voucherSnapshot(voucher.toObject());
     voucher.status = "void";
     voucher.voidedAt = new Date();
-    voucher.voidedBy = userId as never;
+    voucher.voidedBy = actor?.id as never;
     voucher.voidReason = reason || "Voided by administrator";
     await voucher.save();
+    await recordAudit({
+      module: "accounting",
+      action: "voided",
+      entity: "voucher",
+      entityId: id,
+      summary: `Voided ${voucher.number} — ${voucher.voidReason}`,
+      before,
+      after: voucherSnapshot(voucher.toObject()),
+      actor,
+    });
     return voucher;
   },
 
-  async removeVoucher(id: string) {
+  /**
+   * Draft vouchers are removed outright. A posted voucher is never physically
+   * deleted — it is reversed (voided) so every report that already filters on
+   * status: "posted" automatically drops its accounting effect, while the
+   * record and its audit trail stay intact.
+   */
+  async removeVoucher(id: string, reason = "", actor?: SessionUser) {
     const voucher = await Voucher.findById(id);
     if (!voucher) throw new ServiceError("NOT_FOUND", "Voucher not found", 404);
-    if (voucher.status !== "draft") {
-      throw new ServiceError("CONFLICT", "Only draft vouchers can be deleted", 409);
+    if (voucher.status === "void") {
+      throw new ServiceError("CONFLICT", "Voucher is already cancelled/voided", 409);
     }
-    await voucher.deleteOne();
-    return { ok: true };
+    const before = voucherSnapshot(voucher.toObject());
+    if (voucher.status === "draft") {
+      await voucher.deleteOne();
+      await recordAudit({
+        module: "accounting",
+        action: "deleted",
+        entity: "voucher",
+        entityId: id,
+        summary: `Deleted draft ${before.number}${reason ? ` — ${reason}` : ""}`,
+        before,
+        actor,
+      });
+      return { ok: true };
+    }
+    if (!reason.trim()) {
+      throw new ServiceError("VALIDATION", "A reason is required to delete a posted voucher", 400);
+    }
+    const reversed = await this.voidVoucher(id, reason, actor);
+    await recordAudit({
+      module: "accounting",
+      action: "deleted",
+      entity: "voucher",
+      entityId: id,
+      summary: `Deleted posted voucher ${before.number} via reversal — ${reason}`,
+      before,
+      after: voucherSnapshot(reversed.toObject()),
+      actor,
+    });
+    return { ok: true, voucher: reversed };
   },
 
   /**

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * Seed Chart of Accounts (COA) into MongoDB.
  * Usage: MONGO_URL="mongodb://localhost:27017/school-system" node scripts/mongo/seed_coa.js

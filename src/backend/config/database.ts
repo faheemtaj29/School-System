@@ -3,6 +3,7 @@
  */
 import mongoose from "mongoose";
 import { env } from "./env";
+import "@/backend/models";
 
 interface MongooseCache {
   conn: typeof mongoose | null;

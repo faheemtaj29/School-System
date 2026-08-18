@@ -46,26 +46,17 @@ export const settingsController = {
     const { error } = await requireAuth();
     if (error) return error;
     try {
-      const [settings, activeSession, sessions] = await Promise.all([
-        settingsService.get(),
-        sessionService.active(),
-        sessionService.list(),
-      ]);
-      return jsonOk({
-        settings,
-        activeSession,
-        sessions,
-      });
+      return jsonOk({ settings: await settingsService.get() });
     } catch (e) {
       return fromServiceError(e);
     }
   },
+
   async update(req: Request) {
     const { error } = await requireAuth(["admin"]);
     if (error) return error;
     try {
-      const body = await req.json();
-      const parsed = settingsSchema.safeParse(body);
+      const parsed = settingsSchema.safeParse(await req.json());
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
       return jsonOk({ settings: await settingsService.update(parsed.data) });
     } catch (e) {
@@ -160,6 +151,22 @@ export const accountingController = {
           vouchers: await accountingService.vouchers({ type, status, branchCode }),
         });
       }
+      if (view === "next-voucher-number") {
+        const voucherType = url.searchParams.get("type") || "journal";
+        const date = url.searchParams.get("date") || new Date().toISOString();
+        return jsonOk({
+          number: await accountingService.nextVoucherNumberPreview(
+            voucherType,
+            branchCode || "MAIN",
+            date
+          ),
+        });
+      }
+      if (view === "audit-log") {
+        const voucherId = url.searchParams.get("voucherId");
+        if (!voucherId) return jsonError("Select a voucher to view its audit history");
+        return jsonOk({ events: await accountingService.auditTrail(voucherId) });
+      }
       if (view === "trial-balance") {
         return jsonOk(await accountingService.trialBalance(range));
       }
@@ -206,7 +213,7 @@ export const accountingController = {
         const parsed = voucherSchema.safeParse(body.voucher);
         if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
         return jsonOk(
-          { voucher: await accountingService.createVoucher(parsed.data, session!.id) },
+          { voucher: await accountingService.createVoucher(parsed.data, session!) },
           201
         );
       }
@@ -237,16 +244,23 @@ export const accountingController = {
           account: await accountingService.setAccountActive(id, Boolean(body.isActive)),
         });
       }
+      if (body.kind === "voucher_update") {
+        const parsed = voucherSchema.safeParse(body.voucher);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        return jsonOk({
+          voucher: await accountingService.updateVoucherDraft(id, parsed.data, session!),
+        });
+      }
       const parsed = voucherActionSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
       if (parsed.data.action === "post") {
-        return jsonOk({ voucher: await accountingService.postVoucher(id, session!.id) });
+        return jsonOk({ voucher: await accountingService.postVoucher(id, session!) });
       }
       return jsonOk({
         voucher: await accountingService.voidVoucher(
           id,
           parsed.data.reason || "",
-          session!.id
+          session!
         ),
       });
     } catch (e) {
@@ -254,12 +268,13 @@ export const accountingController = {
     }
   },
   async remove(req: Request, ctx: Ctx) {
-    const { error } = await requireAuth(["admin"]);
+    const { session, error } = await requireAuth(["admin"]);
     if (error) return error;
     try {
       const { id } = await ctx.params;
       if (new URL(req.url).searchParams.get("kind") === "voucher") {
-        return jsonOk(await accountingService.removeVoucher(id));
+        const body = await req.json().catch(() => ({}));
+        return jsonOk(await accountingService.removeVoucher(id, body.reason || "", session!));
       }
       return jsonOk(await accountingService.remove(id));
     } catch (e) {
@@ -275,6 +290,11 @@ export const inventoryController = {
     try {
       const params = new URL(req.url).searchParams;
       const branchCode = params.get("branch");
+      if (params.get("view") === "audit-log") {
+        const voucherId = params.get("voucherId");
+        if (!voucherId) return jsonError("Select a voucher to view its audit history");
+        return jsonOk({ events: await inventoryService.auditTrail(voucherId) });
+      }
       const [items, stats, vouchers] = await Promise.all([
         inventoryService.list(branchCode),
         inventoryService.stats(branchCode),
@@ -298,7 +318,7 @@ export const inventoryController = {
         const parsed = stockVoucherSchema.safeParse(body.voucher);
         if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
         return jsonOk(
-          { voucher: await inventoryService.createVoucher(parsed.data, session!.id) },
+          { voucher: await inventoryService.createVoucher(parsed.data, session!) },
           201
         );
       }
@@ -319,13 +339,13 @@ export const inventoryController = {
         const parsed = voucherActionSchema.safeParse(body);
         if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
         if (parsed.data.action === "post") {
-          return jsonOk({ voucher: await inventoryService.postVoucher(id, session!.id) });
+          return jsonOk({ voucher: await inventoryService.postVoucher(id, session!) });
         }
         return jsonOk({
           voucher: await inventoryService.voidVoucher(
             id,
             parsed.data.reason || "",
-            session!.id
+            session!
           ),
         });
       }
@@ -337,12 +357,13 @@ export const inventoryController = {
     }
   },
   async remove(req: Request, ctx: Ctx) {
-    const { error } = await requireAuth(["admin", "staff"]);
+    const { session, error } = await requireAuth(["admin", "staff"]);
     if (error) return error;
     try {
       const { id } = await ctx.params;
       if (new URL(req.url).searchParams.get("kind") === "voucher") {
-        return jsonOk(await inventoryService.removeVoucher(id));
+        const body = await req.json().catch(() => ({}));
+        return jsonOk(await inventoryService.removeVoucher(id, body.reason || "", session!));
       }
       return jsonOk(await inventoryService.remove(id));
     } catch (e) {

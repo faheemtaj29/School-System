@@ -28,19 +28,20 @@ export const ACADEMIC_PAGES = [
 export const SHARED_PAGES = ["/dashboard", "/distance-learning", "/notices"];
 
 export function canOpenPage(role: string, pathname: string) {
+  const normalizedRole = (role || "").toLowerCase();
   const hit = (paths: string[]) =>
     paths.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   if (hit(SHARED_PAGES)) return true;
-  if (role === "admin") return true;
+  if (normalizedRole === "admin") return true;
 
-  if (role === "teacher") {
+  if (normalizedRole === "teacher") {
     if (hit(ACADEMIC_PAGES)) return true;
     if (pathname === "/hr" || pathname.startsWith("/hr/")) return true;
     return false;
   }
 
-  if (role === "staff") {
+  if (normalizedRole === "staff") {
     if (hit(OPS_PAGES.filter((p) => p !== "/hr"))) return true;
     if (pathname === "/fees" || pathname.startsWith("/fees/")) return true;
     if (pathname === "/inventory" || pathname.startsWith("/inventory/")) return true;
@@ -48,7 +49,7 @@ export function canOpenPage(role: string, pathname: string) {
     return false;
   }
 
-  if (role === "student" || role === "parent") {
+  if (normalizedRole === "student" || normalizedRole === "parent") {
     if (pathname === "/fees" || pathname.startsWith("/fees/")) return true;
     if (pathname === "/reports" || pathname.startsWith("/reports/")) return true;
     return false;

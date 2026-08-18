@@ -8,6 +8,8 @@ import {
 import { AccountingCounter } from "@/backend/models/Accounting";
 import { Settings } from "@/backend/models/Settings";
 import { ServiceError } from "@/backend/types";
+import type { SessionUser } from "@/backend/types";
+import { recordAudit, getAuditTrail } from "@/backend/lib/audit";
 import type { z } from "zod";
 import type {
   inventorySchema,
@@ -36,6 +38,21 @@ const STOCK_PREFIX: Record<StockVoucherType, string> = {
   transfer: "STRF",
   adjustment: "SADJ",
 };
+
+function stockVoucherSnapshot(v: Record<string, unknown>) {
+  return {
+    number: v.number,
+    voucherType: v.voucherType,
+    status: v.status,
+    date: v.date,
+    narration: v.narration,
+    partyName: v.partyName,
+    branchCode: v.branchCode,
+    toBranchCode: v.toBranchCode,
+    grandTotal: v.grandTotal,
+    items: v.items,
+  };
+}
 
 /** How each posted stock voucher hits the ledger; transfers/adjustments stay off-book. */
 const GL: Partial<Record<StockVoucherType, { type: "income" | "expense"; accountKey: string; category: string }>> = {
@@ -277,7 +294,7 @@ export const inventoryService = {
     return StockVoucher.find(query).sort({ date: -1, createdAt: -1 }).limit(300).lean();
   },
 
-  async createVoucher(data: StockVoucherInput, userId?: string) {
+  async createVoucher(data: StockVoucherInput, actor?: SessionUser) {
     await dbConnect();
     const branchCode = (data.branchCode || (await defaultBranch())).toUpperCase();
     const toBranchCode = data.toBranchCode ? data.toBranchCode.toUpperCase() : undefined;
@@ -315,18 +332,30 @@ export const inventoryService = {
       discountAmount: data.discountAmount,
       taxAmount: data.taxAmount,
       grandTotal,
-      createdBy: userId || undefined,
+      createdBy: actor?.id || undefined,
     });
-    if (!data.postNow) return voucher;
-    try {
-      return await this.postVoucher(String(voucher._id), userId);
-    } catch (e) {
-      await voucher.deleteOne();
-      throw e;
+    let result = voucher;
+    if (data.postNow) {
+      try {
+        result = await this.postVoucher(String(voucher._id), actor);
+      } catch (e) {
+        await voucher.deleteOne();
+        throw e;
+      }
     }
+    await recordAudit({
+      module: "inventory",
+      action: "created",
+      entity: "voucher",
+      entityId: String(result._id),
+      summary: `Created ${result.number} (${result.voucherType})`,
+      after: stockVoucherSnapshot(result.toObject()),
+      actor,
+    });
+    return result;
   },
 
-  async postVoucher(id: string, userId?: string) {
+  async postVoucher(id: string, actor?: SessionUser) {
     await dbConnect();
     const voucher = await StockVoucher.findById(id);
     if (!voucher) throw new ServiceError("NOT_FOUND", "Voucher not found", 404);
@@ -336,37 +365,97 @@ export const inventoryService = {
     await applyStock(voucher, 1);
     voucher.status = "posted";
     voucher.postedAt = new Date();
-    voucher.postedBy = userId as never;
+    voucher.postedBy = actor?.id as never;
     await voucher.save();
     await syncVoucherLedger(voucher);
+    await recordAudit({
+      module: "inventory",
+      action: "posted",
+      entity: "voucher",
+      entityId: id,
+      summary: `Posted ${voucher.number}`,
+      after: stockVoucherSnapshot(voucher.toObject()),
+      actor,
+    });
     return voucher;
   },
 
-  async voidVoucher(id: string, reason: string, userId?: string) {
+  async voidVoucher(id: string, reason: string, actor?: SessionUser) {
     await dbConnect();
     const voucher = await StockVoucher.findById(id);
     if (!voucher) throw new ServiceError("NOT_FOUND", "Voucher not found", 404);
     if (voucher.status !== "posted") {
       throw new ServiceError("CONFLICT", "Only posted vouchers can be voided", 409);
     }
+    const before = stockVoucherSnapshot(voucher.toObject());
     await applyStock(voucher, -1);
     voucher.status = "void";
     voucher.voidedAt = new Date();
-    voucher.voidedBy = userId as never;
+    voucher.voidedBy = actor?.id as never;
     voucher.voidReason = reason || "Voided by administrator";
     await voucher.save();
     await accountingService.removeBySource("inventory", String(voucher._id));
+    await recordAudit({
+      module: "inventory",
+      action: "voided",
+      entity: "voucher",
+      entityId: id,
+      summary: `Voided ${voucher.number} — ${voucher.voidReason}`,
+      before,
+      after: stockVoucherSnapshot(voucher.toObject()),
+      actor,
+    });
     return voucher;
   },
 
-  async removeVoucher(id: string) {
+  /**
+   * Draft stock vouchers are removed outright. A posted voucher already moved
+   * stock and (sometimes) posted to accounting, so deletion is only allowed for
+   * admins and is carried out as a reversal (voidVoucher) instead of a raw
+   * delete — this restores quantities and unlinks the accounting entry safely.
+   */
+  async removeVoucher(id: string, reason = "", actor?: SessionUser) {
     await dbConnect();
     const voucher = await StockVoucher.findById(id);
     if (!voucher) throw new ServiceError("NOT_FOUND", "Voucher not found", 404);
-    if (voucher.status !== "draft") {
-      throw new ServiceError("CONFLICT", "Only draft vouchers can be deleted", 409);
+    if (voucher.status === "void") {
+      throw new ServiceError("CONFLICT", "Voucher is already cancelled/voided", 409);
     }
-    await voucher.deleteOne();
-    return { ok: true };
+    const before = stockVoucherSnapshot(voucher.toObject());
+    if (voucher.status === "draft") {
+      await voucher.deleteOne();
+      await recordAudit({
+        module: "inventory",
+        action: "deleted",
+        entity: "voucher",
+        entityId: id,
+        summary: `Deleted draft ${before.number}${reason ? ` — ${reason}` : ""}`,
+        before,
+        actor,
+      });
+      return { ok: true };
+    }
+    if (actor?.role !== "admin") {
+      throw new ServiceError("FORBIDDEN", "Only an administrator can delete a posted transaction", 403);
+    }
+    if (!reason.trim()) {
+      throw new ServiceError("VALIDATION", "A reason is required to delete a posted voucher", 400);
+    }
+    const reversed = await this.voidVoucher(id, reason, actor);
+    await recordAudit({
+      module: "inventory",
+      action: "deleted",
+      entity: "voucher",
+      entityId: id,
+      summary: `Deleted posted voucher ${before.number} via reversal — ${reason}`,
+      before,
+      after: stockVoucherSnapshot(reversed.toObject()),
+      actor,
+    });
+    return { ok: true, voucher: reversed };
+  },
+
+  async auditTrail(voucherId: string) {
+    return getAuditTrail("inventory", "voucher", voucherId);
   },
 };

@@ -1,0 +1,160 @@
+{"_id":"6a82e050bbefa23313be44b4","code":"PRE-ENG","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":5,"name":"English Readiness","stage":"pre-primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44b5","code":"PRE-URD","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":5,"name":"Urdu Readiness","stage":"pre-primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44b6","code":"PRE-MTH","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":5,"name":"Numbers & Counting","stage":"pre-primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44b7","code":"PRE-ISL","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":3,"name":"Islamiat & Duas","stage":"pre-primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44b8","code":"PRE-GK","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":2,"name":"General Knowledge","stage":"pre-primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44b9","code":"PRE-ART","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":2,"name":"Art & Colouring","stage":"pre-primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44ba","code":"PRE-RHY","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":2,"name":"Rhymes & Storytelling","stage":"pre-primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44bb","code":"PRE-PLY","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":3,"name":"Play & Motor Skills","stage":"pre-primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44bc","code":"PRI-ENG","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":6,"name":"English","stage":"primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44bd","code":"PRI-URD","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":6,"name":"Urdu","stage":"primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44be","code":"PRI-MTH","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":6,"name":"Mathematics","stage":"primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44bf","code":"PRI-SCI","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":4,"name":"General Science","stage":"primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44c0","code":"PRI-ISL","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":3,"name":"Islamiat","stage":"primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44c1","code":"PRI-QUR","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":3,"name":"Quran Nazra","stage":"primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44c2","code":"PRI-SST","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":3,"name":"Social Studies","stage":"primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44c3","code":"PRI-CMP","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":2,"name":"Computer Basics","stage":"primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44c4","code":"PRI-ART","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":2,"name":"Art & Craft","stage":"primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44c5","code":"PRI-PET","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":2,"name":"Physical Education","stage":"primary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44c6","code":"MID-ENG","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":6,"name":"English","stage":"middle","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44c7","code":"MID-URD","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":5,"name":"Urdu","stage":"middle","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44c8","code":"MID-MTH","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":6,"name":"Mathematics","stage":"middle","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44c9","code":"MID-SCI","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":5,"name":"General Science","stage":"middle","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44ca","code":"MID-ISL","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":3,"name":"Islamiat","stage":"middle","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44cb","code":"MID-PST","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":3,"name":"History & Geography of Pakistan","stage":"middle","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44cc","code":"MID-CMP","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":3,"name":"Computer Science","stage":"middle","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44cd","code":"MID-ARB","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":2,"name":"Arabic","stage":"middle","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44ce","code":"MID-ART","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":2,"name":"Art & Craft","stage":"middle","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44cf","code":"MID-PET","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":2,"name":"Physical Education","stage":"middle","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44d0","code":"SEC-ENG","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":6,"name":"English","stage":"secondary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44d1","code":"SEC-URD","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":5,"name":"Urdu","stage":"secondary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44d2","code":"SEC-ISL","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":3,"name":"Islamiat","stage":"secondary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44d3","code":"SEC-PST","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":3,"name":"Pakistan Studies","stage":"secondary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44d4","code":"SEC-MTH","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":6,"name":"Mathematics","stage":"secondary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44d5","code":"SEC-PHY","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":5,"name":"Physics","stage":"secondary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44d6","code":"SEC-CHE","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":5,"name":"Chemistry","stage":"secondary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44d7","code":"SEC-BIO","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":5,"name":"Biology","stage":"secondary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44d8","code":"SEC-CSC","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":5,"name":"Computer Science","stage":"secondary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44d9","code":"SEC-GSC","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":4,"name":"General Science","stage":"secondary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44da","code":"SEC-ECO","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":4,"name":"Economics","stage":"secondary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44db","code":"SEC-CIV","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":4,"name":"Civics","stage":"secondary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44dc","code":"SEC-HIS","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":4,"name":"History","stage":"secondary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44dd","code":"SEC-GEO","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":4,"name":"Geography","stage":"secondary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44de","code":"SEC-TQR","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":2,"name":"Tarjuma-tul-Quran","stage":"secondary","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44df","code":"INT-ENG","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":4,"name":"English","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44e0","code":"INT-URD","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":4,"name":"Urdu","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44e1","code":"INT-ISL","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":2,"name":"Islamic Studies","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44e2","code":"INT-PST","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":2,"name":"Pakistan Studies","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44e3","code":"INT-PHY","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":5,"name":"Physics","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44e4","code":"INT-CHE","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":5,"name":"Chemistry","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44e5","code":"INT-BIO","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":5,"name":"Biology","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44e6","code":"INT-MTH","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":5,"name":"Mathematics","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44e7","code":"INT-CSC","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":5,"name":"Computer Science","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44e8","code":"INT-STA","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":4,"name":"Statistics","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44e9","code":"INT-ACC","__v":0,"createdAt":"2026-08-17T10:20:00.144Z","credits":5,"name":"Principles of Accounting","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44ea","code":"INT-ECO","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":4,"name":"Economics","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44eb","code":"INT-BUS","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":4,"name":"Business Studies","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44ec","code":"INT-COM","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":4,"name":"Commerce & Banking","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44ed","code":"INT-EDU","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":4,"name":"Education","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44ee","code":"INT-CIV","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":4,"name":"Civics","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44ef","code":"INT-ISH","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":4,"name":"Islamic History","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44f0","code":"INT-SOC","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":4,"name":"Sociology","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44f1","code":"INT-PSY","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":4,"name":"Psychology","stage":"intermediate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44f2","code":"GEN-ENG101","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"English Composition","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44f3","code":"GEN-ENG102","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Communication Skills","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44f4","code":"GEN-ISL101","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":2,"name":"Islamic Studies","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44f5","code":"GEN-PST101","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":2,"name":"Pakistan Studies","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44f6","code":"GEN-MTH101","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Calculus & Analytical Geometry","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44f7","code":"GEN-MTH102","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Discrete Structures","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44f8","code":"GEN-STA101","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Probability & Statistics","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44f9","code":"GEN-PHY101","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Applied Physics","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44fa","code":"GEN-ECO101","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Principles of Economics","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44fb","code":"GEN-PSY101","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Introduction to Psychology","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44fc","code":"GEN-SOC101","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Introduction to Sociology","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44fd","code":"CS-101","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":4,"name":"Programming Fundamentals","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44fe","code":"CS-102","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Introduction to ICT","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be44ff","code":"CS-103","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":4,"name":"Object Oriented Programming","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4500","code":"CS-104","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Digital Logic Design","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4501","code":"CS-201","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":4,"name":"Data Structures & Algorithms","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4502","code":"CS-202","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Computer Organization & Assembly","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4503","code":"CS-203","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":4,"name":"Database Systems","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4504","code":"CS-204","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Operating Systems","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4505","code":"CS-205","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Software Engineering","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4506","code":"CS-206","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Design & Analysis of Algorithms","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4507","code":"CS-301","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Computer Networks","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4508","code":"CS-302","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Artificial Intelligence","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4509","code":"CS-303","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Web Technologies","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be450a","code":"CS-304","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Theory of Automata","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be450b","code":"CS-305","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Compiler Construction","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be450c","code":"CS-306","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Information Security","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be450d","code":"CS-307","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Mobile Application Development","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be450e","code":"CS-308","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Human Computer Interaction","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be450f","code":"CS-401","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Machine Learning","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4510","code":"CS-402","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Cloud Computing","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4511","code":"CS-403","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Final Year Project I","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4512","code":"CS-404","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Final Year Project II","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4513","code":"CS-405","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":2,"name":"Professional Practices","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4514","code":"CS-406","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Data Science","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4515","code":"BA-101","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Introduction to Business","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4516","code":"BA-102","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Principles of Management","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4517","code":"BA-103","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Business Mathematics","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4518","code":"BA-104","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Financial Accounting","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4519","code":"BA-105","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Microeconomics","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be451a","code":"BA-106","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Business Communication","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be451b","code":"BA-201","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Macroeconomics","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be451c","code":"BA-202","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Cost Accounting","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be451d","code":"BA-203","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Principles of Marketing","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be451e","code":"BA-204","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Business Law","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be451f","code":"BA-205","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Financial Management","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4520","code":"BA-206","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Human Resource Management","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4521","code":"BA-207","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Organizational Behaviour","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4522","code":"BA-301","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Marketing Management","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4523","code":"BA-302","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Money & Banking","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4524","code":"BA-303","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Entrepreneurship","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4525","code":"BA-304","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Operations Management","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4526","code":"BA-305","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Business Research Methods","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4527","code":"BA-306","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Consumer Behaviour","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4528","code":"BA-307","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Supply Chain Management","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4529","code":"BA-401","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Strategic Management","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be452a","code":"BA-402","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"International Business","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be452b","code":"BA-403","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Investment Analysis","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be452c","code":"BA-404","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Leadership & Change","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be452d","code":"BA-405","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Internship Report","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be452e","code":"BA-406","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Business Policy & Project","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be452f","code":"EN-101","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Introduction to Literature","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4530","code":"EN-102","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Functional English","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4531","code":"EN-103","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Phonetics & Phonology","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4532","code":"EN-104","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Classical Poetry","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4533","code":"EN-201","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Drama","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4534","code":"EN-202","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"The Novel","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4535","code":"EN-203","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Introduction to Linguistics","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4536","code":"EN-204","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"American Literature","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4537","code":"EN-205","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Literary Criticism","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4538","code":"EN-206","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Modern Poetry","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4539","code":"EN-301","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Postcolonial Literature","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be453a","code":"EN-302","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"English Language Teaching","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be453b","code":"EN-303","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Research Methodology","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be453c","code":"EN-304","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Shakespeare Studies","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be453d","code":"EN-305","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"World Literature in Translation","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be453e","code":"EN-306","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Discourse Analysis","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be453f","code":"EN-401","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Pakistani Literature in English","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4540","code":"EN-402","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":6,"name":"Research Thesis","stage":"undergraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4541","code":"MS-501","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Advanced Algorithms","stage":"postgraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4542","code":"MS-502","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Research Methods in Computing","stage":"postgraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4543","code":"MS-503","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Advanced Machine Learning","stage":"postgraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4544","code":"MS-504","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Distributed Systems","stage":"postgraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4545","code":"MS-505","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Advanced Database Systems","stage":"postgraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4546","code":"MS-506","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Deep Learning","stage":"postgraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4547","code":"MS-507","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":6,"name":"MS Thesis I","stage":"postgraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4548","code":"MS-508","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":6,"name":"MS Thesis II","stage":"postgraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be4549","code":"MB-501","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Advanced Financial Management","stage":"postgraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be454a","code":"MB-502","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Strategic Marketing","stage":"postgraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be454b","code":"MB-503","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Corporate Governance","stage":"postgraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be454c","code":"MB-504","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Managerial Economics","stage":"postgraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be454d","code":"MB-505","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Business Analytics","stage":"postgraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be454e","code":"MB-506","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":3,"name":"Project Management","stage":"postgraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e050bbefa23313be454f","code":"MB-507","__v":0,"createdAt":"2026-08-17T10:20:00.145Z","credits":6,"name":"MBA Research Project","stage":"postgraduate","updatedAt":"2026-08-17T10:20:06.303Z"}
+{"_id":"6a82e0f8bbefa23313be45c6","code":"MATH-01","createdAt":"2026-08-17T10:22:48.760Z","credits":5,"description":"Mathematics (demo)","name":"Mathematics","stage":"primary","updatedAt":"2026-08-17T10:22:48.760Z"}
+{"_id":"6a82e0f8bbefa23313be45c7","code":"ENG-01","createdAt":"2026-08-17T10:22:48.760Z","credits":4,"description":"English (demo)","name":"English","stage":"primary","updatedAt":"2026-08-17T10:22:48.760Z"}
+{"_id":"6a82e0f8bbefa23313be45c8","code":"SCI-01","createdAt":"2026-08-17T10:22:48.760Z","credits":4,"description":"General Science (demo)","name":"General Science","stage":"primary","updatedAt":"2026-08-17T10:22:48.760Z"}
+{"_id":"6a82e0f8bbefa23313be45c9","code":"COMP-01","createdAt":"2026-08-17T10:22:48.760Z","credits":2,"description":"Computer Studies (demo)","name":"Computer Studies","stage":"primary","updatedAt":"2026-08-17T10:22:48.760Z"}

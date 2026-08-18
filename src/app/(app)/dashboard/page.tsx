@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Panel, StatusBadge, NameCell, EmptyState } from "@/components/ui";
+import { Panel, EmptyState } from "@/components/ui";
 import {
   AlertIcon,
   CheckCalendarIcon,
@@ -12,13 +12,7 @@ import {
   StudentsIcon,
 } from "@/components/Icons";
 import {
-  ExamItem,
-  FeeItem,
-  StudentItem,
-  dayMonth,
   formatCompact,
-  fullName,
-  labelOfClass,
 } from "@/lib/types";
 import {
   StudentDashboard,
@@ -123,9 +117,6 @@ export default function DashboardPage() {
   const [role, setRole] = useState<RoleData | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [charts, setCharts] = useState<Charts | null>(null);
-  const [recent, setRecent] = useState<StudentItem[]>([]);
-  const [recentFees, setRecentFees] = useState<FeeItem[]>([]);
-  const [upcoming, setUpcoming] = useState<ExamItem[]>([]);
 
   useEffect(() => {
     fetch("/api/dashboard")
@@ -134,9 +125,6 @@ export default function DashboardPage() {
         setRole(d);
         setStats(d.stats ?? null);
         setCharts(d.charts ?? null);
-        setRecent(d.recentStudents || []);
-        setRecentFees(d.recentFees || []);
-        setUpcoming(d.upcomingExams || []);
       })
       .catch(() => undefined);
   }, []);
@@ -248,35 +236,12 @@ export default function DashboardPage() {
             <BarChart data={charts?.classStrength ?? []} />
           </Panel>
 
-          <Panel title="Recent Admissions" meta="LATEST 5">
-            <div className="table-scroll">
-              <table className="reg">
-                <thead>
-                  <tr>
-                    <th>Student</th>
-                    <th>Admission</th>
-                    <th>Class</th>
-                    <th className="right">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recent.map((s) => (
-                    <tr key={s._id}>
-                      <td><NameCell name={fullName(s)} /></td>
-                      <td className="num">{s.admissionNo}</td>
-                      <td>{labelOfClass(s.classId as never)}</td>
-                      <td className="right"><StatusBadge status={s.status} /></td>
-                    </tr>
-                  ))}
-                  {!recent.length ? (
-                    <tr>
-                      <td colSpan={4} style={{ color: "var(--text-dim)", padding: "22px 0" }}>
-                        No students yet — create a class, then enroll.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
+          <Panel title="Operations Snapshot">
+            <div className="pay-stat-row" style={{ marginTop: 4 }}>
+              <div className="pay-stat"><div className="tag">Classes</div><div className="num">{stats?.classes ?? 0}</div></div>
+              <div className="pay-stat"><div className="tag">Subjects</div><div className="num">{stats?.subjects ?? 0}</div></div>
+              <div className="pay-stat"><div className="tag">Total Exams</div><div className="num">{stats?.exams ?? 0}</div></div>
+              <div className="pay-stat"><div className="tag">Upcoming Exams</div><div className="num">{stats?.upcomingExamCount ?? 0}</div></div>
             </div>
           </Panel>
         </div>
@@ -304,79 +269,12 @@ export default function DashboardPage() {
             </div>
           </Panel>
 
-          <Panel title="Quick Modules">
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              {[
-                { href: "/accounting", label: "Accounting", color: "var(--indigo)" },
-                { href: "/inventory", label: "Inventory", color: "var(--saffron)" },
-                { href: "/hr", label: "HR & Payroll", color: "var(--jade)" },
-                { href: "/settings", label: "Settings", color: "#6366f1" },
-                { href: "/notices", label: "Notices", color: "#d6483d" },
-                { href: "/reports", label: "Reports", color: "#0ea5a0" },
-              ].map((m) => (
-                <Link
-                  key={m.href}
-                  href={m.href}
-                  className="spark-card"
-                  style={{ textDecoration: "none", color: "inherit", borderLeft: `3px solid ${m.color}` }}
-                >
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>{m.label}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 3 }}>Open module →</div>
-                </Link>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel title="Upcoming Exams">
-            {upcoming.length ? (
-              upcoming.map((exam) => {
-                const d = dayMonth(exam.date);
-                return (
-                  <div className="deadline-row" key={exam._id}>
-                    <span className="dname">
-                      {exam.title}
-                      <span style={{ color: "var(--text-dim)", fontSize: 11 }}>
-                        {" "}· {labelOfClass(exam.classId as never)}
-                      </span>
-                    </span>
-                    <span className="d">{d.day} {d.month}</span>
-                  </div>
-                );
-              })
-            ) : (
-              <EmptyState message="No exams scheduled." />
-            )}
-          </Panel>
-
-          <Panel title="Recent Vouchers">
-            <div className="table-scroll">
-              <table className="reg">
-                <thead>
-                  <tr>
-                    <th>Student</th>
-                    <th className="right">Amount</th>
-                    <th className="right">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentFees.map((f) => {
-                    const student = typeof f.studentId === "object" ? f.studentId : null;
-                    return (
-                      <tr key={f._id}>
-                        <td><NameCell name={student ? fullName(student) : "Unknown"} /></td>
-                        <td className="num">{f.amount.toLocaleString()}</td>
-                        <td className="right"><StatusBadge status={f.status} /></td>
-                      </tr>
-                    );
-                  })}
-                  {!recentFees.length ? (
-                    <tr>
-                      <td colSpan={3} style={{ color: "var(--text-dim)", padding: "18px 0" }}>No vouchers yet.</td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
+          <Panel title="Fee KPI Summary">
+            <div className="deadline-row"><div className="dname">Total Billed</div><div className="num">{formatCompact(fees?.billed ?? 0)}</div></div>
+            <div className="deadline-row"><div className="dname">Collected</div><div className="num" style={{ color: "var(--jade-dark)" }}>{formatCompact(fees?.collected ?? 0)}</div></div>
+            <div className="deadline-row"><div className="dname">Pending</div><div className="num" style={{ color: "#96650f" }}>{formatCompact(fees?.pending ?? 0)}</div></div>
+            <div className="deadline-row"><div className="dname">Overdue</div><div className="num" style={{ color: "var(--red)" }}>{formatCompact(fees?.overdue ?? 0)}</div></div>
+            <div className="deadline-row"><div className="dname">Overdue Vouchers</div><div className="num">{fees?.overdueCount ?? 0}</div></div>
           </Panel>
         </div>
       </div>

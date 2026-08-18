@@ -60,11 +60,16 @@ export default function ReportsPage() {
   const [type, setType] = useState<(typeof REPORTS)[number]["id"]>("overview");
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generatedAt, setGeneratedAt] = useState("");
   const [classes, setClasses] = useState<{ _id: string; name: string; section: string }[]>([]);
   const [classId, setClassId] = useState("all");
   const [examType, setExamType] = useState("final");
   const [students, setStudents] = useState<{ _id: string; firstName: string; lastName: string; admissionNo: string }[]>([]);
   const [studentId, setStudentId] = useState("");
+
+  useEffect(() => {
+    setGeneratedAt(new Date().toLocaleString("en-GB"));
+  }, []);
 
   useEffect(() => {
     fetch("/api/classes")
@@ -274,10 +279,10 @@ export default function ReportsPage() {
       <div className="print-only" style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 20 }}>Sabaq — {REPORTS.find((r) => r.id === type)?.label}</h2>
         <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
-          Generated {new Date().toLocaleString()}
+          Generated {generatedAt || "—"}
           {results
-            ? ` · ${results.cards.length} cards · ${results.examType} · ${results.class.name}${
-                results.class.section ? `-${results.class.section}` : ""
+            ? ` · ${(results.cards || []).length} cards · ${results.examType || "All exams"} · ${results.class?.name || "All classes"}${
+                results.class?.section ? `-${results.class.section}` : ""
               }`
             : ""}
         </div>

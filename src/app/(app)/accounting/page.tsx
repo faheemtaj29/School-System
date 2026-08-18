@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   EmptyState,
   Field,
@@ -113,6 +114,15 @@ type LedgerRow = {
   balance: number;
 };
 
+type AuditEventItem = {
+  _id: string;
+  action: string;
+  actorName?: string;
+  actorRole?: string;
+  summary: string;
+  createdAt: string;
+};
+
 const blankLine = (): VoucherLine => ({
   accountCode: "",
   debit: 0,
@@ -160,6 +170,8 @@ const voucherLabels: Record<string, string> = {
 };
 
 export default function AccountingPage() {
+  const searchParams = useSearchParams();
+  const searchKey = searchParams.toString();
   const [tab, setTab] = useState<Tab>("overview");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
@@ -219,6 +231,12 @@ export default function AccountingPage() {
   const [voucherOpen, setVoucherOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [voucherForm, setVoucherForm] = useState(voucherBlank);
+  const [editingVoucherId, setEditingVoucherId] = useState<string | null>(null);
+  const [voucherNumberPreview, setVoucherNumberPreview] = useState("");
+  const [auditEvents, setAuditEvents] = useState<AuditEventItem[]>([]);
+  const [auditLoadedFor, setAuditLoadedFor] = useState<string | null>(null);
+  const [expensePaymentMode, setExpensePaymentMode] = useState<"cash" | "bank">("cash");
+  const [expensePaymentAccount, setExpensePaymentAccount] = useState("");
   const [accountForm, setAccountForm] = useState(accountBlank);
   const [selected, setSelected] = useState<Voucher | null>(null);
   const [err, setErr] = useState("");
@@ -235,6 +253,209 @@ export default function AccountingPage() {
     }[]
   >([]);
 
+  const navNode = searchParams.get("node") || "accounting-dashboard";
+  const navMode = searchParams.get("mode") || "";
+
+  const breadcrumb = useMemo(() => {
+    const map: Record<string, { section: string; leaf: string }> = {
+      "accounting-dashboard": { section: "Overview", leaf: "Dashboard" },
+      cpv: { section: "Vouchers", leaf: "Cash Payment Voucher" },
+      bpv: { section: "Vouchers", leaf: "Bank Payment Voucher" },
+      crv: { section: "Vouchers", leaf: "Cash Receipt Voucher" },
+      brv: { section: "Vouchers", leaf: "Bank Receipt Voucher" },
+      jv: { section: "Vouchers", leaf: "Journal Entry" },
+      cv: { section: "Vouchers", leaf: "Contra Entry" },
+      expv: { section: "Vouchers", leaf: "Expense Voucher" },
+      expvp: { section: "Vouchers", leaf: "Expense Voucher" },
+      "chart-of-accounts": { section: "Ledgers", leaf: "Chart of Accounts" },
+      "party-ledger": { section: "Ledgers", leaf: "Party Ledger" },
+      "general-ledger": { section: "Ledgers", leaf: "General Ledger" },
+      "cash-book": { section: "Ledgers", leaf: "Cash Book" },
+      "bank-book": { section: "Ledgers", leaf: "Bank Book" },
+      "trial-balance": { section: "Reports", leaf: "Trial Balance" },
+      "income-statement": { section: "Reports", leaf: "Income Statement" },
+      "balance-sheet": { section: "Reports", leaf: "Balance Sheet" },
+      "bank-reconciliation": { section: "Reports", leaf: "Bank Reconciliation" },
+      "accounting-reports": { section: "Reports", leaf: "Accounting Reports" },
+    };
+    return map[navNode] || { section: "Overview", leaf: "Dashboard" };
+  }, [navNode]);
+
+  const pageHeaderTitle = useMemo(() => {
+    if (navNode === "accounting-dashboard") return "Accounting Dashboard";
+    if (navNode === "cpv") return "Cash Payment Vouchers";
+    if (navNode === "bpv") return "Bank Payment Vouchers";
+    if (navNode === "crv") return "Cash Receipt Vouchers";
+    if (navNode === "brv") return "Bank Receipt Vouchers";
+    if (navNode === "jv") return "Journal Vouchers";
+    if (navNode === "cv") return "Contra Vouchers";
+    if (navNode === "expv" || navNode === "expvp") return "Expense Vouchers";
+    if (navNode === "chart-of-accounts") return "Chart of Accounts";
+    if (navNode === "party-ledger") return "Party Ledger";
+    if (navNode === "general-ledger") return "General Ledger";
+    if (navNode === "cash-book") return "Cash Book";
+    if (navNode === "bank-book") return "Bank Book";
+    if (navNode === "trial-balance") return "Trial Balance";
+    if (navNode === "income-statement") return "Income Statement";
+    if (navNode === "balance-sheet") return "Balance Sheet";
+    if (navNode === "bank-reconciliation") return "Bank Reconciliation";
+    if (navNode === "accounting-reports") return "Accounting Reports";
+    return "Accounting & Finance";
+  }, [navNode]);
+
+  const pageHeaderDesc = useMemo(() => {
+    if (navNode === "accounting-dashboard") return "Finance KPIs, ledgers and reporting controls in one place.";
+    if (navNode === "cpv") return "Manage all cash payment transactions.";
+    if (navNode === "bpv") return "Manage all bank payment transactions.";
+    if (navNode === "crv") return "Manage all cash receipt transactions.";
+    if (navNode === "brv") return "Manage all bank receipt transactions.";
+    if (navNode === "jv") return "Manage journal entry vouchers and posting.";
+    if (navNode === "cv") return "Manage contra entries between cash and bank.";
+    if (navNode === "expv" || navNode === "expvp") {
+      return "Create expense vouchers and choose cash/bank payment account from chart of accounts.";
+    }
+    if (navNode === "chart-of-accounts") return "5-level account hierarchy for journal posting and controls.";
+    if (navNode === "party-ledger") return "View ledger balances and movement by party.";
+    if (navNode === "general-ledger") return "View account-wise ledger movement and balances.";
+    if (navNode === "cash-book") return "Daily cash movement with opening and closing position.";
+    if (navNode === "bank-book") return "Daily bank movement and reconciliation-ready balances.";
+    if (navNode === "trial-balance") return "Debit and credit position across all posting accounts.";
+    if (navNode === "income-statement") return "Income and expense statement for selected period.";
+    if (navNode === "balance-sheet") return "Assets, liabilities and equity position for selected period.";
+    if (navNode === "bank-reconciliation") return "Unreconciled bank entries and WHT monitoring.";
+    if (navNode === "accounting-reports") return "Summary reporting view across core accounting books.";
+    return "5-level chart of accounts · double-entry vouchers · invoices · branch books";
+  }, [navNode]);
+
+  const voucherTypeByNode = useMemo(() => {
+    const map: Record<string, string> = {
+      cpv: "payment",
+      bpv: "payment",
+      crv: "receipt",
+      brv: "receipt",
+      jv: "journal",
+      cv: "contra",
+      expv: "payment",
+      expvp: "payment",
+    };
+    return map[navNode] || "";
+  }, [navNode]);
+
+  const activeTab = useMemo<Tab>(() => {
+    const byNode: Record<string, Tab> = {
+      cpv: "vouchers",
+      bpv: "vouchers",
+      crv: "vouchers",
+      brv: "vouchers",
+      jv: "vouchers",
+      cv: "vouchers",
+      expv: "vouchers",
+      expvp: "vouchers",
+      "chart-of-accounts": "coa",
+      "party-ledger": "ledger",
+      "general-ledger": "ledger",
+      "cash-book": "daybook",
+      "bank-book": "daybook",
+      "trial-balance": "trial",
+      "income-statement": "pnl",
+      "balance-sheet": "balance",
+      "bank-reconciliation": "bank",
+    };
+    return byNode[navNode] || tab;
+  }, [navNode, tab]);
+
+  const isDashboardNode = navNode === "accounting-dashboard";
+
+  const needsPeriodControls = useMemo(
+    () => ["party-ledger", "general-ledger", "cash-book", "bank-book", "trial-balance", "income-statement", "balance-sheet", "bank-reconciliation", "accounting-reports"].includes(navNode),
+    [navNode]
+  );
+
+  const visibleVouchers = useMemo(() => {
+    let rows = voucherTypeByNode
+      ? vouchers.filter((v) => v.voucherType === voucherTypeByNode)
+      : vouchers;
+    if (navMode === "cash_payment") {
+      rows = rows.filter((v) =>
+        v.lines.some((line) => line.credit > 0 && /cash/i.test(line.accountName || ""))
+      );
+    }
+    if (navMode === "bank_payment") {
+      rows = rows.filter((v) =>
+        v.lines.some((line) => line.credit > 0 && /bank/i.test(line.accountName || ""))
+      );
+    }
+    if (navMode === "cash_receipt") {
+      rows = rows.filter((v) =>
+        v.lines.some((line) => line.debit > 0 && /cash/i.test(line.accountName || ""))
+      );
+    }
+    if (navMode === "bank_receipt") {
+      rows = rows.filter((v) =>
+        v.lines.some((line) => line.debit > 0 && /bank/i.test(line.accountName || ""))
+      );
+    }
+    if (navMode === "expense" || navMode === "expense_paid") {
+      rows = rows.filter((v) =>
+        v.lines.some(
+          (line) =>
+            line.credit > 0 && /cash|bank/i.test(line.accountName || "")
+        )
+      );
+    }
+    return rows;
+  }, [vouchers, voucherTypeByNode, navMode]);
+
+  const effectiveVoucherTypeFilter = voucherTypeByNode || typeFilter;
+
+  const recentAccountingVouchers = useMemo(
+    () =>
+      [...vouchers]
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 6),
+    [vouchers]
+  );
+
+  const voucherTypeMix = useMemo(() => {
+    const map = new Map<string, { label: string; count: number; amount: number }>();
+    for (const voucher of vouchers) {
+      const key = voucher.voucherType;
+      const row = map.get(key) || {
+        label: voucherLabels[key] || key,
+        count: 0,
+        amount: 0,
+      };
+      row.count += 1;
+      row.amount += Number(voucher.grandTotal || 0);
+      map.set(key, row);
+    }
+    return [...map.values()].sort((a, b) => b.amount - a.amount);
+  }, [vouchers]);
+
+  const createLabel = useMemo(() => {
+    if (navNode === "accounting-dashboard") return "New Voucher";
+    if (navNode === "cpv") return "New Cash Payment Voucher";
+    if (navNode === "bpv") return "New Bank Payment Voucher";
+    if (navNode === "crv") return "New Cash Receipt Voucher";
+    if (navNode === "brv") return "New Bank Receipt Voucher";
+    if (navNode === "jv") return "New Journal Voucher";
+    if (navNode === "cv") return "New Contra Voucher";
+    if (navNode === "expv" || navNode === "expvp") return "New Expense Voucher";
+    if (navNode === "chart-of-accounts") return "Add Account";
+    return "";
+  }, [navNode]);
+
+  const voucherEmptyMessage = useMemo(() => {
+    if (navNode === "expv" || navNode === "expvp") {
+      return "No expense vouchers yet. Create the first expense payment entry.";
+    }
+    if (navNode === "cpv") return "No cash payment vouchers yet. Create the first cash payment entry.";
+    if (navNode === "bpv") return "No bank payment vouchers yet. Create the first bank payment entry.";
+    if (navNode === "crv") return "No cash receipt vouchers yet. Create the first cash receipt entry.";
+    if (navNode === "brv") return "No bank receipt vouchers yet. Create the first bank receipt entry.";
+    return "No vouchers yet. Create a receipt, payment, journal or invoice.";
+  }, [navNode]);
+
   const load = useCallback(async () => {
     const period = new URLSearchParams();
     if (branch) period.set("branch", branch);
@@ -249,7 +470,7 @@ export default function AccountingPage() {
 
     const voucherQuery = new URLSearchParams({ view: "vouchers" });
     if (branch) voucherQuery.set("branch", branch);
-    if (typeFilter) voucherQuery.set("type", typeFilter);
+    if (effectiveVoucherTypeFilter) voucherQuery.set("type", effectiveVoucherTypeFilter);
     if (statusFilter) voucherQuery.set("status", statusFilter);
 
     const [a, v, t, s, cash, settings, day, profit, bs] = await Promise.all([
@@ -308,9 +529,10 @@ export default function AccountingPage() {
         ? form
         : { ...form, branchCode: settings.settings.defaultBranchCode }
     );
-  }, [branch, from, to, typeFilter, statusFilter]);
+  }, [branch, from, to, effectiveVoucherTypeFilter, statusFilter]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 
@@ -328,13 +550,240 @@ export default function AccountingPage() {
   }, [ledgerCode, branch, from, to]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadLedger();
   }, [loadLedger]);
+
+  useEffect(() => {
+    const requestedTab = searchParams.get("tab") as Tab | null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (requestedTab) setTab(requestedTab);
+    const requestedType = searchParams.get("type") || "";
+    setTypeFilter(requestedType);
+  }, [searchKey, searchParams]);
 
   const postingAccounts = useMemo(
     () => accounts.filter((account) => account.isPosting && account.isActive),
     [accounts]
   );
+
+  const partyLedgerAccounts = useMemo(
+    () =>
+      postingAccounts.filter((account) =>
+        /receivable|payable|student|supplier|customer|party/i.test(
+          `${account.code} ${account.name}`
+        )
+      ),
+    [postingAccounts]
+  );
+
+  const partyLedgerEntries = useMemo(
+    () => {
+      const partyCodes = new Set(partyLedgerAccounts.map((account) => account.code));
+      return dayBook.flatMap((voucher) =>
+        voucher.lines
+          .filter((line) => partyCodes.has(line.accountCode))
+          .map((line) => ({ voucher, line }))
+      );
+    },
+    [dayBook, partyLedgerAccounts]
+  );
+
+  const ledgerAccounts = navNode === "party-ledger" ? partyLedgerAccounts : postingAccounts;
+
+  const reportHeadingTitle = useMemo(() => {
+    if (navNode === "party-ledger") return "Party Ledger";
+    if (navNode === "general-ledger") return "General Ledger";
+    if (navNode === "cash-book") return "Cash Book";
+    if (navNode === "bank-book") return "Bank Book";
+    return REPORT_TITLES[activeTab];
+  }, [navNode, activeTab]);
+
+  const expenseCashAccounts = useMemo(
+    () =>
+      postingAccounts.filter(
+        (account) => account.isCashBank && /cash/i.test(`${account.code} ${account.name}`)
+      ),
+    [postingAccounts]
+  );
+
+  const expenseBankAccounts = useMemo(
+    () =>
+      postingAccounts.filter(
+        (account) => account.isCashBank && /bank/i.test(`${account.code} ${account.name}`)
+      ),
+    [postingAccounts]
+  );
+
+  const expenseAccountOptions = useMemo(
+    () => (expensePaymentMode === "bank" ? expenseBankAccounts : expenseCashAccounts),
+    [expensePaymentMode, expenseBankAccounts, expenseCashAccounts]
+  );
+
+  const cashBankAccounts = useMemo(
+    () => postingAccounts.filter((account) => account.isCashBank),
+    [postingAccounts]
+  );
+
+  const cashAccounts = useMemo(
+    () =>
+      cashBankAccounts.filter((account) =>
+        /cash/i.test(`${account.code} ${account.name}`)
+      ),
+    [cashBankAccounts]
+  );
+
+  const bankAccounts = useMemo(
+    () =>
+      cashBankAccounts.filter((account) =>
+        /bank/i.test(`${account.code} ${account.name}`)
+      ),
+    [cashBankAccounts]
+  );
+
+  const [settlementAccount, setSettlementAccount] = useState("");
+
+  const isExpenseVoucherNode = navNode === "expv" || navNode === "expvp";
+  const isExpenseVoucherForm = isExpenseVoucherNode && voucherForm.voucherType === "payment";
+  const isVoucherTypeLocked = Boolean(voucherTypeByNode);
+  const isCashPaymentNode = navNode === "cpv";
+  const isBankPaymentNode = navNode === "bpv";
+  const isCashReceiptNode = navNode === "crv";
+  const isBankReceiptNode = navNode === "brv";
+  const isFixedSettlementVoucherNode =
+    isCashPaymentNode ||
+    isBankPaymentNode ||
+    isCashReceiptNode ||
+    isBankReceiptNode;
+
+  const fixedSettlementConfig = useMemo(() => {
+    if (isCashPaymentNode) {
+      return {
+        accountKind: "cash" as const,
+        lockedSide: "credit" as const,
+        lockedIndex: 1,
+        label: "Pay From (Cash Account)",
+      };
+    }
+    if (isBankPaymentNode) {
+      return {
+        accountKind: "bank" as const,
+        lockedSide: "credit" as const,
+        lockedIndex: 1,
+        label: "Pay From (Bank Account)",
+      };
+    }
+    if (isCashReceiptNode) {
+      return {
+        accountKind: "cash" as const,
+        lockedSide: "debit" as const,
+        lockedIndex: 0,
+        label: "Receive In (Cash Account)",
+      };
+    }
+    if (isBankReceiptNode) {
+      return {
+        accountKind: "bank" as const,
+        lockedSide: "debit" as const,
+        lockedIndex: 0,
+        label: "Receive In (Bank Account)",
+      };
+    }
+    return null;
+  }, [isCashPaymentNode, isBankPaymentNode, isCashReceiptNode, isBankReceiptNode]);
+
+  const settlementOptions = useMemo(() => {
+    if (!fixedSettlementConfig) return [] as Account[];
+    return fixedSettlementConfig.accountKind === "bank" ? bankAccounts : cashAccounts;
+  }, [fixedSettlementConfig, bankAccounts, cashAccounts]);
+
+  const settlementAccountLabel = useMemo(() => {
+    if (!settlementAccount) return "";
+    const found = postingAccounts.find((a) => a.code === settlementAccount);
+    return found ? `${found.code} — ${found.name}` : settlementAccount;
+  }, [postingAccounts, settlementAccount]);
+
+  const activeVoucherTitle = useMemo(() => {
+    if (navNode === "cpv") return "Cash Payment Voucher";
+    if (navNode === "bpv") return "Bank Payment Voucher";
+    if (navNode === "crv") return "Cash Receipt Voucher";
+    if (navNode === "brv") return "Bank Receipt Voucher";
+    if (navNode === "cv") return "Contra Voucher";
+    if (navNode === "jv") return "Journal Voucher";
+    if (navNode === "expv" || navNode === "expvp") return "Expense Voucher";
+    return voucherLabels[voucherForm.voucherType] || "Voucher";
+  }, [navNode, voucherForm.voucherType]);
+
+  const voucherModalTitle = `${editingVoucherId ? "Edit" : "New"} ${activeVoucherTitle}`;
+
+  useEffect(() => {
+    if (!isExpenseVoucherForm) return;
+    const exists = expenseAccountOptions.some((a) => a.code === expensePaymentAccount);
+    if (exists) return;
+    const fallbackCode = expenseAccountOptions[0]?.code;
+    if (!fallbackCode) return;
+    applyExpensePaymentAccount(fallbackCode);
+  }, [
+    isExpenseVoucherForm,
+    expenseAccountOptions,
+    expensePaymentAccount,
+    expensePaymentMode,
+  ]);
+
+  useEffect(() => {
+    if (!isFixedSettlementVoucherNode) return;
+    if (!settlementOptions.length) return;
+    if (settlementOptions.some((a) => a.code === settlementAccount)) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSettlementAccount(settlementOptions[0].code);
+  }, [isFixedSettlementVoucherNode, settlementOptions, settlementAccount]);
+
+  useEffect(() => {
+    if (!fixedSettlementConfig) return;
+    if (!voucherOpen) return;
+    if (!settlementAccount) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setVoucherForm((form) => {
+      if (form.voucherType !== voucherTypeByNode) return form;
+      const lines = [...form.lines];
+      while (lines.length < 2) lines.push(blankLine());
+      const lockedIndex = fixedSettlementConfig.lockedIndex;
+      const locked = lines[lockedIndex] || blankLine();
+      const oppositeTotal = lines.reduce((sum, line, index) => {
+        if (index === lockedIndex) return sum;
+        if (fixedSettlementConfig.lockedSide === "credit") {
+          return sum + Number(line.debit || 0);
+        }
+        return sum + Number(line.credit || 0);
+      }, 0);
+      const nextLocked: VoucherLine =
+        fixedSettlementConfig.lockedSide === "credit"
+          ? {
+              ...locked,
+              accountCode: settlementAccount,
+              debit: 0,
+              credit: oppositeTotal,
+            }
+          : {
+              ...locked,
+              accountCode: settlementAccount,
+              debit: oppositeTotal,
+              credit: 0,
+            };
+      const unchanged =
+        locked.accountCode === nextLocked.accountCode &&
+        Number(locked.debit || 0) === Number(nextLocked.debit || 0) &&
+        Number(locked.credit || 0) === Number(nextLocked.credit || 0);
+      if (unchanged) return form;
+      lines[lockedIndex] = nextLocked;
+      return { ...form, lines };
+    });
+  }, [
+    fixedSettlementConfig,
+    voucherOpen,
+    settlementAccount,
+    voucherTypeByNode,
+  ]);
 
   const lineTotals = useMemo(
     () => ({
@@ -386,12 +835,127 @@ export default function AccountingPage() {
         { accountCode: defaultCode("Cash in Hand", "asset"), debit: 0, credit: 0 },
       ];
     }
-    setVoucherForm({
+    const nextForm = {
       ...voucherBlank,
       voucherType: type,
       branchCode: branch || voucherForm.branchCode || "MAIN",
       lines,
+    };
+
+    if (fixedSettlementConfig && type === voucherTypeByNode) {
+      const options = fixedSettlementConfig.accountKind === "bank" ? bankAccounts : cashAccounts;
+      const currentIsValid = options.some((a) => a.code === settlementAccount);
+      const fallbackCode =
+        (currentIsValid ? settlementAccount : "") ||
+        options[0]?.code ||
+        defaultCode(fixedSettlementConfig.accountKind === "bank" ? "Bank" : "Cash in Hand", "asset");
+      setSettlementAccount(fallbackCode);
+      if (fixedSettlementConfig.lockedSide === "credit") {
+        nextForm.lines = [
+          { accountCode: defaultCode("General Expense", "expense"), debit: 0, credit: 0 },
+          { accountCode: fallbackCode, debit: 0, credit: 0 },
+        ];
+      } else {
+        nextForm.lines = [
+          { accountCode: fallbackCode, debit: 0, credit: 0 },
+          { accountCode: defaultCode("Student Tuition", "income"), debit: 0, credit: 0 },
+        ];
+      }
+    }
+
+    setVoucherForm(nextForm);
+    setEditingVoucherId(null);
+    fetchVoucherNumberPreview(type, nextForm.branchCode, nextForm.date);
+    setErr("");
+    setVoucherOpen(true);
+  }
+
+  function applyExpensePaymentAccount(code: string) {
+    setExpensePaymentAccount(code);
+    setVoucherForm((form) => {
+      const lines = [...form.lines];
+      while (lines.length < 2) lines.push(blankLine());
+      lines[1] = { ...lines[1], accountCode: code };
+      return { ...form, lines };
     });
+  }
+
+  function openExpenseVoucher(mode: "cash" | "bank" = "cash") {
+    const modeAccounts = mode === "bank" ? expenseBankAccounts : expenseCashAccounts;
+    const fallbackCode =
+      modeAccounts[0]?.code || defaultCode(mode === "bank" ? "Bank" : "Cash in Hand", "asset");
+    setExpensePaymentMode(mode);
+    setExpensePaymentAccount(fallbackCode);
+    setVoucherForm({
+      ...voucherBlank,
+      voucherType: "payment",
+      branchCode: branch || voucherForm.branchCode || "MAIN",
+      partyType: "supplier",
+      lines: [
+        { accountCode: defaultCode("General Expense", "expense"), debit: 0, credit: 0 },
+        { accountCode: fallbackCode, debit: 0, credit: 0 },
+      ],
+    });
+    setEditingVoucherId(null);
+    fetchVoucherNumberPreview("payment", branch || voucherForm.branchCode || "MAIN", voucherBlank.date);
+    setErr("");
+    setVoucherOpen(true);
+  }
+
+  async function fetchVoucherNumberPreview(type: string, branchCode: string, date: string) {
+    const params = new URLSearchParams({
+      view: "next-voucher-number",
+      type,
+      branch: branchCode || "MAIN",
+      date,
+    });
+    const response = await fetch(`/api/accounting?${params}`);
+    const data = await response.json();
+    if (response.ok) setVoucherNumberPreview(data.number || "");
+  }
+
+  function openVoucherForEdit(voucher: Voucher) {
+    if (voucher.status !== "draft") {
+      alert("Only draft vouchers can be edited");
+      return;
+    }
+    const formData = {
+      voucherType: voucher.voucherType,
+      date: toDateInput(new Date(voucher.date)),
+      dueDate: voucher.dueDate ? toDateInput(new Date(voucher.dueDate)) : "",
+      branchCode: voucher.branchCode || "MAIN",
+      partyType: voucher.partyType || "other",
+      partyName: voucher.partyName || "",
+      narration: voucher.narration || "",
+      reference: voucher.reference || "",
+      discountAmount: Number(voucher.discountAmount || 0),
+      taxAmount: Number(voucher.taxAmount || 0),
+      items:
+        voucher.items?.length > 0
+          ? voucher.items.map((item) => ({
+              description: item.description,
+              quantity: Number(item.quantity || 0),
+              rate: Number(item.rate || 0),
+            }))
+          : [{ description: "", quantity: 1, rate: 0 }],
+      lines:
+        voucher.lines?.length > 0
+          ? voucher.lines.map((line) => ({
+              accountCode: line.accountCode,
+              debit: Number(line.debit || 0),
+              credit: Number(line.credit || 0),
+              narration: line.narration || "",
+            }))
+          : [blankLine(), blankLine()],
+      postNow: false,
+    };
+    setVoucherForm(formData);
+    setVoucherNumberPreview(voucher.number);
+    if (fixedSettlementConfig) {
+      setSettlementAccount(voucher.lines[fixedSettlementConfig.lockedIndex]?.accountCode || "");
+    }
+    setEditingVoucherId(voucher._id);
+    setSelected(voucher);
     setErr("");
     setVoucherOpen(true);
   }
@@ -399,6 +963,23 @@ export default function AccountingPage() {
   function updateLine(index: number, patch: Partial<VoucherLine>) {
     const lines = [...voucherForm.lines];
     lines[index] = { ...lines[index], ...patch };
+    if (fixedSettlementConfig && index !== fixedSettlementConfig.lockedIndex) {
+      const lockedIndex = fixedSettlementConfig.lockedIndex;
+      const locked = lines[lockedIndex] || blankLine();
+      const oppositeTotal = lines.reduce((sum, line, i) => {
+        if (i === lockedIndex) return sum;
+        return (
+          sum +
+          Number(
+            fixedSettlementConfig.lockedSide === "credit" ? line.debit || 0 : line.credit || 0
+          )
+        );
+      }, 0);
+      lines[lockedIndex] =
+        fixedSettlementConfig.lockedSide === "credit"
+          ? { ...locked, accountCode: settlementAccount || locked.accountCode, debit: 0, credit: oppositeTotal }
+          : { ...locked, accountCode: settlementAccount || locked.accountCode, debit: oppositeTotal, credit: 0 };
+    }
     setVoucherForm({ ...voucherForm, lines });
   }
 
@@ -411,20 +992,113 @@ export default function AccountingPage() {
   async function saveVoucher(e: FormEvent) {
     e.preventDefault();
     setErr("");
-    const res = await fetch("/api/accounting", {
-      method: "POST",
+    let formToSave = voucherForm;
+    if (!isInvoice) {
+      formToSave = { ...formToSave, items: [] };
+    }
+    if (fixedSettlementConfig) {
+      if (!settlementAccount) {
+        setErr(
+          fixedSettlementConfig.lockedSide === "credit"
+            ? "Select the paying cash/bank account"
+            : "Select the receiving cash/bank account"
+        );
+        return;
+      }
+      const lockedIndex = fixedSettlementConfig.lockedIndex;
+      const lines = [...formToSave.lines];
+      const locked = lines[lockedIndex] || blankLine();
+      const oppositeTotal = lines.reduce((sum, line, i) => {
+        if (i === lockedIndex) return sum;
+        return (
+          sum +
+          Number(fixedSettlementConfig.lockedSide === "credit" ? line.debit || 0 : line.credit || 0)
+        );
+      }, 0);
+      lines[lockedIndex] =
+        fixedSettlementConfig.lockedSide === "credit"
+          ? { ...locked, accountCode: settlementAccount, debit: 0, credit: oppositeTotal }
+          : { ...locked, accountCode: settlementAccount, debit: oppositeTotal, credit: 0 };
+      formToSave = { ...formToSave, lines };
+    }
+    const isEditing = Boolean(editingVoucherId);
+    const url = isEditing ? `/api/accounting/${editingVoucherId}` : "/api/accounting";
+    const method = isEditing ? "PUT" : "POST";
+    const body = isEditing
+      ? { kind: "voucher_update", voucher: formToSave }
+      : { kind: "voucher", voucher: formToSave };
+    const res = await fetch(url, {
+      method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "voucher", voucher: voucherForm }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     if (!res.ok) {
-      setErr(data.error || "Could not save voucher");
+      setErr(data.error || (isEditing ? "Could not update voucher" : "Could not save voucher"));
       return;
     }
     setVoucherOpen(false);
+    setEditingVoucherId(null);
     setSelected(data.voucher);
     setTab("vouchers");
     load();
+  }
+
+  function exportVoucherExcel(voucher: Voucher) {
+    const rows = [
+      ["Voucher No", voucher.number],
+      ["Voucher Type", voucherLabels[voucher.voucherType] || voucher.voucherType],
+      ["Date", prettyDate(voucher.date)],
+      ["Status", voucher.status],
+      ["Branch", voucher.branchCode],
+      ["Party", voucher.partyName || ""],
+      ["Reference", voucher.reference || ""],
+      ["Narration", voucher.narration || ""],
+      [],
+      ["Account Code", "Account Name", "Debit", "Credit", "Line Narration"],
+      ...voucher.lines.map((line) => [
+        line.accountCode,
+        line.accountName || "",
+        Number(line.debit || 0).toFixed(2),
+        Number(line.credit || 0).toFixed(2),
+        line.narration || "",
+      ]),
+    ];
+    const csv = rows
+      .map((row) =>
+        row
+          .map((cell) => {
+            const value = String(cell ?? "");
+            return /[",\n]/.test(value)
+              ? `"${value.replace(/"/g, '""')}"`
+              : value;
+          })
+          .join(",")
+      )
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${voucher.number}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function openVoucherPdf(voucher: Voucher) {
+    printVoucher(voucher);
+  }
+
+  function shareVoucherWhatsApp(voucher: Voucher) {
+    const message = [
+      `Voucher: ${voucher.number}`,
+      `Type: ${voucherLabels[voucher.voucherType] || voucher.voucherType}`,
+      `Date: ${prettyDate(voucher.date)}`,
+      `Amount: ${voucher.currency} ${formatNumber(voucher.grandTotal)}`,
+      `Status: ${voucher.status}`,
+      `Narration: ${voucher.narration}`,
+    ].join("\n");
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank");
   }
 
   async function saveAccount(e: FormEvent) {
@@ -462,10 +1136,26 @@ export default function AccountingPage() {
     load();
   }
 
-  async function deleteDraft(voucher: Voucher) {
-    if (!confirm(`Delete draft ${voucher.number}?`)) return;
+  async function deleteVoucher(voucher: Voucher) {
+    const details = `${voucher.number} · ${prettyDate(voucher.date)} · ${voucher.partyName || voucher.branchCode} · ${voucher.currency} ${formatNumber(voucher.grandTotal)}`;
+    if (voucher.status === "void") {
+      alert("This voucher is already cancelled/voided.");
+      return;
+    }
+    let reason = "";
+    if (voucher.status === "draft") {
+      if (!confirm(`Delete this draft voucher?\n\n${details}`)) return;
+    } else {
+      reason = prompt(
+        `This voucher is posted. Deleting it will reverse its accounting effect.\n\n${details}\n\nEnter a reason for deletion:`
+      ) || "";
+      if (!reason.trim()) return;
+      if (!confirm(`Confirm delete posted voucher ${voucher.number}? This cannot be undone.`)) return;
+    }
     const res = await fetch(`/api/accounting/${voucher._id}?kind=voucher`, {
       method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -476,20 +1166,130 @@ export default function AccountingPage() {
     load();
   }
 
+  async function loadAuditHistory(voucherId: string) {
+    const res = await fetch(`/api/accounting?view=audit-log&voucherId=${voucherId}`);
+    const data = await res.json();
+    if (res.ok) {
+      setAuditEvents(data.events || []);
+      setAuditLoadedFor(voucherId);
+    }
+  }
+
   function printVoucher(voucher: Voucher) {
-    setSelected(voucher);
-    setTimeout(() => window.print(), 80);
+    const popup = window.open("", "_blank", "noopener,noreferrer,width=960,height=760");
+    if (!popup) {
+      alert("Allow pop-ups to open the printable voucher.");
+      return;
+    }
+    const escapeHtml = (value: unknown) =>
+      String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    const lines = voucher.lines
+      .map(
+        (line) => `
+          <tr>
+            <td><strong>${escapeHtml(line.accountCode)}</strong><br><span>${escapeHtml(line.accountName)}</span></td>
+            <td>${escapeHtml(line.narration || voucher.narration)}</td>
+            <td class="amount">${line.debit ? formatNumber(line.debit) : "-"}</td>
+            <td class="amount">${line.credit ? formatNumber(line.credit) : "-"}</td>
+          </tr>`
+      )
+      .join("");
+    const items = voucher.items?.length
+      ? `
+        <h3>Invoice Items</h3>
+        <table><thead><tr><th>Description</th><th class="amount">Qty</th><th class="amount">Rate</th><th class="amount">Amount</th></tr></thead>
+        <tbody>${voucher.items
+          .map(
+            (item) => `<tr><td>${escapeHtml(item.description)}</td><td class="amount">${formatNumber(item.quantity)}</td><td class="amount">${formatNumber(item.rate)}</td><td class="amount">${formatNumber(item.amount || item.quantity * item.rate)}</td></tr>`
+          )
+          .join("")}</tbody></table>`
+      : "";
+    const debitTotal = voucher.lines.reduce((sum, line) => sum + Number(line.debit || 0), 0);
+    const creditTotal = voucher.lines.reduce((sum, line) => sum + Number(line.credit || 0), 0);
+    const branchName = branches.find((branch) => branch.code === voucher.branchCode)?.name || voucher.branchCode;
+
+    popup.document.write(`<!doctype html>
+      <html><head><title>${escapeHtml(voucher.number)} - Print</title>
+      <style>
+        @page { size: A4; margin: 14mm; }
+        * { box-sizing: border-box; }
+        body { margin: 0; color: #17241d; font: 12px Arial, sans-serif; }
+        .document { max-width: 190mm; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; gap: 20px; padding-bottom: 16px; border-bottom: 3px solid #157a5c; }
+        h1 { margin: 0; font: 700 25px Georgia, serif; } h2 { margin: 0; font: 700 17px Georgia, serif; text-align: right; }
+        h3 { margin: 23px 0 8px; color: #157a5c; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+        .muted { color: #627369; margin-top: 5px; } .number { font: 700 13px 'Courier New', monospace; margin-top: 6px; }
+        .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 18px 0; padding: 12px; background: #f3f7f3; border: 1px solid #dce7dd; }
+        .meta span { display:block; color:#64746b; font-size:9px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:3px; }.meta b { font-size:12px; }
+        .narration { padding: 10px 12px; border-left: 3px solid #e8992e; background:#fffaf1; line-height:1.5; }
+        table { width:100%; border-collapse:collapse; margin-top:8px; } th { background:#15332a; color:#fff; padding:9px 8px; font-size:9px; text-align:left; letter-spacing:.06em; text-transform:uppercase; } td { padding:9px 8px; border-bottom:1px solid #dfe7df; vertical-align:top; } td span { color:#64746b; font-size:10px; } .amount { text-align:right; font-family:'Courier New', monospace; } .total td { border-top:2px solid #15332a; border-bottom:none; font-weight:bold; }
+        .summary { margin-left:auto; width:310px; margin-top:16px; border:1px solid #dce7dd; }.summary div { display:flex; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #e5ece5; }.summary div:last-child { border:0; background:#e3f2ec; font-weight:700; font-size:13px; }
+        .signatures { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-top:70px; }.signatures div { border-top:1px solid #44534a; padding-top:7px; text-align:center; font-size:10px; color:#4e5e55; }
+      </style></head><body><main class="document">
+        <header class="header"><div><h1>Sabaq School System</h1><p class="muted">${escapeHtml(branchName)}</p></div><div><h2>${escapeHtml(voucherLabels[voucher.voucherType] || voucher.voucherType)}</h2><div class="number">${escapeHtml(voucher.number)}</div></div></header>
+        <section class="meta"><div><span>Date</span><b>${escapeHtml(prettyDate(voucher.date))}</b></div><div><span>Party</span><b>${escapeHtml(voucher.partyName || "- ")}</b></div><div><span>Status</span><b>${escapeHtml(voucher.status.toUpperCase())}</b></div><div><span>Reference</span><b>${escapeHtml(voucher.reference || "- ")}</b></div><div><span>Branch</span><b>${escapeHtml(voucher.branchCode)}</b></div><div><span>Currency</span><b>${escapeHtml(voucher.currency)}</b></div></section>
+        <div class="narration"><strong>Narration:</strong> ${escapeHtml(voucher.narration)}</div>
+        ${items}<h3>Double-entry Posting</h3><table><thead><tr><th>Account</th><th>Narration</th><th class="amount">Debit</th><th class="amount">Credit</th></tr></thead><tbody>${lines}<tr class="total"><td colspan="2">TOTAL</td><td class="amount">${formatNumber(debitTotal)}</td><td class="amount">${formatNumber(creditTotal)}</td></tr></tbody></table>
+        <section class="summary"><div><span>Subtotal</span><strong>${formatNumber(voucher.subtotal)}</strong></div><div><span>Discount</span><strong>${formatNumber(voucher.discountAmount)}</strong></div><div><span>Tax</span><strong>${formatNumber(voucher.taxAmount)}</strong></div><div><span>Grand Total</span><strong>${escapeHtml(voucher.currency)} ${formatNumber(voucher.grandTotal)}</strong></div></section>
+        <footer class="signatures"><div>Prepared by</div><div>Checked by</div><div>Approved by</div><div>Received by</div></footer>
+      </main><script>window.onload = () => window.print();</script></body></html>`);
+    popup.document.close();
   }
 
   return (
     <>
       <Hero
-        title="Accounting & Finance"
-        subtitle="5-level chart of accounts · double-entry vouchers · invoices · branch books"
-        actionLabel="New Voucher"
-        onAction={() => openVoucher("journal")}
+        title={pageHeaderTitle}
+        subtitle={pageHeaderDesc}
+        actionLabel={createLabel || undefined}
+        onAction={() => {
+          if (navNode === "chart-of-accounts") {
+            setAccountForm(accountBlank);
+            setErr("");
+            setAccountOpen(true);
+            return;
+          }
+          if (navNode === "cpv") {
+            openVoucher("payment");
+            return;
+          }
+          if (navNode === "bpv") {
+            openVoucher("payment");
+            return;
+          }
+          if (navNode === "crv") {
+            openVoucher("receipt");
+            return;
+          }
+          if (navNode === "brv") {
+            openVoucher("receipt");
+            return;
+          }
+          if (navNode === "cv") {
+            openVoucher("contra");
+            return;
+          }
+          if (navNode === "expv" || navNode === "expvp") {
+            openExpenseVoucher("cash");
+            return;
+          }
+          if (!createLabel) return;
+          openVoucher("journal");
+        }}
       />
 
+      <div className="chips" style={{ marginBottom: 10 }}>
+        <span className="filter-chip active">Accounting</span>
+        <span className="filter-chip">{breadcrumb.section}</span>
+        <span className="filter-chip">{breadcrumb.leaf}</span>
+      </div>
+
+      {isDashboardNode ? (
       <div className="pay-stat-row">
         <div className="pay-stat">
           <div className="tag">GL Income</div>
@@ -518,7 +1318,9 @@ export default function AccountingPage() {
           </div>
         </div>
       </div>
+      ) : null}
 
+      {isDashboardNode ? (
       <div className="accounting-toolbar no-print">
         <div className="tabs" style={{ marginBottom: 0 }}>
           {(
@@ -537,7 +1339,7 @@ export default function AccountingPage() {
             <button
               key={key}
               type="button"
-              className={`tab${tab === key ? " active" : ""}`}
+              className={`tab${activeTab === key ? " active" : ""}`}
               onClick={() => setTab(key)}
             >
               {label}
@@ -545,7 +1347,9 @@ export default function AccountingPage() {
           ))}
         </div>
       </div>
+      ) : null}
 
+      {needsPeriodControls ? (
       <div className="period-bar no-print">
         <label>
           <span>Branch</span>
@@ -606,37 +1410,29 @@ export default function AccountingPage() {
           </button>
         </div>
       </div>
+      ) : null}
 
+      {needsPeriodControls ? (
       <ReportHeading
-        title={REPORT_TITLES[tab]}
+        title={reportHeadingTitle}
         branch={branches.find((b) => b.code === branch)?.name || "All branches (consolidated)"}
         from={from}
         to={to}
       />
+      ) : null}
 
-      {tab === "overview" ? (
+      {isDashboardNode && activeTab === "overview" ? (
         <>
-          <div className="voucher-launch-grid">
-            {[
-              ["receipt", "Receipt Voucher", "Cash/bank received"],
-              ["payment", "Payment Voucher", "Cash/bank paid"],
-              ["journal", "Journal Voucher", "General adjustment"],
-              ["contra", "Contra Voucher", "Cash ↔ bank transfer"],
-              ["sales_invoice", "Sales Invoice", "Customer / student billing"],
-              ["purchase_invoice", "Purchase Invoice", "Supplier bill"],
-            ].map(([type, title, text]) => (
-              <button
-                type="button"
-                className="voucher-launch"
-                key={type}
-                onClick={() => openVoucher(type)}
-              >
-                <span>{PREFIX_UI[type]}</span>
-                <strong>{title}</strong>
-                <small>{text}</small>
-              </button>
-            ))}
-          </div>
+          <Panel title="Accounting Health" meta="LIVE SNAPSHOT">
+            <div className="pay-stat-row" style={{ marginTop: 4 }}>
+              <div className="pay-stat"><div className="tag">Posted</div><div className="num">{summary.vouchers?.posted || 0}</div></div>
+              <div className="pay-stat"><div className="tag">Draft</div><div className="num" style={{ color: "#96650f" }}>{summary.vouchers?.draft || 0}</div></div>
+              <div className="pay-stat"><div className="tag">Voided</div><div className="num" style={{ color: "var(--red)" }}>{summary.vouchers?.void || 0}</div></div>
+              <div className="pay-stat"><div className="tag">Tax Collected</div><div className="num">{formatNumber(summary.taxCollected || 0)}</div></div>
+              <div className="pay-stat"><div className="tag">Net Position</div><div className="num">{formatNumber((statements.income || 0) - (statements.expense || 0))}</div></div>
+            </div>
+          </Panel>
+
           <div className="grid-2">
             <Panel title="Financial Position">
               {[
@@ -670,13 +1466,59 @@ export default function AccountingPage() {
               </div>
             </Panel>
           </div>
+
+          <div className="grid-2">
+            <Panel title="Recent Voucher Activity" meta={`${recentAccountingVouchers.length} ENTRIES`}>
+              {!recentAccountingVouchers.length ? (
+                <EmptyState message="No voucher activity yet." />
+              ) : (
+                <div className="table-scroll">
+                  <table className="reg">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Voucher</th>
+                        <th>Type</th>
+                        <th className="right">Amount</th>
+                        <th className="right">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentAccountingVouchers.map((v) => (
+                        <tr key={v._id}>
+                          <td>{prettyDate(v.date)}</td>
+                          <td className="num">{v.number}</td>
+                          <td>{voucherLabels[v.voucherType] || v.voucherType}</td>
+                          <td className="num">{v.currency} {formatNumber(v.grandTotal)}</td>
+                          <td className="right"><StatusBadge status={v.status} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Panel>
+
+            <Panel title="Voucher Mix" meta="TYPE BREAKDOWN">
+              {!voucherTypeMix.length ? (
+                <EmptyState message="No voucher mix data yet." />
+              ) : (
+                voucherTypeMix.map((row) => (
+                  <div className="deadline-row" key={row.label}>
+                    <div className="dname">{row.label} ({row.count})</div>
+                    <div className="num">{formatNumber(row.amount)}</div>
+                  </div>
+                ))
+              )}
+            </Panel>
+          </div>
         </>
       ) : null}
 
-      {tab === "vouchers" ? (
-        <Panel title="Voucher Register" meta={`${vouchers.length} RECORDS`}>
+      {activeTab === "vouchers" ? (
+        <Panel title={pageHeaderTitle.includes("Voucher") ? pageHeaderTitle : "Voucher Register"} meta={`${visibleVouchers.length} RECORDS`}>
           <div className="chips no-print" style={{ marginBottom: 14 }}>
-            <select className={inputClass} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+            <select className={inputClass} value={effectiveVoucherTypeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
               <option value="">All voucher types</option>
               {Object.entries(voucherLabels).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
@@ -686,11 +1528,11 @@ export default function AccountingPage() {
               <option value="">All statuses</option>
               <option value="draft">Draft</option>
               <option value="posted">Posted</option>
-              <option value="void">Void</option>
+              <option value="void">Void / Cancelled</option>
             </select>
           </div>
-          {!vouchers.length ? (
-            <EmptyState message="No vouchers yet. Create a receipt, payment, journal or invoice." />
+          {!visibleVouchers.length ? (
+            <EmptyState message={voucherEmptyMessage} />
           ) : (
             <div className="table-scroll">
               <table className="reg">
@@ -706,7 +1548,7 @@ export default function AccountingPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {vouchers.map((v) => (
+                  {visibleVouchers.map((v) => (
                     <tr key={v._id}>
                       <td className="num">{v.number}</td>
                       <td>{prettyDate(v.date)}</td>
@@ -725,15 +1567,23 @@ export default function AccountingPage() {
                       <td>
                         <div className="row-actions">
                           <button type="button" className="link-btn" onClick={() => setSelected(v)}>View</button>
+                          {v.status === "draft" ? (
+                            <button type="button" className="link-btn" onClick={() => openVoucherForEdit(v)}>Edit</button>
+                          ) : null}
                           <button type="button" className="link-btn" onClick={() => printVoucher(v)}>Print</button>
+                          <button type="button" className="link-btn" onClick={() => openVoucherPdf(v)}>PDF</button>
+                          <button type="button" className="link-btn" onClick={() => exportVoucherExcel(v)}>Excel</button>
                           {v.status === "draft" ? (
                             <>
                               <button type="button" className="link-btn" onClick={() => voucherAction(v, "post")}>Post</button>
-                              <button type="button" className="link-btn danger" onClick={() => deleteDraft(v)}>Delete</button>
+                              <button type="button" className="link-btn danger" onClick={() => deleteVoucher(v)}>Delete</button>
                             </>
                           ) : null}
                           {v.status === "posted" && v.sourceType === "manual" ? (
-                            <button type="button" className="link-btn danger" onClick={() => voucherAction(v, "void")}>Void</button>
+                            <>
+                              <button type="button" className="link-btn danger" onClick={() => voucherAction(v, "void")}>Void</button>
+                              <button type="button" className="link-btn danger" onClick={() => deleteVoucher(v)}>Delete</button>
+                            </>
                           ) : null}
                         </div>
                       </td>
@@ -746,7 +1596,7 @@ export default function AccountingPage() {
         </Panel>
       ) : null}
 
-      {tab === "coa" ? (
+      {activeTab === "coa" ? (
         <Panel title="5-Level Chart of Accounts" meta={`${accounts.length} ACCOUNTS`}>
           <div className="form-actions no-print" style={{ marginTop: 0, marginBottom: 14 }}>
             <button
@@ -796,7 +1646,7 @@ export default function AccountingPage() {
         </Panel>
       ) : null}
 
-      {tab === "trial" ? (
+      {activeTab === "trial" ? (
         <Panel
           title="Trial Balance"
           meta={`${trial.rows.length} ACCOUNTS · ${trial.totalDebit === trial.totalCredit ? "BALANCED" : "OUT OF BALANCE"}`}
@@ -857,11 +1707,12 @@ export default function AccountingPage() {
         </Panel>
       ) : null}
 
-      {tab === "ledger" ? (
+      {activeTab === "ledger" ? (
         <Panel
-          title="General Ledger"
-          meta={ledger?.account ? `${ledger.account.code} · ${ledger.account.name}` : "SELECT ACCOUNT"}
+          title={navNode === "party-ledger" ? "Party Ledger" : "General Ledger"}
+          meta={navNode === "party-ledger" ? `${partyLedgerAccounts.length} PARTY COA ACCOUNTS` : ledger?.account ? `${ledger.account.code} · ${ledger.account.name}` : "SELECT ACCOUNT"}
         >
+          {navNode !== "party-ledger" ? (
           <div className="chips no-print" style={{ marginBottom: 14 }}>
             <select
               className={inputClass}
@@ -869,15 +1720,40 @@ export default function AccountingPage() {
               onChange={(e) => setLedgerCode(e.target.value)}
             >
               <option value="">Select a posting account…</option>
-              {postingAccounts.map((a) => (
+              {ledgerAccounts.map((a) => (
                 <option key={a.code} value={a.code}>
                   {a.code} — {a.name}
                 </option>
               ))}
             </select>
           </div>
-          {!ledger ? (
-            <EmptyState message="Choose a posting account to view its ledger with running balance." />
+          ) : null}
+          {navNode === "party-ledger" ? (
+            !partyLedgerEntries.length ? (
+              <EmptyState message="No posted entries found across party COA accounts for this period." />
+            ) : (
+              <div className="table-scroll">
+                <table className="reg report-table">
+                  <thead><tr><th>Date</th><th>Party COA Account</th><th>Voucher</th><th>Particulars</th><th className="right">Debit</th><th className="right">Credit</th></tr></thead>
+                  <tbody>
+                    {partyLedgerEntries.map(({ voucher, line }, index) => (
+                      <tr key={`${voucher._id}-${line.accountCode}-${index}`}>
+                        <td className="num">{prettyDate(voucher.date)}</td>
+                        <td><span className="num">{line.accountCode}</span> — {line.accountName}</td>
+                        <td><div className="num">{voucher.number}</div><div style={{ fontSize: 10.5, color: "var(--text-dim)" }}>{voucherLabels[voucher.voucherType]}</div></td>
+                        <td>{line.narration || voucher.narration}{voucher.partyName ? ` · ${voucher.partyName}` : ""}</td>
+                        <td className="num">{amount(line.debit)}</td>
+                        <td className="num">{amount(line.credit)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          ) : !ledger ? (
+            <EmptyState
+              message="Choose a posting account to view its ledger with running balance."
+            />
           ) : (
             <div className="table-scroll">
               <table className="reg report-table">
@@ -932,7 +1808,7 @@ export default function AccountingPage() {
         </Panel>
       ) : null}
 
-      {tab === "daybook" ? (
+      {activeTab === "daybook" ? (
         <Panel title="Day Book" meta={`${dayBook.length} POSTED VOUCHERS`}>
           {!dayBook.length ? (
             <EmptyState message="No posted vouchers in this period." />
@@ -982,7 +1858,7 @@ export default function AccountingPage() {
         </Panel>
       ) : null}
 
-      {tab === "pnl" ? (
+      {activeTab === "pnl" ? (
         <Panel title="Income & Expenditure Statement" meta={pnl ? (pnl.surplus >= 0 ? "SURPLUS" : "DEFICIT") : ""}>
           {!pnl ? (
             <EmptyState message="No posted income or expenditure in this period." />
@@ -999,7 +1875,7 @@ export default function AccountingPage() {
         </Panel>
       ) : null}
 
-      {tab === "balance" ? (
+      {activeTab === "balance" ? (
         <Panel
           title="Statement of Financial Position"
           meta={balanceSheet ? (balanceSheet.balanced ? "BALANCED" : "OUT OF BALANCE") : ""}
@@ -1042,7 +1918,7 @@ export default function AccountingPage() {
         </Panel>
       ) : null}
 
-      {tab === "bank" ? (
+      {activeTab === "bank" ? (
         <Panel title="Bank reconciliation & WHT" meta={`${bankEntries.length} BANK LINES`}>
           <p className="muted small" style={{ marginBottom: 12 }}>
             Mark bank/online lines as reconciled. Apply WHT on expenses using the rate from Settings → Tax & Finance.
@@ -1126,6 +2002,41 @@ export default function AccountingPage() {
 
       {selected ? (
         <Panel title={`${selected.number} — ${voucherLabels[selected.voucherType]}`} meta={selected.status.toUpperCase()}>
+          <div className="form-actions no-print" style={{ marginTop: 0, marginBottom: 12 }}>
+            <button type="button" className="btn-dark" onClick={() => setSelected(selected)}>
+              View
+            </button>
+            {selected.status === "draft" ? (
+              <button type="button" className="btn-ghost" onClick={() => openVoucherForEdit(selected)}>
+                Update Draft
+              </button>
+            ) : null}
+            {selected.status === "draft" ? (
+              <button type="button" className="btn-ghost" onClick={() => voucherAction(selected, "post")}>
+                Post
+              </button>
+            ) : null}
+            <button type="button" className="btn-ghost" onClick={() => printVoucher(selected)}>
+              Print
+            </button>
+            <button type="button" className="btn-ghost" onClick={() => openVoucherPdf(selected)}>
+              PDF
+            </button>
+            <button type="button" className="btn-ghost" onClick={() => exportVoucherExcel(selected)}>
+              Export Excel
+            </button>
+            <button type="button" className="btn-ghost" onClick={() => shareVoucherWhatsApp(selected)}>
+              WhatsApp
+            </button>
+            {selected.status !== "void" ? (
+              <button type="button" className="btn-ghost" style={{ color: "var(--red)" }} onClick={() => deleteVoucher(selected)}>
+                Delete
+              </button>
+            ) : null}
+            <button type="button" className="btn-ghost" onClick={() => loadAuditHistory(selected._id)}>
+              View Audit History
+            </button>
+          </div>
           <div className="voucher-detail-grid">
             <div><span>Date</span><strong>{prettyDate(selected.date)}</strong></div>
             <div><span>Branch</span><strong>{selected.branchCode}</strong></div>
@@ -1134,39 +2045,151 @@ export default function AccountingPage() {
           </div>
           <p style={{ margin: "14px 0" }}>{selected.narration}</p>
           <VoucherLinesTable voucher={selected} />
+          {auditLoadedFor === selected._id ? (
+            <div className="voucher-editor" style={{ marginTop: 16 }}>
+              <div className="form-section-title">Audit History</div>
+              {!auditEvents.length ? (
+                <EmptyState message="No audit events recorded yet for this voucher." />
+              ) : (
+                <div className="table-scroll">
+                  <table className="reg">
+                    <thead>
+                      <tr><th>When</th><th>Action</th><th>By</th><th>Details</th></tr>
+                    </thead>
+                    <tbody>
+                      {auditEvents.map((ev) => (
+                        <tr key={ev._id}>
+                          <td className="num">{prettyDate(ev.createdAt)}</td>
+                          <td style={{ textTransform: "capitalize" }}>{ev.action}</td>
+                          <td>{ev.actorName || "—"}{ev.actorRole ? ` (${ev.actorRole})` : ""}</td>
+                          <td>{ev.summary}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : null}
         </Panel>
       ) : null}
 
       <ModalForm
         open={voucherOpen}
-        onClose={() => setVoucherOpen(false)}
+        onClose={() => {
+          setVoucherOpen(false);
+          setEditingVoucherId(null);
+        }}
         onSubmit={saveVoucher}
-        title={`New ${voucherLabels[voucherForm.voucherType] || "Voucher"}`}
+        title={voucherModalTitle}
         subtitle="Debit and credit must balance before saving"
-        submitLabel={voucherForm.postNow ? "Save & Post" : "Save Draft"}
+        submitLabel={
+          editingVoucherId
+            ? voucherForm.postNow
+              ? "Update & Post"
+              : "Update Draft"
+            : voucherForm.postNow
+              ? "Save & Post"
+              : "Save Draft"
+        }
         wide
       >
         {err ? <div className="alert err">{err}</div> : null}
         <div className="form-grid">
-          <Field label="Voucher Type" required>
-            <select
+          <Field label="Voucher No.">
+            <input
               className={inputClass}
-              value={voucherForm.voucherType}
-              onChange={(e) => {
-                setVoucherOpen(false);
-                setTimeout(() => openVoucher(e.target.value), 0);
-              }}
-            >
-              {Object.entries(voucherLabels).map(([value, label]) => (
-                <option value={value} key={value}>{label}</option>
-              ))}
-            </select>
+              value={editingVoucherId ? voucherNumberPreview : voucherNumberPreview || "Generating…"}
+              readOnly
+            />
           </Field>
+          <Field label="Voucher Type" required>
+            {isVoucherTypeLocked ? (
+              <input
+                className={inputClass}
+                value={voucherLabels[voucherForm.voucherType] || "Voucher"}
+                readOnly
+              />
+            ) : (
+              <select
+                className={inputClass}
+                value={voucherForm.voucherType}
+                onChange={(e) => {
+                  setVoucherOpen(false);
+                  setTimeout(() => openVoucher(e.target.value), 0);
+                }}
+              >
+                {Object.entries(voucherLabels).map(([value, label]) => (
+                  <option value={value} key={value}>{label}</option>
+                ))}
+              </select>
+            )}
+          </Field>
+          {isFixedSettlementVoucherNode && fixedSettlementConfig ? (
+            <Field label={fixedSettlementConfig.label} required>
+              <select
+                className={inputClass}
+                value={settlementAccount}
+                onChange={(e) => setSettlementAccount(e.target.value)}
+                required
+              >
+                <option value="">Select account</option>
+                {settlementOptions.map((a) => (
+                  <option value={a.code} key={a.code}>{a.code} — {a.name}</option>
+                ))}
+              </select>
+            </Field>
+          ) : null}
+          {isExpenseVoucherForm ? (
+            <>
+              <Field label="Payment Mode" required>
+                <select
+                  className={inputClass}
+                  value={expensePaymentMode}
+                  onChange={(e) => {
+                    const mode = e.target.value as "cash" | "bank";
+                    setExpensePaymentMode(mode);
+                    const modeAccounts = mode === "bank" ? expenseBankAccounts : expenseCashAccounts;
+                    const code =
+                      modeAccounts[0]?.code || defaultCode(mode === "bank" ? "Bank" : "Cash in Hand", "asset");
+                    applyExpensePaymentAccount(code);
+                  }}
+                >
+                  <option value="cash">Cash</option>
+                  <option value="bank">Bank</option>
+                </select>
+              </Field>
+              <Field
+                label={expensePaymentMode === "bank" ? "Bank Account (COA)" : "Cash Account (COA)"}
+                required
+              >
+                <select
+                  className={inputClass}
+                  value={expensePaymentAccount}
+                  onChange={(e) => applyExpensePaymentAccount(e.target.value)}
+                  required
+                >
+                  <option value="">Select account</option>
+                  {expenseAccountOptions.map((a) => (
+                    <option value={a.code} key={a.code}>{a.code} — {a.name}</option>
+                  ))}
+                </select>
+              </Field>
+            </>
+          ) : null}
           <Field label="Date" required>
-            <input type="date" className={inputClass} value={voucherForm.date} onChange={(e) => setVoucherForm({ ...voucherForm, date: e.target.value })} required />
+            <input type="date" className={inputClass} value={voucherForm.date} onChange={(e) => {
+              const date = e.target.value;
+              setVoucherForm({ ...voucherForm, date });
+              if (!editingVoucherId) fetchVoucherNumberPreview(voucherForm.voucherType, voucherForm.branchCode, date);
+            }} required />
           </Field>
           <Field label="Branch" required>
-            <select className={inputClass} value={voucherForm.branchCode} onChange={(e) => setVoucherForm({ ...voucherForm, branchCode: e.target.value })} required>
+            <select className={inputClass} value={voucherForm.branchCode} onChange={(e) => {
+              const branchCode = e.target.value;
+              setVoucherForm({ ...voucherForm, branchCode });
+              if (!editingVoucherId) fetchVoucherNumberPreview(voucherForm.voucherType, branchCode, voucherForm.date);
+            }} required>
               {branches.map((b) => <option key={b.code} value={b.code}>{b.code} — {b.name}</option>)}
             </select>
           </Field>
@@ -1216,23 +2239,89 @@ export default function AccountingPage() {
           </div>
         ) : (
           <div className="voucher-editor">
-            <div className="form-section-title">Double-Entry Lines</div>
-            <div className="voucher-line-head"><span>Account</span><span>Debit</span><span>Credit</span><span>Narration</span><span /></div>
-            {voucherForm.lines.map((line, index) => (
-              <div className="voucher-line-row" key={index}>
-                <select className={inputClass} value={line.accountCode} onChange={(e) => updateLine(index, { accountCode: e.target.value })} required>
+            <div className="form-section-title">{fixedSettlementConfig ? "Entry Lines" : "Double-Entry Lines"}</div>
+            <div className={`voucher-line-head${fixedSettlementConfig ? " amount-only" : ""}`}>
+              {fixedSettlementConfig ? (
+                <><span>Account</span><span>Amount</span><span>Narration</span><span /></>
+              ) : (
+                <><span>Account</span><span>Debit</span><span>Credit</span><span>Narration</span><span /></>
+              )}
+            </div>
+            {voucherForm.lines.map((line, index) => {
+              if (fixedSettlementConfig && index === fixedSettlementConfig.lockedIndex) return null;
+              return (
+              <div className={fixedSettlementConfig ? "voucher-line-row amount-only" : "voucher-line-row"} key={index}>
+                <select
+                  className={inputClass}
+                  value={line.accountCode}
+                  onChange={(e) => updateLine(index, { accountCode: e.target.value })}
+                  required
+                >
                   <option value="">Select posting account</option>
                   {postingAccounts.map((a) => <option value={a.code} key={a.code}>{a.code} — {a.name}</option>)}
                 </select>
-                <input type="number" min="0" step="0.01" className={inputClass} value={line.debit} onChange={(e) => updateLine(index, { debit: Number(e.target.value), credit: Number(e.target.value) > 0 ? 0 : line.credit })} />
-                <input type="number" min="0" step="0.01" className={inputClass} value={line.credit} onChange={(e) => updateLine(index, { credit: Number(e.target.value), debit: Number(e.target.value) > 0 ? 0 : line.debit })} />
+                {fixedSettlementConfig ? (
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className={inputClass}
+                    value={fixedSettlementConfig.lockedSide === "credit" ? line.debit : line.credit}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      updateLine(
+                        index,
+                        fixedSettlementConfig.lockedSide === "credit"
+                          ? { debit: value, credit: 0 }
+                          : { credit: value, debit: 0 }
+                      );
+                    }}
+                  />
+                ) : (
+                  <>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className={inputClass}
+                      value={line.debit}
+                      onChange={(e) => updateLine(index, { debit: Number(e.target.value), credit: Number(e.target.value) > 0 ? 0 : line.credit })}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className={inputClass}
+                      value={line.credit}
+                      onChange={(e) => updateLine(index, { credit: Number(e.target.value), debit: Number(e.target.value) > 0 ? 0 : line.debit })}
+                    />
+                  </>
+                )}
                 <input className={inputClass} value={line.narration || ""} onChange={(e) => updateLine(index, { narration: e.target.value })} />
-                <button type="button" className="link-btn danger" onClick={() => setVoucherForm({ ...voucherForm, lines: voucherForm.lines.filter((_, i) => i !== index) })}>×</button>
+                <button
+                  type="button"
+                  className="link-btn danger"
+                  onClick={() => setVoucherForm({ ...voucherForm, lines: voucherForm.lines.filter((_, i) => i !== index) })}
+                >
+                  ×
+                </button>
               </div>
-            ))}
-            <button type="button" className="link-btn" onClick={() => setVoucherForm({ ...voucherForm, lines: [...voucherForm.lines, blankLine()] })}>+ Add debit / credit line</button>
+              );
+            })}
+            {fixedSettlementConfig && settlementAccountLabel ? (
+              <div className="muted small" style={{ marginTop: 6 }}>
+                {fixedSettlementConfig.lockedSide === "credit"
+                  ? `This amount is paid from ${settlementAccountLabel} (selected above).`
+                  : `This amount is received into ${settlementAccountLabel} (selected above).`}
+              </div>
+            ) : null}
+            <button type="button" className="link-btn" onClick={() => setVoucherForm({ ...voucherForm, lines: [...voucherForm.lines, blankLine()] })}>
+              {fixedSettlementConfig ? "+ Add another line" : "+ Add debit / credit line"}
+            </button>
             <div className={`voucher-balance${Math.abs(lineTotals.debit - lineTotals.credit) < 0.009 && lineTotals.debit > 0 ? " ok" : " bad"}`}>
-              Debit: {formatNumber(lineTotals.debit)} · Credit: {formatNumber(lineTotals.credit)} · Difference: {formatNumber(Math.abs(lineTotals.debit - lineTotals.credit))}
+              {fixedSettlementConfig
+                ? `Total amount: ${formatNumber(Math.max(lineTotals.debit, lineTotals.credit))}`
+                : `Debit: ${formatNumber(lineTotals.debit)} · Credit: ${formatNumber(lineTotals.credit)} · Difference: ${formatNumber(Math.abs(lineTotals.debit - lineTotals.credit))}`}
             </div>
           </div>
         )}
@@ -1420,15 +2509,6 @@ function FragmentGroup({ group }: { group: ReportGroup }) {
     </>
   );
 }
-
-const PREFIX_UI: Record<string, string> = {
-  journal: "JV",
-  receipt: "RV",
-  payment: "PV",
-  contra: "CV",
-  sales_invoice: "SI",
-  purchase_invoice: "PI",
-};
 
 function VoucherLinesTable({ voucher }: { voucher: Voucher }) {
   return (

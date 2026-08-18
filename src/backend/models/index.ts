@@ -14,6 +14,7 @@ export { Exam } from "./Exam";
 export { Fee } from "./Fee";
 export { Settings } from "./Settings";
 export { AcademicSession } from "./AcademicSession";
+export { ExamTypeMaster, ExamTerm, ExamSchedule } from "./ExamWorkflow";
 export { LedgerEntry } from "./Ledger";
 export { Account, Voucher, AccountingCounter } from "./Accounting";
 export { InventoryItem, StockVoucher } from "./Inventory";

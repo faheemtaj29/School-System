@@ -401,6 +401,7 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
     </ModalForm>
   );
 }
+type TeacherProps = {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
