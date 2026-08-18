@@ -253,16 +253,48 @@ export const accountingController = {
       }
       const parsed = voucherActionSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
-      if (parsed.data.action === "post") {
-        return jsonOk({ voucher: await accountingService.postVoucher(id, session!) });
+      switch (parsed.data.action) {
+        case "post":
+          return jsonOk({ voucher: await accountingService.postVoucher(id, session!) });
+        case "void":
+          return jsonOk({
+            voucher: await accountingService.voidVoucher(
+              id,
+              parsed.data.reason || "",
+              session!
+            ),
+          });
+        case "approve":
+          return jsonOk({
+            voucher: await accountingService.approveVoucher(id, session!),
+          });
+        case "reject":
+          return jsonOk({
+            voucher: await accountingService.rejectVoucher(
+              id,
+              parsed.data.reason || "Rejected",
+              session!
+            ),
+          });
+        case "cancel":
+          return jsonOk({
+            voucher: await accountingService.cancelVoucher(
+              id,
+              parsed.data.reason || "Cancelled",
+              session!
+            ),
+          });
+        case "reverse":
+          return jsonOk({
+            voucher: await accountingService.reverseVoucher(
+              id,
+              parsed.data.reason || "Reversed",
+              session!
+            ),
+          });
+        default:
+          return jsonError("Unsupported action");
       }
-      return jsonOk({
-        voucher: await accountingService.voidVoucher(
-          id,
-          parsed.data.reason || "",
-          session!
-        ),
-      });
     } catch (e) {
       return fromServiceError(e);
     }

@@ -47,7 +47,7 @@ type Voucher = {
   _id: string;
   number: string;
   voucherType: string;
-  status: "draft" | "posted" | "void";
+  status: "draft" | "pending_approval" | "approved" | "posted" | "rejected" | "cancelled" | "reversed" | "void";
   date: string;
   dueDate?: string;
   branchCode: string;
@@ -66,6 +66,8 @@ type Voucher = {
   sourceType: string;
   postedAt?: string;
   voidReason?: string;
+  approvalStatus?: string;
+  rejectionReason?: string;
 };
 
 type TrialRow = {
@@ -1118,10 +1120,12 @@ export default function AccountingPage() {
     load();
   }
 
-  async function voucherAction(voucher: Voucher, action: "post" | "void") {
-    const reason =
-      action === "void" ? prompt("Reason for voiding this voucher:") || "" : "";
-    if (action === "void" && !reason) return;
+  async function voucherAction(voucher: Voucher, action: "post" | "void" | "approve" | "reject" | "cancel" | "reverse") {
+    let reason = "";
+    if (["void", "reject", "cancel", "reverse"].includes(action)) {
+      reason = prompt(`Reason for ${action}ing this voucher:`) || "";
+      if (action !== "void" && !reason.trim()) return;
+    }
     const res = await fetch(`/api/accounting/${voucher._id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -1138,19 +1142,19 @@ export default function AccountingPage() {
 
   async function deleteVoucher(voucher: Voucher) {
     const details = `${voucher.number} · ${prettyDate(voucher.date)} · ${voucher.partyName || voucher.branchCode} · ${voucher.currency} ${formatNumber(voucher.grandTotal)}`;
-    if (voucher.status === "void") {
-      alert("This voucher is already cancelled/voided.");
+    if (["void", "cancelled", "reversed", "rejected"].includes(voucher.status)) {
+      alert("This voucher is already terminal and cannot be deleted.");
       return;
     }
     let reason = "";
-    if (voucher.status === "draft") {
+    if (voucher.status === "draft" || voucher.status === "pending_approval") {
       if (!confirm(`Delete this draft voucher?\n\n${details}`)) return;
     } else {
       reason = prompt(
-        `This voucher is posted. Deleting it will reverse its accounting effect.\n\n${details}\n\nEnter a reason for deletion:`
+        `This voucher is ${voucher.status}. Deleting it will reverse its accounting effect.\n\n${details}\n\nEnter a reason for deletion:`
       ) || "";
       if (!reason.trim()) return;
-      if (!confirm(`Confirm delete posted voucher ${voucher.number}? This cannot be undone.`)) return;
+      if (!confirm(`Confirm delete ${voucher.status} voucher ${voucher.number}? This cannot be undone.`)) return;
     }
     const res = await fetch(`/api/accounting/${voucher._id}?kind=voucher`, {
       method: "DELETE",
@@ -1527,8 +1531,13 @@ export default function AccountingPage() {
             <select className={inputClass} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               <option value="">All statuses</option>
               <option value="draft">Draft</option>
+              <option value="pending_approval">Pending Approval</option>
+              <option value="approved">Approved</option>
               <option value="posted">Posted</option>
-              <option value="void">Void / Cancelled</option>
+              <option value="rejected">Rejected</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="reversed">Reversed</option>
+              <option value="void">Void</option>
             </select>
           </div>
           {!visibleVouchers.length ? (
@@ -1573,18 +1582,22 @@ export default function AccountingPage() {
                           <button type="button" className="link-btn" onClick={() => printVoucher(v)}>Print</button>
                           <button type="button" className="link-btn" onClick={() => openVoucherPdf(v)}>PDF</button>
                           <button type="button" className="link-btn" onClick={() => exportVoucherExcel(v)}>Excel</button>
-                          {v.status === "draft" ? (
-                            <>
-                              <button type="button" className="link-btn" onClick={() => voucherAction(v, "post")}>Post</button>
-                              <button type="button" className="link-btn danger" onClick={() => deleteVoucher(v)}>Delete</button>
-                            </>
-                          ) : null}
-                          {v.status === "posted" && v.sourceType === "manual" ? (
-                            <>
-                              <button type="button" className="link-btn danger" onClick={() => voucherAction(v, "void")}>Void</button>
-                              <button type="button" className="link-btn danger" onClick={() => deleteVoucher(v)}>Delete</button>
-                            </>
-                          ) : null}
+                           {v.status === "draft" || v.status === "pending_approval" ? (
+                             <>
+                               <button type="button" className="link-btn" onClick={() => voucherAction(v, "approve")}>Approve</button>
+                               <button type="button" className="link-btn danger" onClick={() => voucherAction(v, "reject")}>Reject</button>
+                               <button type="button" className="link-btn" onClick={() => voucherAction(v, "post")}>Post</button>
+                               <button type="button" className="link-btn danger" onClick={() => voucherAction(v, "cancel")}>Cancel</button>
+                               <button type="button" className="link-btn danger" onClick={() => deleteVoucher(v)}>Delete</button>
+                             </>
+                           ) : null}
+                           {v.status === "posted" && v.sourceType === "manual" ? (
+                             <>
+                               <button type="button" className="link-btn danger" onClick={() => voucherAction(v, "void")}>Void</button>
+                               <button type="button" className="link-btn danger" onClick={() => voucherAction(v, "reverse")}>Reverse</button>
+                               <button type="button" className="link-btn danger" onClick={() => deleteVoucher(v)}>Delete</button>
+                             </>
+                           ) : null}
                         </div>
                       </td>
                     </tr>

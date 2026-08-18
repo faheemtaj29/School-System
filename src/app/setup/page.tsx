@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Field, inputClass } from "@/components/ui";
@@ -12,6 +12,16 @@ export default function SetupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/auth/login", { method: "PUT" })
+      .then((r) => {
+        if (r.status === 403) router.replace("/login");
+      })
+      .catch(() => undefined)
+      .finally(() => setChecking(false));
+  }, [router]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -34,6 +44,8 @@ export default function SetupPage() {
       setLoading(false);
     }
   }
+
+  if (checking) return <div className="auth">Loading…</div>;
 
   return (
     <div className="auth">

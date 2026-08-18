@@ -361,7 +361,7 @@ const AiTransactionSchema = new Schema<IAiTransaction>({
   inputMediaType: String,
   extractedData: { type: Schema.Types.Mixed, required: true },
   suggestedVoucherType: { type: String, required: true },
-  suggestedLines: { type: [Schema.Types.Mixed], required: true },
+  suggestedLines: [{ type: Schema.Types.Mixed }],
   confidence: { type: Number, required: true, min: 0, max: 100 },
   validationErrors: { type: [String], default: [] },
   partyMatch: {

@@ -690,6 +690,103 @@ export const accountingService = {
     return voucher;
   },
 
+  async approveVoucher(id: string, actor?: SessionUser) {
+    const voucher = await Voucher.findById(id);
+    if (!voucher) throw new ServiceError("NOT_FOUND", "Voucher not found", 404);
+    if (voucher.status !== "draft" && voucher.status !== "pending_approval") {
+      throw new ServiceError("CONFLICT", "Only draft or pending vouchers can be approved", 409);
+    }
+    const before = voucherSnapshot(voucher.toObject());
+    voucher.status = "approved";
+    voucher.approvalStatus = "approved";
+    voucher.approvedBy = actor?.id as never;
+    voucher.approvedAt = new Date();
+    await voucher.save();
+    await recordAudit({
+      module: "accounting",
+      action: "approved",
+      entity: "voucher",
+      entityId: id,
+      summary: `Approved ${voucher.number}`,
+      before,
+      after: voucherSnapshot(voucher.toObject()),
+      actor,
+    });
+    return voucher;
+  },
+
+  async rejectVoucher(id: string, reason: string, actor?: SessionUser) {
+    const voucher = await Voucher.findById(id);
+    if (!voucher) throw new ServiceError("NOT_FOUND", "Voucher not found", 404);
+    if (voucher.status !== "draft" && voucher.status !== "pending_approval") {
+      throw new ServiceError("CONFLICT", "Only draft or pending vouchers can be rejected", 409);
+    }
+    const before = voucherSnapshot(voucher.toObject());
+    voucher.status = "rejected";
+    voucher.approvalStatus = "rejected";
+    voucher.rejectedBy = actor?.id as never;
+    voucher.rejectedAt = new Date();
+    voucher.rejectionReason = reason || "Rejected by administrator";
+    await voucher.save();
+    await recordAudit({
+      module: "accounting",
+      action: "rejected",
+      entity: "voucher",
+      entityId: id,
+      summary: `Rejected ${voucher.number} — ${voucher.rejectionReason}`,
+      before,
+      after: voucherSnapshot(voucher.toObject()),
+      actor,
+    });
+    return voucher;
+  },
+
+  async cancelVoucher(id: string, reason: string, actor?: SessionUser) {
+    const voucher = await Voucher.findById(id);
+    if (!voucher) throw new ServiceError("NOT_FOUND", "Voucher not found", 404);
+    if (!["draft", "pending_approval", "approved"].includes(voucher.status)) {
+      throw new ServiceError("CONFLICT", "Only unposted vouchers can be cancelled", 409);
+    }
+    const before = voucherSnapshot(voucher.toObject());
+    voucher.status = "cancelled";
+    voucher.voidReason = reason || "Cancelled by administrator";
+    await voucher.save();
+    await recordAudit({
+      module: "accounting",
+      action: "cancelled",
+      entity: "voucher",
+      entityId: id,
+      summary: `Cancelled ${voucher.number} — ${voucher.voidReason}`,
+      before,
+      after: voucherSnapshot(voucher.toObject()),
+      actor,
+    });
+    return voucher;
+  },
+
+  async reverseVoucher(id: string, reason: string, actor?: SessionUser) {
+    const voucher = await Voucher.findById(id);
+    if (!voucher) throw new ServiceError("NOT_FOUND", "Voucher not found", 404);
+    if (voucher.status !== "posted") {
+      throw new ServiceError("CONFLICT", "Only posted vouchers can be reversed", 409);
+    }
+    const before = voucherSnapshot(voucher.toObject());
+    voucher.status = "reversed";
+    voucher.voidReason = reason || "Reversed by administrator";
+    await voucher.save();
+    await recordAudit({
+      module: "accounting",
+      action: "reversed",
+      entity: "voucher",
+      entityId: id,
+      summary: `Reversed ${voucher.number} — ${voucher.voidReason}`,
+      before,
+      after: voucherSnapshot(voucher.toObject()),
+      actor,
+    });
+    return voucher;
+  },
+
   /**
    * Draft vouchers are removed outright. A posted voucher is never physically
    * deleted — it is reversed (voided) so every report that already filters on
@@ -699,7 +796,7 @@ export const accountingService = {
   async removeVoucher(id: string, reason = "", actor?: SessionUser) {
     const voucher = await Voucher.findById(id);
     if (!voucher) throw new ServiceError("NOT_FOUND", "Voucher not found", 404);
-    if (voucher.status === "void") {
+    if (["void", "cancelled", "reversed"].includes(voucher.status)) {
       throw new ServiceError("CONFLICT", "Voucher is already cancelled/voided", 409);
     }
     const before = voucherSnapshot(voucher.toObject());

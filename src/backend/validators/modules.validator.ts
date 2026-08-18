@@ -168,7 +168,7 @@ export const voucherSchema = z.object({
 });
 
 export const voucherActionSchema = z.object({
-  action: z.enum(["post", "void"]),
+  action: z.enum(["post", "void", "approve", "reject", "cancel", "reverse"]),
   reason: z.string().optional(),
 });
 
