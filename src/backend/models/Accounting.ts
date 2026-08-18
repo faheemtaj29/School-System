@@ -54,6 +54,16 @@ AccountSchema.index({ type: 1, isPosting: 1, isActive: 1 });
 
 export const Account = models.Account || model<IAccount>("Account", AccountSchema);
 
+export type VoucherStatus =
+  | "draft"
+  | "pending_approval"
+  | "approved"
+  | "posted"
+  | "rejected"
+  | "cancelled"
+  | "reversed"
+  | "void";
+
 export type VoucherType =
   | "journal"
   | "receipt"
@@ -81,11 +91,13 @@ export interface IInvoiceItem {
 export interface IVoucher {
   number: string;
   voucherType: VoucherType;
-  status: "draft" | "posted" | "void";
+  status: VoucherStatus;
   date: Date;
   dueDate?: Date;
   branchCode: string;
-  partyType?: "student" | "teacher" | "supplier" | "other";
+  companyId?: string;
+  financialYear?: string;
+  partyType?: "student" | "teacher" | "supplier" | "customer" | "other";
   partyId?: Types.ObjectId | string;
   partyName?: string;
   narration: string;
@@ -106,6 +118,17 @@ export interface IVoucher {
   voidedBy?: Types.ObjectId;
   voidedAt?: Date;
   voidReason?: string;
+  approvalStatus?: "pending" | "approved" | "rejected";
+  approvedBy?: Types.ObjectId;
+  approvedAt?: Date;
+  rejectedBy?: Types.ObjectId;
+  rejectedAt?: Date;
+  rejectionReason?: string;
+  aiConfidence?: number;
+  aiExtractedData?: Record<string, unknown>;
+  aiModelResponse?: string;
+  originalMessage?: string;
+  originalImageUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -140,11 +163,17 @@ const VoucherSchema = new Schema<IVoucher>(
       enum: ["journal", "receipt", "payment", "contra", "sales_invoice", "purchase_invoice"],
       required: true,
     },
-    status: { type: String, enum: ["draft", "posted", "void"], default: "draft" },
+    status: {
+      type: String,
+      enum: ["draft", "pending_approval", "approved", "posted", "rejected", "cancelled", "reversed", "void"],
+      default: "draft",
+    },
     date: { type: Date, required: true },
     dueDate: Date,
     branchCode: { type: String, required: true, uppercase: true, trim: true },
-    partyType: { type: String, enum: ["student", "teacher", "supplier", "other"] },
+    companyId: { type: String, trim: true },
+    financialYear: { type: String, trim: true },
+    partyType: { type: String, enum: ["student", "teacher", "supplier", "customer", "other"] },
     partyId: Schema.Types.Mixed,
     partyName: String,
     narration: { type: String, required: true, trim: true },
@@ -159,7 +188,7 @@ const VoucherSchema = new Schema<IVoucher>(
     lines: { type: [VoucherLineSchema], required: true },
     sourceType: {
       type: String,
-      enum: ["manual", "fee", "payslip", "inventory", "elearning", "other"],
+      enum: ["manual", "fee", "payslip", "inventory", "elearning", "ai", "whatsapp", "other"],
       default: "manual",
     },
     sourceId: String,
@@ -169,6 +198,17 @@ const VoucherSchema = new Schema<IVoucher>(
     voidedBy: { type: Schema.Types.ObjectId, ref: "User" },
     voidedAt: Date,
     voidReason: String,
+    approvalStatus: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
+    approvedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    approvedAt: Date,
+    rejectedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    rejectedAt: Date,
+    rejectionReason: String,
+    aiConfidence: { type: Number, min: 0, max: 100 },
+    aiExtractedData: { type: Schema.Types.Mixed },
+    aiModelResponse: String,
+    originalMessage: String,
+    originalImageUrl: String,
   },
   { timestamps: true }
 );
