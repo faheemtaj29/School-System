@@ -412,6 +412,14 @@ svg.ico {
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
 }
+.hero-text .hero-kicker {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 1.6px;
+  color: #a8dcc4;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
 .hero-text h1 {
   font-size: 29px;
   font-weight: 600;

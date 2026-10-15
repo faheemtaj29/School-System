@@ -312,7 +312,7 @@ export const reportsService = {
     >();
 
     for (const exam of exams) {
-      const result = exam.results?.find((r) => String(r.studentId) === String(student._id));
+      const result = exam.results?.find((r: { studentId: unknown; marks?: number | null }) => String(r.studentId) === String(student._id));
       if (!result || result.marks == null) continue;
       const subject = exam.subjectId as unknown as {
         name?: string;

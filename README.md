@@ -35,10 +35,11 @@ cp .env.local.example .env.local
 
 3. Set `MONGODB_URI` and `JWT_SECRET` in `.env.local`.
 
-4. Install & run:
+4. Install, apply database migrations & run:
 
 ```bash
 npm install
+npm run db:migrate
 npm run dev
 ```
 

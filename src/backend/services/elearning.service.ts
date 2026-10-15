@@ -534,7 +534,7 @@ export const elearningService = {
     if (!studentId) throw new ServiceError("VALIDATION", "studentId is required", 400);
 
     let score = 0;
-    quiz.questions.forEach((q, i) => {
+    quiz.questions.forEach((q: { correctIndex: number }, i: number) => {
       if (Number(data.answers[i]) === q.correctIndex) score += 1;
     });
     const total = quiz.questions.length || 1;

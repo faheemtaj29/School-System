@@ -146,7 +146,7 @@ export const siteService = {
             branchCode: item.branchCode,
           },
         },
-        { id: "public", name: "Public admissions", role: "admin" }
+        { id: "public", name: "Public admissions", email: "", role: "admin" }
       );
     } catch {
       /* application saved even if workflow not seeded */

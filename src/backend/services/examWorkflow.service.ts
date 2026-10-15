@@ -264,7 +264,7 @@ export const examWorkflowService = {
       passingMarks: examType?.defaultPassingMarks || 40,
     };
 
-    const rows =
+    const rows: typeof data.rows =
       data.rows.length > 0
         ? data.rows
         : await classSubjectRows(data.classId, fallbackMarks);

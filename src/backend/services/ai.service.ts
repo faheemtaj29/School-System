@@ -5,6 +5,7 @@
  * IMPORTANT: AI never writes accounting records directly. It only produces
  * structured data. The accounting engine validates and posts everything.
  */
+import type { HydratedDocument, Types } from "mongoose";
 import { dbConnect } from "@/backend/config/database";
 import {
   AiDocument,
@@ -15,14 +16,20 @@ import {
   type AiDocumentStatus,
   type AiTransactionStatus,
   type StockMovementType,
+  type IAiDocument,
+  type IAiTransaction,
 } from "@/backend/models/AiModels";
 import { accountingService } from "./accounting.service";
 import { taxService } from "./tax.service";
 import { partyService } from "./party.service";
-import { duplicateService } from "./duplicate.service";
+import { duplicateService, type DuplicateCheckResult } from "./duplicate.service";
 import { Settings } from "@/backend/models/Settings";
 import { ServiceError } from "@/backend/types";
 import type { SessionUser } from "@/backend/types";
+import type { z } from "zod";
+import type { voucherSchema } from "@/backend/validators/modules.validator";
+
+type VoucherInput = z.infer<typeof voucherSchema>;
 import { recordAudit } from "@/backend/lib/audit";
 
 export interface ParsedTransaction {
@@ -33,7 +40,7 @@ export interface ParsedTransaction {
   partyType?: "customer" | "supplier" | "student" | "other";
   narration: string;
   reference?: string;
-  lines: { accountCode: string; accountName: string; debit: number; credit: number }[];
+  lines: { accountCode: string; accountName: string; debit: number; credit: number; narration?: string }[];
   subtotal: number;
   taxAmount: number;
   grandTotal: number;
@@ -41,6 +48,9 @@ export interface ParsedTransaction {
   confidence: number;
   currency: string;
 }
+
+type AiTransactionDoc = HydratedDocument<IAiTransaction>;
+type AiDocumentDoc = HydratedDocument<IAiDocument>;
 
 function round(value: number) {
   return Math.round(value * 100) / 100;
@@ -57,7 +67,7 @@ export const aiService = {
     source: "text" | "whatsapp" | "voice";
     userId: string;
     branchCode: string;
-  }): Promise<AiTransaction> {
+  }): Promise<AiTransactionDoc> {
     await dbConnect();
     const settings = await Settings.findOne().lean();
     const branch = (branchCode || settings?.defaultBranchCode || "MAIN").toUpperCase();
@@ -88,7 +98,7 @@ export const aiService = {
           voucherType: parsed.voucherType,
           branchCode: branch,
         })
-      : { isDuplicate: false, matchScore: 0 } as const;
+      : ({ isDuplicate: false, matchScore: 0, matchedFields: [] } satisfies DuplicateCheckResult);
 
     let status: AiTransactionStatus = "draft";
     if (parsed.confidence >= 80 && !duplicateCheck.isDuplicate) {
@@ -151,7 +161,7 @@ export const aiService = {
     source: "image" | "pdf";
     userId: string;
     branchCode: string;
-  }): Promise<AiDocument> {
+  }): Promise<AiDocumentDoc> {
     await dbConnect();
     const branch = (branchCode || "MAIN").toUpperCase();
 
@@ -287,10 +297,11 @@ export const aiService = {
 
     const voucher = await accountingService.createVoucher(
       {
-        voucherType: data.voucherType,
+        voucherType: data.voucherType as VoucherInput["voucherType"],
         date: data.date,
         branchCode: data.branchCode,
-        partyType: data.partyType || "other",
+        // Vouchers have no "customer" party type; customers are booked as "other".
+        partyType: data.partyType && data.partyType !== "customer" ? data.partyType : "other",
         partyName: data.partyName,
         narration: data.narration,
         reference: data.reference,
@@ -344,7 +355,7 @@ export const aiService = {
     userId: string,
     branchCode: string,
     documentId?: Types.ObjectId
-  ): Promise<AiTransaction> {
+  ): Promise<AiTransactionDoc> {
     const tx = await AiTransaction.create({
       status: "pending_review",
       source: source as "image" | "pdf",
@@ -610,7 +621,7 @@ export const aiService = {
     };
   },
 
-  async extractFromDocument(doc: AiDocument): Promise<{
+  async extractFromDocument(doc: AiDocumentDoc): Promise<{
     text: string;
     classification: string;
     confidence: number;

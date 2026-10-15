@@ -74,7 +74,7 @@ type ExamScheduleItem = {
 const emptyTypeForm = {
   key: "",
   name: "",
-  category: "school" as const,
+  category: "school" as ExamTypeItem["category"],
   isActive: true,
   defaultMaxMarks: 100,
   defaultPassingMarks: 40,
@@ -85,7 +85,7 @@ const emptyTermForm = {
   academicYear: "",
   examTypeId: "",
   weightPercent: 100,
-  status: "draft" as const,
+  status: "draft" as ExamTermItem["status"],
   startDate: "",
   endDate: "",
   remarks: "",
