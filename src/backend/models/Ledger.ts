@@ -6,7 +6,6 @@ export type LedgerSource =
   | "payslip"
   | "inventory"
   | "elearning"
-  | "dealership"
   | "other";
 
 export interface ILedgerEntry {
@@ -47,7 +46,7 @@ const LedgerSchema = new Schema<ILedgerEntry>(
     branchCode: { type: String, uppercase: true, trim: true },
     sourceType: {
       type: String,
-      enum: ["manual", "fee", "payslip", "inventory", "elearning", "dealership", "other"],
+      enum: ["manual", "fee", "payslip", "inventory", "elearning", "other"],
       default: "manual",
     },
     sourceId: { type: Schema.Types.Mixed },

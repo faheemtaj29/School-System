@@ -7,7 +7,6 @@ import {
   AccountingIcon,
   AttendanceIcon,
   BellIcon,
-  CarIcon,
   ChevronDownIcon,
   ClassesIcon,
   DashboardIcon,
@@ -30,7 +29,7 @@ import {
 
 type NavSubItem = { href: string; label: string };
 type NavTree = {
-  key: "accounting" | "inventory" | "dealership" | "ecommerce";
+  key: "accounting" | "inventory";
   sections: { label: string; items: NavSubItem[] }[];
 };
 
@@ -169,51 +168,6 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: "Business Modules",
-    items: [
-      {
-        href: "/dealership",
-        label: "Dealership",
-        Icon: CarIcon,
-        roles: ["admin", "staff"],
-        tree: {
-          key: "dealership",
-          sections: [
-            {
-              label: "Dealership",
-              items: [
-                { href: "/dealership?tab=overview", label: "Overview" },
-                { href: "/dealership?tab=inventory", label: "Vehicle Inventory" },
-                { href: "/dealership?tab=customers", label: "Customers & Leads" },
-                { href: "/dealership?tab=deals", label: "Deals & Financing" },
-                { href: "/dealership?tab=classifieds", label: "Public Ads (review)" },
-              ],
-            },
-          ],
-        },
-      },
-      {
-        href: "/ecommerce",
-        label: "Online Shop",
-        Icon: InventoryIcon,
-        roles: ["admin", "staff"],
-        tree: {
-          key: "ecommerce",
-          sections: [
-            {
-              label: "Shop",
-              items: [
-                { href: "/ecommerce?tab=orders", label: "Orders" },
-                { href: "/ecommerce?tab=products", label: "Products" },
-                { href: "/ecommerce?tab=settings", label: "Shop Settings" },
-              ],
-            },
-          ],
-        },
-      },
-    ],
-  },
-  {
     label: "System",
     items: [
       { href: "/website", label: "Website & Admissions", Icon: GlobeIcon, roles: ["admin"] },
@@ -248,7 +202,7 @@ export function AppShell({
   ]);
   const [campus, setCampus] = useState("MAIN");
   const [academicYear, setAcademicYear] = useState("");
-  const [expandedTrees, setExpandedTrees] = useState({ accounting: false, inventory: false, dealership: false, ecommerce: false });
+  const [expandedTrees, setExpandedTrees] = useState({ accounting: false, inventory: false });
   const currentRole = (user.role || "").toLowerCase();
 
   const visibleGroups = navGroups
@@ -265,8 +219,6 @@ export function AppShell({
     setExpandedTrees((prev) => ({
       accounting: prev.accounting || pathname.startsWith("/accounting"),
       inventory: prev.inventory || pathname.startsWith("/inventory"),
-      dealership: prev.dealership || pathname.startsWith("/dealership"),
-      ecommerce: prev.ecommerce || pathname.startsWith("/ecommerce"),
     }));
   }, [pathname]);
 

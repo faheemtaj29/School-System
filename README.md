@@ -90,53 +90,6 @@ All server code is under **`src/backend/`** in clear layers:
 
 All under `/api/*` — requires auth cookie except `/api/auth/login` and setup.
 
-## Marketplace: cars, bikes, shop & public ads
-
-| Who | Where | What |
-|-----|-------|------|
-| Staff | `/dealership` | Car & bike stock, lead CRM, deal desk, financing, **Public Ads** review tab |
-| Staff | `/ecommerce` | Online shop: orders (confirm → dispatch → deliver), product listings with photos, shop settings |
-| Public | `/cars`, `/bikes` | Search dealer stock **and** approved private ads (filter dealer / private) |
-| Public | `/shop` | Car & bike accessories, oils, parts; cart, cash-on-delivery checkout, `/shop/track` |
-| Public | `/post-ad`, `/account` | Seller accounts (mobile + password), post/edit/renew ads, read buyer messages, see shop orders |
-
-How it fits together:
-
-- **Shop products are inventory items.** List an item in *Online Shop → Products*; price and stock stay in
-  Inventory. Confirming a web order posts a normal **sales stock voucher** (stock goes down, sale is booked
-  in Accounting); cancelling voids it; a return posts a sales-return voucher.
-- **Public ads** live in their own collection, never touch dealership accounting, and go live after a
-  staff member approves them (switchable in *Shop Settings*). They expire after 30 days.
-- **Photos** upload to `public/uploads/images/…`. On serverless/ephemeral hosting, switch
-  `src/backend/lib/imageUpload.ts` to object storage (S3/R2).
-- **Database:** MongoDB creates every collection automatically on first save — no migrations to run.
-  New collections: `vehicles`, `dealercustomers`, `dealerdeals`, `classifiedads`, `marketmembers`,
-  `shoporders`, `shopsettings` (shop fields are added to `inventoryitems`).
-
-## Checking what was built
-
-1. Run the app (`npm run dev`), open `/setup`, create the admin, then:
-   - *Inventory* → add an item with a sale price and opening stock.
-   - *Online Shop → Products* → **List in shop**, add a photo, tick *Live*.
-   - Open `/shop` in another browser, add to cart, place a cash-on-delivery order.
-   - *Online Shop → Orders* → **Confirm** (watch stock drop in Inventory and the sale appear in
-     Accounting) → **Dispatch** → **Delivered**.
-   - *Dealership → Inventory* → add a **Motorbike**, tick *Publish*; it appears on `/bikes`.
-   - On `/post-ad`, create a seller account and post an ad → approve it in *Dealership → Public Ads* →
-     it appears on `/cars` or `/bikes` marked *Private*.
-   - `/dashboard` shows the Dealership and Online Shop & Ads cards.
-2. Automated end-to-end check (79 assertions: stock, accounting vouchers, permissions, security):
-
-```bash
-# terminal 1 — a throwaway database whose name ends in _test
-MONGODB_URI=mongodb://localhost:27017/sabaq_test npm run test:e2e:reset
-MONGODB_URI=mongodb://localhost:27017/sabaq_test JWT_SECRET=dev-secret-0123456789abcdef npm run dev
-# terminal 2
-npm run test:e2e
-```
-
-3. Look at the data with MongoDB Compass or `mongosh` → `use sabaq` → `show collections`.
-
 ## Scripts
 
 ```bash
@@ -144,6 +97,4 @@ npm run dev
 npm run build
 npm run start
 npm run lint
-npm run test:e2e        # marketplace end-to-end check (needs a running app on a _test database)
-npm run test:e2e:reset  # drops the _test database only
 ```

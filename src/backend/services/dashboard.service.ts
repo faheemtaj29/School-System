@@ -13,9 +13,6 @@ import { Attendance } from "@/backend/models/Attendance";
 import { Course, Diploma, Enrollment, Lecture } from "@/backend/models/ELearning";
 import { LeaveRequest, Payslip } from "@/backend/models/HR";
 import { Notice } from "@/backend/models/Notice";
-import { dealershipSnapshot } from "@/backend/services/dealership.service";
-import { shopSnapshot } from "@/backend/services/shop.service";
-import { ClassifiedAd } from "@/backend/models/Marketplace";
 import type { SessionUser } from "@/backend/types";
 
 function todayRange() {
@@ -458,21 +455,13 @@ export const dashboardService = {
     if (session.role === "student" || session.role === "parent") {
       return this.getStudentOverview(session);
     }
-    // The dealership card must never take the whole dashboard down with it.
-    const [overview, dealership, shop, adsPending] = await Promise.all([
-      // One failing section must not blank the whole dashboard.
-      this.getOverview().catch((e) => {
-        console.error("Dashboard overview failed", e);
-        return {} as Partial<Awaited<ReturnType<typeof this.getOverview>>>;
-      }),
-      dealershipSnapshot().catch(() => null),
-      shopSnapshot().catch(() => null),
-      ClassifiedAd.countDocuments({ status: "pending" }).catch(() => 0),
-    ]);
-    const marketplace = shop || adsPending ? { ...(shop || { listed: 0, pending: 0, toShip: 0, mtdOrders: 0, mtdRevenue: 0 }), adsPending } : null;
     if (session.role === "staff") {
-      return { role: "staff" as const, linked: true, ...overview, dealership, marketplace };
+      return {
+        role: "staff" as const,
+        linked: true,
+        ...(await this.getOverview()),
+      };
     }
-    return { role: "admin" as const, linked: true, ...overview, dealership, marketplace };
+    return { role: "admin" as const, linked: true, ...(await this.getOverview()) };
   },
 };

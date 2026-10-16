@@ -39,18 +39,6 @@ type Stats = {
   };
 };
 
-type DealershipSnapshot = {
-  unitsInStock: number;
-  stockCost: number;
-  stockList: number;
-  mtdUnits: number;
-  mtdGross: number;
-  openDeals: number;
-  followUpsDue: number;
-  webLeads7d: number;
-  publishedListings: number;
-};
-
 type Charts = {
   attendanceTrend: { date: string; label: string; rate: number; present: number; total: number }[];
   avgAttendance: number;
@@ -129,8 +117,6 @@ export default function DashboardPage() {
   const [role, setRole] = useState<RoleData | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [charts, setCharts] = useState<Charts | null>(null);
-  const [dealer, setDealer] = useState<DealershipSnapshot | null>(null);
-  const [market, setMarket] = useState<{ listed: number; pending: number; toShip: number; mtdOrders: number; mtdRevenue: number; adsPending: number } | null>(null);
 
   useEffect(() => {
     fetch("/api/dashboard")
@@ -139,8 +125,6 @@ export default function DashboardPage() {
         setRole(d);
         setStats(d.stats ?? null);
         setCharts(d.charts ?? null);
-        setDealer(d.dealership ?? null);
-        setMarket(d.marketplace ?? null);
       })
       .catch(() => undefined);
   }, []);
@@ -241,34 +225,6 @@ export default function DashboardPage() {
           </Link>
         ))}
       </div>
-
-      {dealer ? (
-        <Panel title="Dealership" meta="LIVE · ALL BRANCHES">
-          <div className="pay-stat-row" style={{ marginTop: 4 }}>
-            <Link href="/dealership?tab=inventory" className="pay-stat"><div className="tag">Cars in stock</div><div className="num">{dealer.unitsInStock}</div></Link>
-            <Link href="/dealership?tab=inventory" className="pay-stat"><div className="tag">Stock at cost</div><div className="num">{formatCompact(dealer.stockCost)}</div></Link>
-            <Link href="/dealership?tab=deals" className="pay-stat"><div className="tag">Sold this month</div><div className="num" style={{ color: "var(--jade-dark)" }}>{dealer.mtdUnits}</div></Link>
-            <Link href="/dealership?tab=deals" className="pay-stat"><div className="tag">Gross (MTD)</div><div className="num">{formatCompact(dealer.mtdGross)}</div></Link>
-            <Link href="/dealership?tab=deals" className="pay-stat"><div className="tag">Open deals</div><div className="num">{dealer.openDeals}</div></Link>
-            <Link href="/dealership?tab=customers" className="pay-stat"><div className="tag">Follow-ups due</div><div className="num" style={{ color: dealer.followUpsDue ? "var(--red)" : undefined }}>{dealer.followUpsDue}</div></Link>
-            <Link href="/dealership?tab=customers" className="pay-stat"><div className="tag">Web leads (7d)</div><div className="num">{dealer.webLeads7d}</div></Link>
-            <Link href="/cars" className="pay-stat"><div className="tag">Live listings</div><div className="num">{dealer.publishedListings}</div></Link>
-          </div>
-        </Panel>
-      ) : null}
-
-      {market ? (
-        <Panel title="Online Shop & Ads" meta="WEBSITE">
-          <div className="pay-stat-row" style={{ marginTop: 4 }}>
-            <Link href="/ecommerce?tab=orders" className="pay-stat"><div className="tag">New orders</div><div className="num" style={{ color: market.pending ? "#96650f" : undefined }}>{market.pending}</div></Link>
-            <Link href="/ecommerce?tab=orders" className="pay-stat"><div className="tag">To dispatch</div><div className="num">{market.toShip}</div></Link>
-            <Link href="/ecommerce?tab=orders" className="pay-stat"><div className="tag">Orders this month</div><div className="num">{market.mtdOrders}</div></Link>
-            <Link href="/ecommerce?tab=orders" className="pay-stat"><div className="tag">Shop revenue (MTD)</div><div className="num" style={{ color: "var(--jade-dark)" }}>{formatCompact(market.mtdRevenue)}</div></Link>
-            <Link href="/ecommerce?tab=products" className="pay-stat"><div className="tag">Live products</div><div className="num">{market.listed}</div></Link>
-            <Link href="/dealership?tab=classifieds" className="pay-stat"><div className="tag">Ads awaiting review</div><div className="num" style={{ color: market.adsPending ? "var(--red)" : undefined }}>{market.adsPending}</div></Link>
-          </div>
-        </Panel>
-      ) : null}
 
       <div className="grid-2">
         <div>

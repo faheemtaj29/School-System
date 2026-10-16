@@ -161,16 +161,6 @@ export const InventoryIcon = (p: IconProps) => (
   </Svg>
 );
 
-export const CarIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M5 17H3v-5l2-5h14l2 5v5h-2" />
-    <path d="M3 12h18" />
-    <circle cx="7.5" cy="17" r="2" />
-    <circle cx="16.5" cy="17" r="2" />
-    <path d="M9.5 17h5" />
-  </Svg>
-);
-
 export const HrIcon = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="9" cy="8" r="3.5" />

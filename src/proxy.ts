@@ -11,12 +11,6 @@ const publicPaths = [
   "/admissions",
   "/about",
   "/contact",
-  "/cars",
-  "/bikes",
-  "/sell-car",
-  "/shop",
-  "/post-ad",
-  "/account",
 ];
 
 /** Public read/submit endpoints for the website. */
@@ -55,10 +49,7 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
-  // Public marketplace pages stay viewable for signed-in staff; only "/" keeps
-  // sending staff to their dashboard.
-  const publicForStaff = isPublic && pathname !== "/";
-  if (session && !pathname.startsWith("/api/") && !publicForStaff && !canOpenPage(session.role, pathname)) {
+  if (session && !pathname.startsWith("/api/") && !canOpenPage(session.role, pathname)) {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
