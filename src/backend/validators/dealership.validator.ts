@@ -42,6 +42,50 @@ export const vehicleSchema = z.object({
   acquiredFrom: z.string().optional(),
   acquiredAt: z.string().optional(),
   notes: z.string().optional(),
+  published: z.boolean().default(false),
+  featured: z.boolean().default(false),
+  city: z.string().trim().optional(),
+  description: z.string().max(4000).optional(),
+});
+
+const score = z.coerce.number().min(0).max(10);
+
+export const inspectionSchema = z.object({
+  inspector: z.string().trim().optional(),
+  scores: z.record(z.string(), score),
+  notes: z.record(z.string(), z.string().max(500)).default({}),
+  summary: z.string().max(2000).optional(),
+});
+
+const phone = z
+  .string()
+  .trim()
+  .regex(/^[+\d][\d\s-]{6,18}$/, "Enter a valid phone number");
+
+/** Public marketplace forms. `website` is a honeypot that real users never fill. */
+export const inquirySchema = z.object({
+  name: z.string().trim().min(2, "Your name is required").max(80),
+  phone,
+  email: z.string().trim().email("Invalid email").optional().or(z.literal("")),
+  intent: z.enum(["buy", "test_drive", "finance", "offer"]).default("buy"),
+  offerPrice: z.coerce.number().min(0).optional(),
+  message: z.string().trim().max(1000).optional(),
+  website: z.string().max(0, "Spam detected").optional().or(z.literal("")),
+});
+
+export const sellRequestSchema = z.object({
+  name: z.string().trim().min(2, "Your name is required").max(80),
+  phone,
+  city: z.string().trim().min(2, "City is required"),
+  make: z.string().trim().min(1, "Make is required"),
+  model: z.string().trim().min(1, "Model is required"),
+  year: z.coerce.number().int().min(1970).max(currentYear + 1),
+  mileage: z.coerce.number().min(0),
+  registrationNo: z.string().trim().optional(),
+  condition: z.string().trim().optional(),
+  expectedPrice: z.coerce.number().min(0).optional(),
+  message: z.string().trim().max(1000).optional(),
+  website: z.string().max(0, "Spam detected").optional().or(z.literal("")),
 });
 
 export const reconSchema = z.object({

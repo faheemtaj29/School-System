@@ -19,8 +19,10 @@ import {
   agingBucket,
   daysBetween,
   dealTotals,
+  inspectionOverall,
   leadScore,
   monthlyInstallment,
+  priceInsight,
   round2,
   type LeadStage,
 } from "@/lib/dealership";
@@ -29,6 +31,7 @@ import type {
   customerSchema,
   dealActionSchema,
   dealSchema,
+  inspectionSchema,
   reconSchema,
   vehicleSchema,
 } from "@/backend/validators/dealership.validator";
@@ -39,6 +42,7 @@ type CustomerInput = z.infer<typeof customerSchema>;
 type ActivityInput = z.infer<typeof activitySchema>;
 type DealInput = z.infer<typeof dealSchema>;
 type DealAction = z.infer<typeof dealActionSchema>;
+type InspectionInput = z.infer<typeof inspectionSchema>;
 
 type Doc<T> = T & { _id: Types.ObjectId };
 
@@ -165,6 +169,47 @@ async function postVehicleCost(v: Doc<IVehicle>, actor?: SessionUser) {
   });
 }
 
+/** A listing needs a price and must still be for sale. */
+function assertPublishable(v: Pick<IVehicle, "published" | "listPrice" | "status">) {
+  if (v.published && !(v.listPrice > 0)) {
+    throw new ServiceError("VALIDATION", "Set a list price before publishing the listing", 400);
+  }
+  if (v.published && v.status === "sold") {
+    throw new ServiceError("VALIDATION", "Sold vehicles cannot be published", 400);
+  }
+}
+
+/**
+ * Comparable units for the fair-price estimate: same make + model within two
+ * model years. Sold units count at their delivered net price, others at list.
+ */
+export async function marketInsightFor(v: Pick<IVehicle, "make" | "model" | "year" | "mileage" | "listPrice"> & { _id?: unknown }) {
+  const rx = (x: string) => new RegExp(`^${x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+  const comps = await Vehicle.find({
+    _id: { $ne: v._id },
+    make: rx(v.make),
+    model: rx(v.model),
+    year: { $gte: v.year - 2, $lte: v.year + 2 },
+  })
+    .select("year mileage listPrice status dealId")
+    .limit(60)
+    .lean<Doc<IVehicle>[]>();
+  const soldDeals = await DealerDeal.find({
+    _id: { $in: comps.filter((c) => c.status === "sold" && c.dealId).map((c) => c.dealId) },
+  })
+    .select("salePrice discount")
+    .lean<Doc<IDealerDeal>[]>();
+  const soldPrice = new Map(soldDeals.map((d) => [String(d._id), d.salePrice - d.discount]));
+  return priceInsight(
+    { year: v.year, mileage: v.mileage || 0, price: v.listPrice || 0 },
+    comps.map((c) => ({
+      year: c.year,
+      mileage: c.mileage || 0,
+      price: (c.dealId && soldPrice.get(String(c.dealId))) || c.listPrice || 0,
+    }))
+  );
+}
+
 function vehicleFilter(params: {
   branch?: string | null;
   status?: string | null;
@@ -210,7 +255,12 @@ export const vehicleService = {
         .select("name phone stage assignedTo")
         .lean(),
     ]);
-    return { vehicle: withVehicleMetrics(v), deals: deals.map(withDealMetrics), interested };
+    return {
+      vehicle: withVehicleMetrics(v),
+      deals: deals.map(withDealMetrics),
+      interested,
+      insight: await marketInsightFor(v),
+    };
   },
 
   async create(data: VehicleInput, actor?: SessionUser) {
@@ -221,9 +271,11 @@ export const vehicleService = {
     if (data.status === "reserved" || data.status === "sold") {
       throw new ServiceError("VALIDATION", "Reserve or sell a vehicle through a deal", 400);
     }
+    assertPublishable(data);
     const acquiredAt = data.acquiredAt ? new Date(data.acquiredAt) : new Date();
     const vehicle = await Vehicle.create({
       ...data,
+      publishedAt: data.published ? new Date() : undefined,
       vin: data.vin || undefined,
       stockNo: data.stockNo?.trim() || (await nextStockNo(acquiredAt)),
       branchCode: (data.branchCode || (await defaultBranch())).toUpperCase(),
@@ -261,6 +313,7 @@ export const vehicleService = {
       throw new ServiceError("CONFLICT", "A reserved vehicle cannot change branch", 409);
     }
     const before = { listPrice: vehicle.listPrice, status: vehicle.status };
+    const wasPublished = vehicle.published;
     Object.assign(vehicle, {
       ...data,
       stockNo: data.stockNo?.trim() || vehicle.stockNo,
@@ -269,6 +322,8 @@ export const vehicleService = {
       branchCode: (data.branchCode || vehicle.branchCode).toUpperCase(),
       acquiredAt: data.acquiredAt ? new Date(data.acquiredAt) : vehicle.acquiredAt,
     });
+    assertPublishable(vehicle);
+    if (vehicle.published && !wasPublished) vehicle.publishedAt = new Date();
     await vehicle.save();
     await postVehicleCost(vehicle.toObject(), actor);
     if (before.listPrice !== vehicle.listPrice) {
@@ -377,6 +432,35 @@ export const vehicleService = {
       entity: "vehicle",
       entityId: id,
       summary: `${vehicle.stockNo} moved ${from} → ${to}`,
+      actor,
+    });
+    return withVehicleMetrics(vehicle.toObject());
+  },
+
+  async setInspection(id: string, data: InspectionInput, actor?: SessionUser) {
+    await dbConnect();
+    const vehicle = await Vehicle.findById(id);
+    if (!vehicle) throw new ServiceError("NOT_FOUND", "Vehicle not found", 404);
+    const overall = inspectionOverall(data.scores);
+    if (overall == null) {
+      throw new ServiceError("VALIDATION", "Score at least one inspection category", 400);
+    }
+    vehicle.inspection = {
+      inspectedAt: new Date(),
+      inspector: data.inspector || actorName(actor),
+      scores: data.scores,
+      notes: data.notes,
+      overall,
+      summary: data.summary,
+    };
+    vehicle.markModified("inspection");
+    await vehicle.save();
+    await recordAudit({
+      module: "dealership",
+      action: "inspected",
+      entity: "vehicle",
+      entityId: id,
+      summary: `${vehicle.stockNo} inspected — ${overall}/10`,
       actor,
     });
     return withVehicleMetrics(vehicle.toObject());
@@ -935,7 +1019,7 @@ export const dealershipOverviewService = {
     const [vehicles, customers, deals, settings] = await Promise.all([
       Vehicle.find(scope).lean<Doc<IVehicle>[]>(),
       DealerCustomer.find(scope)
-        .select("name phone stage source assignedTo nextFollowUp branchCode lastActivityAt budgetMax email interestedVehicleId tradeIn activities")
+        .select("name phone stage source assignedTo nextFollowUp branchCode lastActivityAt budgetMax email interestedVehicleId tradeIn activities createdAt")
         .lean(),
       DealerDeal.find(scope).lean<Doc<IDealerDeal>[]>(),
       Settings.findOne().lean<{ branches?: { code: string; name: string }[] }>(),
@@ -1033,6 +1117,22 @@ export const dealershipOverviewService = {
         };
       });
 
+    const listed = unsold.filter((v) => v.published);
+    const since30 = new Date(now.getTime() - 30 * 86_400_000);
+    const marketplace = {
+      published: listed.length,
+      featured: listed.filter((v) => v.featured).length,
+      inspected: listed.filter((v) => v.inspection?.overall != null).length,
+      views: listed.reduce((s, v) => s + (v.views || 0), 0),
+      inquiries: listed.reduce((s, v) => s + (v.inquiries || 0), 0),
+      webLeads30d: customers.filter(
+        (c) => c.source === "website" && new Date((c as { createdAt?: Date }).createdAt || 0) >= since30
+      ).length,
+      topViewed: [...listed]
+        .sort((a, b) => (b.views || 0) - (a.views || 0))
+        .slice(0, 5)
+        .map((v) => ({ _id: v._id, stockNo: v.stockNo, label: v.label, views: v.views || 0, inquiries: v.inquiries || 0 })),
+    };
     const financedDelivered = delivered.filter((d) => d.financing?.status === "approved").length;
     const openDeals = deals.filter((d) => (OPEN_DEAL as readonly string[]).includes(d.status));
 
@@ -1076,9 +1176,54 @@ export const dealershipOverviewService = {
           .map((c) => ({ _id: c._id, name: c.name, stage: c.stage, score: c.score, assignedTo: c.assignedTo })),
       },
       branches,
+      marketplace,
       leaderboard: [...people.entries()]
         .map(([name, v]) => ({ name, ...v, gross: round2(v.gross), commission: round2(v.commission) }))
         .sort((a, b) => b.gross - a.gross || b.units - a.units),
     };
   },
 };
+
+/** Compact numbers for the main ERP dashboard; null when the module is unused. */
+export async function dealershipSnapshot() {
+  await dbConnect();
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endOfToday = new Date(now);
+  endOfToday.setHours(23, 59, 59, 999);
+  const since7 = new Date(now.getTime() - 7 * 86_400_000);
+  const [vehicleCount, stock, mtd, openDeals, followUps, webLeads, listed] = await Promise.all([
+    Vehicle.estimatedDocumentCount(),
+    Vehicle.aggregate([
+      { $match: { status: { $ne: "sold" } } },
+      {
+        $group: {
+          _id: null,
+          units: { $sum: 1 },
+          cost: { $sum: { $add: ["$purchaseCost", { $sum: "$recon.amount" }] } },
+          list: { $sum: "$listPrice" },
+        },
+      },
+    ]),
+    DealerDeal.aggregate([
+      { $match: { status: "delivered", deliveredAt: { $gte: monthStart } } },
+      { $group: { _id: null, units: { $sum: 1 }, gross: { $sum: { $ifNull: ["$grossProfit", 0] } } } },
+    ]),
+    DealerDeal.countDocuments({ status: { $in: [...OPEN_DEAL] } }),
+    DealerCustomer.countDocuments({ stage: { $nin: ["won", "lost"] }, nextFollowUp: { $lte: endOfToday } }),
+    DealerCustomer.countDocuments({ source: "website", createdAt: { $gte: since7 } }),
+    Vehicle.countDocuments({ published: true, status: { $in: ["in_stock", "reserved"] } }),
+  ]);
+  if (!vehicleCount && !(await DealerCustomer.estimatedDocumentCount())) return null;
+  return {
+    unitsInStock: stock[0]?.units ?? 0,
+    stockCost: round2(stock[0]?.cost ?? 0),
+    stockList: round2(stock[0]?.list ?? 0),
+    mtdUnits: mtd[0]?.units ?? 0,
+    mtdGross: round2(mtd[0]?.gross ?? 0),
+    openDeals,
+    followUpsDue: followUps,
+    webLeads7d: webLeads,
+    publishedListings: listed,
+  };
+}

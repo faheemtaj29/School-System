@@ -3,7 +3,14 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState, Field, ModalForm, Panel, inputClass } from "@/components/ui";
 import { prettyDate, toDateInput } from "@/lib/types";
-import { VEHICLE_STATUSES } from "@/lib/dealership";
+import {
+  INSPECTION_CATEGORIES,
+  PRICE_RATING_LABEL,
+  VEHICLE_STATUSES,
+  inspectionGrade,
+  inspectionOverall,
+  type PriceInsight,
+} from "@/lib/dealership";
 import { Branch, Deal, Pill, Sheet, Vehicle, api, label, pkr, withBranch } from "./shared";
 
 const BODY_TYPES = ["Sedan", "Hatchback", "SUV", "Crossover", "Pickup", "Van", "Coupe", "MPV"];
@@ -35,6 +42,10 @@ type VehicleForm = {
   acquiredFrom: string;
   acquiredAt: string;
   notes: string;
+  published: boolean;
+  featured: boolean;
+  city: string;
+  description: string;
 };
 
 function emptyForm(branch: string): VehicleForm {
@@ -63,6 +74,10 @@ function emptyForm(branch: string): VehicleForm {
     acquiredFrom: "",
     acquiredAt: toDateInput(new Date()),
     notes: "",
+    published: false,
+    featured: false,
+    city: "",
+    description: "",
   };
 }
 
@@ -92,6 +107,10 @@ function toForm(v: Vehicle): VehicleForm {
     acquiredFrom: v.acquiredFrom || "",
     acquiredAt: toDateInput(v.acquiredAt),
     notes: v.notes || "",
+    published: Boolean(v.published),
+    featured: Boolean(v.featured),
+    city: v.city || "",
+    description: v.description || "",
   };
 }
 
@@ -263,6 +282,7 @@ export function DealershipInventory({
                 {!v.photos[0] ? <span>{v.make}</span> : null}
                 <div className="dl-card-badges">
                   <Pill value={v.status} />
+                  {v.published && v.status !== "sold" ? <span className="badge info">🌐 Live</span> : null}
                   {v.daysInStock > 60 && v.status !== "sold" ? (
                     <span className={`badge ${v.daysInStock > 90 ? "absent" : "leave"}`}>{v.daysInStock}d</span>
                   ) : null}
@@ -397,7 +417,18 @@ export function DealershipInventory({
           <Field label="Photo URLs (one per line)"><textarea className={inputClass} rows={3} value={form.photos} onChange={(e) => set("photos", e.target.value)} /></Field>
           <Field label="Features (comma separated)"><textarea className={inputClass} rows={3} value={form.features} onChange={(e) => set("features", e.target.value)} placeholder="Sunroof, Push start, Cruise control" /></Field>
         </div>
-        <Field label="Notes"><textarea className={inputClass} rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} /></Field>
+        <Field label="Internal notes (never shown publicly)"><textarea className={inputClass} rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} /></Field>
+        <div className="form-section-title">Marketplace listing</div>
+        <div className="form-grid">
+          <label className="check-row">
+            <input type="checkbox" checked={form.published} onChange={(e) => set("published", e.target.checked)} /> Publish on the public &quot;Cars for Sale&quot; site
+          </label>
+          <label className="check-row">
+            <input type="checkbox" checked={form.featured} onChange={(e) => set("featured", e.target.checked)} /> Featured listing (shown first)
+          </label>
+          <Field label="City shown on listing"><input className={inputClass} value={form.city} onChange={(e) => set("city", e.target.value)} placeholder="Lahore" /></Field>
+        </div>
+        <Field label="Public description"><textarea className={inputClass} rows={3} value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Bumper-to-bumper original, first owner, complete service history…" /></Field>
       </ModalForm>
 
       <VehicleDetail
@@ -436,7 +467,13 @@ function VehicleDetail({
   onChanged: () => void;
   onStartDeal: (vehicleId: string) => void;
 }) {
-  const [data, setData] = useState<{ vehicle: Vehicle; deals: Deal[]; interested: { _id: string; name: string; phone?: string; stage: string }[] } | null>(null);
+  const [data, setData] = useState<{
+    vehicle: Vehicle;
+    deals: Deal[];
+    interested: { _id: string; name: string; phone?: string; stage: string }[];
+    insight: PriceInsight | null;
+  } | null>(null);
+  const [inspecting, setInspecting] = useState(false);
   const [photo, setPhoto] = useState(0);
   const [recon, setRecon] = useState({ description: "", vendor: "", amount: "" });
   const [msg, setMsg] = useState("");
@@ -455,6 +492,7 @@ function VehicleDetail({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setData(null);
     setPhoto(0);
+    setInspecting(false);
     load();
   }, [load]);
 
@@ -556,6 +594,68 @@ function VehicleDetail({
             </div>
           </div>
 
+          <div className="grid-2">
+            <div>
+              <div className="form-section-title">Market price check</div>
+              {data.insight ? (
+                <div className="dl-callout">
+                  <div>
+                    Fair price <b>{pkr(data.insight.fairPrice)}</b>{" "}
+                    <span className="muted small">({pkr(data.insight.low)} – {pkr(data.insight.high)}, {data.insight.comps} comps)</span>
+                  </div>
+                  <div className={`dl-rating ${data.insight.rating}`}>
+                    {PRICE_RATING_LABEL[data.insight.rating]} · {data.insight.deltaPct > 0 ? "+" : ""}{data.insight.deltaPct}% vs market
+                  </div>
+                </div>
+              ) : (
+                <div className="muted small">Needs at least 3 comparable {v.make} {v.model} units (±2 years) to estimate.</div>
+              )}
+            </div>
+            <div>
+              <div className="form-section-title">Marketplace</div>
+              {v.published && v.status !== "sold" ? (
+                <div className="dl-callout">
+                  <div>🌐 Live since {prettyDate(v.publishedAt)}{v.featured ? " · Featured" : ""}</div>
+                  <div className="small">{v.views || 0} views · {v.inquiries || 0} enquiries</div>
+                  <a className="link-btn" href={`/cars/${v._id}`} target="_blank" rel="noreferrer">Open public listing ↗</a>
+                </div>
+              ) : (
+                <div className="muted small">Not published. Edit the vehicle and tick &quot;Publish&quot; to list it on the public site.</div>
+              )}
+            </div>
+          </div>
+
+          <div className="form-section-title">
+            Inspection report{" "}
+            {v.inspection?.overall != null ? <span className="muted small">— {v.inspection.overall}/10 {inspectionGrade(v.inspection.overall)} · {prettyDate(v.inspection.inspectedAt)} by {v.inspection.inspector || "—"}</span> : null}
+          </div>
+          {inspecting ? (
+            <InspectionEditor
+              initial={v.inspection}
+              onCancel={() => setInspecting(false)}
+              onSave={async (inspection) => {
+                if (await act({ action: "inspection", inspection })) setInspecting(false);
+              }}
+            />
+          ) : (
+            <div>
+              {v.inspection?.overall != null ? (
+                <div className="dl-insp-grid">
+                  {INSPECTION_CATEGORIES.filter((c) => typeof v.inspection!.scores[c.key] === "number").map((c) => (
+                    <div key={c.key}><span>{c.label}</span><b>{v.inspection!.scores[c.key]}</b></div>
+                  ))}
+                </div>
+              ) : (
+                <div className="muted small">Not inspected yet. Inspected listings get a trust badge on the public site.</div>
+              )}
+              {v.status !== "sold" ? (
+                <button type="button" className="link-btn" onClick={() => setInspecting(true)}>
+                  {v.inspection ? "Re-inspect" : "Record inspection"}
+                </button>
+              ) : null}
+            </div>
+          )}
+
           <div className="form-section-title">Reconditioning & prep costs</div>
           {v.recon.length ? (
             <table className="reg">
@@ -633,5 +733,54 @@ function VehicleDetail({
         </>
       )}
     </Sheet>
+  );
+}
+
+type InspectionPayload = { inspector?: string; scores: Record<string, number>; notes: Record<string, string>; summary?: string };
+
+function InspectionEditor({
+  initial,
+  onSave,
+  onCancel,
+}: {
+  initial?: Vehicle["inspection"];
+  onSave: (data: InspectionPayload) => void;
+  onCancel: () => void;
+}) {
+  const [scores, setScores] = useState<Record<string, string>>(() =>
+    Object.fromEntries(INSPECTION_CATEGORIES.map((c) => [c.key, initial?.scores?.[c.key] != null ? String(initial.scores[c.key]) : ""]))
+  );
+  const [notes, setNotes] = useState<Record<string, string>>(() => ({ ...(initial?.notes || {}) }));
+  const [inspector, setInspector] = useState(initial?.inspector || "");
+  const [summary, setSummary] = useState(initial?.summary || "");
+  const numeric = Object.fromEntries(
+    Object.entries(scores).filter(([, val]) => val !== "").map(([k, val]) => [k, Number(val)])
+  );
+  const overall = inspectionOverall(numeric);
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    onSave({ inspector, summary, scores: numeric, notes: Object.fromEntries(Object.entries(notes).filter(([, n]) => n.trim())) });
+  }
+
+  return (
+    <form onSubmit={submit} className="dl-insp-editor">
+      {INSPECTION_CATEGORIES.map((c) => (
+        <div key={c.key} className="dl-insp-line">
+          <span>{c.label} <span className="muted small">({Math.round(c.weight * 100)}%)</span></span>
+          <input className={inputClass} type="number" min={0} max={10} step={0.5} placeholder="0–10" value={scores[c.key]} onChange={(e) => setScores({ ...scores, [c.key]: e.target.value })} />
+          <input className={inputClass} placeholder="Notes (optional)" value={notes[c.key] || ""} onChange={(e) => setNotes({ ...notes, [c.key]: e.target.value })} />
+        </div>
+      ))}
+      <div className="form-grid">
+        <Field label="Inspector"><input className={inputClass} value={inspector} onChange={(e) => setInspector(e.target.value)} placeholder="Defaults to you" /></Field>
+        <Field label="Overall"><div className="dl-insp-overall">{overall ?? "—"}/10 · {inspectionGrade(overall)}</div></Field>
+      </div>
+      <Field label="Summary for buyers"><textarea className={inputClass} rows={2} value={summary} onChange={(e) => setSummary(e.target.value)} /></Field>
+      <div className="dl-footer-actions">
+        <button type="button" className="btn-ghost" onClick={onCancel}>Cancel</button>
+        <button type="submit" className="btn-dark" disabled={overall == null}>Save inspection</button>
+      </div>
+    </form>
   );
 }

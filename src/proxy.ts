@@ -11,6 +11,8 @@ const publicPaths = [
   "/admissions",
   "/about",
   "/contact",
+  "/cars",
+  "/sell-car",
 ];
 
 /** Public read/submit endpoints for the website. */

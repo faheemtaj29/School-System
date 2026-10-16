@@ -178,3 +178,102 @@ export function leadScore(lead: {
 export function isValidVin(vin: string) {
   return /^[A-HJ-NPR-Z0-9]{17}$/i.test(vin);
 }
+
+/* ------------------------------------------------- marketplace / listings */
+
+/** Inspection checklist used on the vehicle report (scores are 0–10). */
+export const INSPECTION_CATEGORIES = [
+  { key: "engine", label: "Engine & transmission", weight: 0.25 },
+  { key: "body", label: "Body & paint", weight: 0.2 },
+  { key: "suspension", label: "Suspension & steering", weight: 0.15 },
+  { key: "interior", label: "Interior", weight: 0.1 },
+  { key: "electrical", label: "Electrical & AC", weight: 0.1 },
+  { key: "tyres", label: "Tyres & brakes", weight: 0.1 },
+  { key: "exterior", label: "Lights & glass", weight: 0.05 },
+  { key: "documents", label: "Documents & history", weight: 0.05 },
+] as const;
+export type InspectionKey = (typeof INSPECTION_CATEGORIES)[number]["key"];
+
+/** Weighted 0–10 score; categories left blank are skipped and weights re-normalised. */
+export function inspectionOverall(scores: Partial<Record<string, number | null | undefined>>) {
+  let total = 0;
+  let weight = 0;
+  for (const c of INSPECTION_CATEGORIES) {
+    const s = scores[c.key];
+    if (typeof s === "number" && Number.isFinite(s)) {
+      total += Math.max(0, Math.min(10, s)) * c.weight;
+      weight += c.weight;
+    }
+  }
+  return weight ? Math.round((total / weight) * 10) / 10 : null;
+}
+
+export function inspectionGrade(score: number | null) {
+  if (score == null) return "Not inspected";
+  if (score >= 9) return "Excellent";
+  if (score >= 7.5) return "Very good";
+  if (score >= 6) return "Good";
+  if (score >= 4.5) return "Fair";
+  return "Needs work";
+}
+
+export type PriceComp = { year: number; mileage: number; price: number };
+export type PriceInsight = {
+  fairPrice: number;
+  low: number;
+  high: number;
+  comps: number;
+  rating: "great" | "fair" | "high";
+  deltaPct: number;
+};
+
+/**
+ * Fair-market estimate from comparable units (same make/model, nearby years).
+ * Each comp is normalised to the subject's year (≈6%/yr) and mileage
+ * (≈1.5% per 10,000 km) before taking the median. Needs ≥3 comps.
+ */
+export function priceInsight(
+  subject: { year: number; mileage: number; price: number },
+  comps: PriceComp[]
+): PriceInsight | null {
+  const adjusted = comps
+    .filter((c) => c.price > 0)
+    .map((c) => {
+      const yearFactor = Math.pow(1.06, subject.year - c.year);
+      const kmFactor = 1 - ((subject.mileage - c.mileage) / 10_000) * 0.015;
+      return c.price * yearFactor * Math.max(0.6, Math.min(1.4, kmFactor));
+    })
+    .sort((a, b) => a - b);
+  if (adjusted.length < 3) return null;
+  const mid = Math.floor(adjusted.length / 2);
+  const median = adjusted.length % 2 ? adjusted[mid] : (adjusted[mid - 1] + adjusted[mid]) / 2;
+  const fairPrice = Math.round(median / 1000) * 1000;
+  const deltaPct = fairPrice ? Math.round(((subject.price - fairPrice) / fairPrice) * 1000) / 10 : 0;
+  return {
+    fairPrice,
+    low: Math.round((fairPrice * 0.93) / 1000) * 1000,
+    high: Math.round((fairPrice * 1.07) / 1000) * 1000,
+    comps: adjusted.length,
+    rating: deltaPct <= -5 ? "great" : deltaPct <= 5 ? "fair" : "high",
+    deltaPct,
+  };
+}
+
+export const PRICE_RATING_LABEL: Record<PriceInsight["rating"], string> = {
+  great: "Great price",
+  fair: "Fair price",
+  high: "Above market",
+};
+
+export function formatPKR(value?: number | null) {
+  return `PKR ${new Intl.NumberFormat("en-US").format(Math.round(value || 0))}`;
+}
+
+/** Local market style: 4,550,000 → "PKR 45.5 lacs", 12,500,000 → "PKR 1.25 crore". */
+export function formatPKRShort(value?: number | null) {
+  const v = Math.round(value || 0);
+  const trim = (n: number) => String(Math.round(n * 100) / 100);
+  if (v >= 10_000_000) return `PKR ${trim(v / 10_000_000)} crore`;
+  if (v >= 100_000) return `PKR ${trim(v / 100_000)} lacs`;
+  return formatPKR(v);
+}

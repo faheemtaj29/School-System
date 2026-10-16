@@ -10,6 +10,7 @@ import {
   customerSchema,
   dealActionSchema,
   dealSchema,
+  inspectionSchema,
   reconSchema,
   vehicleSchema,
   vehicleTransferSchema,
@@ -89,7 +90,7 @@ export const vehicleController = {
     }
   },
 
-  /** Sub-actions on one vehicle: add/remove recon cost, move branch. */
+  /** Sub-actions on one vehicle: recon cost, inspection report, branch move. */
   async action(req: Request, ctx: Ctx) {
     const { session, error } = await requireAuth([...DESK]);
     if (error) return error;
@@ -103,6 +104,11 @@ export const vehicleController = {
       }
       if (body.action === "remove_recon" && typeof body.reconId === "string") {
         return jsonOk({ vehicle: await vehicleService.removeRecon(id, body.reconId) });
+      }
+      if (body.action === "inspection") {
+        const parsed = inspectionSchema.safeParse(body.inspection);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        return jsonOk({ vehicle: await vehicleService.setInspection(id, parsed.data, session!) });
       }
       if (body.action === "transfer") {
         const parsed = vehicleTransferSchema.safeParse(body);

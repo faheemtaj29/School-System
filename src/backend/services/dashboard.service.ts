@@ -13,6 +13,7 @@ import { Attendance } from "@/backend/models/Attendance";
 import { Course, Diploma, Enrollment, Lecture } from "@/backend/models/ELearning";
 import { LeaveRequest, Payslip } from "@/backend/models/HR";
 import { Notice } from "@/backend/models/Notice";
+import { dealershipSnapshot } from "@/backend/services/dealership.service";
 import type { SessionUser } from "@/backend/types";
 
 function todayRange() {
@@ -455,13 +456,14 @@ export const dashboardService = {
     if (session.role === "student" || session.role === "parent") {
       return this.getStudentOverview(session);
     }
+    // The dealership card must never take the whole dashboard down with it.
+    const [overview, dealership] = await Promise.all([
+      this.getOverview(),
+      dealershipSnapshot().catch(() => null),
+    ]);
     if (session.role === "staff") {
-      return {
-        role: "staff" as const,
-        linked: true,
-        ...(await this.getOverview()),
-      };
+      return { role: "staff" as const, linked: true, ...overview, dealership };
     }
-    return { role: "admin" as const, linked: true, ...(await this.getOverview()) };
+    return { role: "admin" as const, linked: true, ...overview, dealership };
   },
 };

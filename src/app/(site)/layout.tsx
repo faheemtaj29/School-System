@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ReactNode } from "react";
 import { siteService } from "@/backend/services/site.service";
+import { marketplaceService } from "@/backend/services/marketplace.service";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,14 @@ const links = [
 ];
 
 export default async function SiteLayout({ children }: { children: ReactNode }) {
-  const { content, branches } = await siteService.publicData();
+  const [{ content, branches }, carsListed] = await Promise.all([
+    siteService.publicData(),
+    marketplaceService.hasListings().catch(() => false),
+  ]);
+  // Car pages appear in the menu only once the dealership publishes stock.
+  const nav = carsListed
+    ? [...links, { href: "/cars", label: "Cars for Sale" }, { href: "/sell-car", label: "Sell Your Car" }]
+    : links;
 
   return (
     <div className="site">
@@ -25,7 +33,7 @@ export default async function SiteLayout({ children }: { children: ReactNode }) 
           </span>
         </Link>
         <nav className="site-links">
-          {links.map((l) => (
+          {nav.map((l) => (
             <Link key={l.href} href={l.href}>
               {l.label}
             </Link>

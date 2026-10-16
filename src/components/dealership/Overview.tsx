@@ -36,6 +36,15 @@ type OverviewData = {
     followUps: { _id: string; name: string; phone?: string; stage: LeadStage; assignedTo?: string; nextFollowUp: string; overdue: boolean }[];
     hot: { _id: string; name: string; stage: LeadStage; score: number; assignedTo?: string }[];
   };
+  marketplace: {
+    published: number;
+    featured: number;
+    inspected: number;
+    views: number;
+    inquiries: number;
+    webLeads30d: number;
+    topViewed: { _id: string; stockNo: string; label: string; views: number; inquiries: number }[];
+  };
   branches: { code: string; name: string; units: number; stockCost: number; aged90: number; mtdUnits: number; mtdGross: number; openDeals: number }[];
   leaderboard: { name: string; units: number; gross: number; commission: number; open: number }[];
 };
@@ -202,6 +211,30 @@ export function DealershipOverview({
           ) : null}
         </Panel>
       </div>
+
+      <Panel title="Online marketplace" meta="Public /cars listings">
+        <div className="pay-stat-row" style={{ marginTop: 4 }}>
+          <Stat label="Live listings" value={data.marketplace.published} hint={`${data.marketplace.featured} featured · ${data.marketplace.inspected} inspected`} />
+          <Stat label="Listing views" value={data.marketplace.views.toLocaleString()} />
+          <Stat label="Enquiries" value={data.marketplace.inquiries} hint={data.marketplace.views ? `${((data.marketplace.inquiries / data.marketplace.views) * 100).toFixed(1)}% of views` : undefined} />
+          <Stat label="Web leads (30d)" value={data.marketplace.webLeads30d} tone="good" />
+          <Stat label="Unlisted stock" value={Math.max(0, inv.units - data.marketplace.published)} tone={inv.units - data.marketplace.published > 0 ? "warn" : undefined} hint="Publish to get leads" />
+        </div>
+        {data.marketplace.topViewed.length ? (
+          <table className="reg">
+            <tbody>
+              {data.marketplace.topViewed.map((v) => (
+                <tr key={v._id}>
+                  <td><b>{v.stockNo}</b> {v.label}</td>
+                  <td className="num">{v.views} views</td>
+                  <td className="num">{v.inquiries} enquiries</td>
+                  <td className="right"><a className="link-btn" href={`/cars/${v._id}`} target="_blank" rel="noreferrer">View ↗</a></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : null}
+      </Panel>
 
       <div className="grid-2">
         <Panel title="Branch comparison" meta="Month to date">

@@ -21,6 +21,15 @@ export interface IReconEntry {
   amount: number;
 }
 
+export interface IInspection {
+  inspectedAt: Date;
+  inspector?: string;
+  scores: Record<string, number>;
+  notes: Record<string, string>;
+  overall: number | null;
+  summary?: string;
+}
+
 export interface IVehicle {
   stockNo: string;
   vin?: string;
@@ -52,10 +61,31 @@ export interface IVehicle {
   /** Set when this unit arrived as a trade-in on another deal. */
   tradeInFromDeal?: Types.ObjectId;
   notes?: string;
+  /** Marketplace listing (public /cars pages). */
+  published: boolean;
+  featured: boolean;
+  publishedAt?: Date;
+  city?: string;
+  description?: string;
+  inspection?: IInspection;
+  views: number;
+  inquiries: number;
   createdBy?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
+
+const InspectionSchema = new Schema<IInspection>(
+  {
+    inspectedAt: { type: Date, default: Date.now },
+    inspector: String,
+    scores: { type: Schema.Types.Mixed, default: {} },
+    notes: { type: Schema.Types.Mixed, default: {} },
+    overall: { type: Number, default: null },
+    summary: String,
+  },
+  { _id: false, minimize: false }
+);
 
 const ReconSchema = new Schema<IReconEntry>({
   date: { type: Date, default: Date.now },
@@ -94,11 +124,20 @@ const VehicleSchema = new Schema<IVehicle>(
     dealId: { type: Schema.Types.ObjectId, ref: "DealerDeal" },
     tradeInFromDeal: { type: Schema.Types.ObjectId, ref: "DealerDeal" },
     notes: String,
+    published: { type: Boolean, default: false },
+    featured: { type: Boolean, default: false },
+    publishedAt: Date,
+    city: { type: String, trim: true },
+    description: String,
+    inspection: InspectionSchema,
+    views: { type: Number, default: 0 },
+    inquiries: { type: Number, default: 0 },
     createdBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );
 
+VehicleSchema.index({ published: 1, status: 1, featured: -1, publishedAt: -1 });
 VehicleSchema.index(
   { vin: 1 },
   { unique: true, partialFilterExpression: { vin: { $type: "string", $gt: "" } } }

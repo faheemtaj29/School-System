@@ -38,6 +38,21 @@ export type Vehicle = {
   dealId?: string;
   tradeInFromDeal?: string;
   notes?: string;
+  published: boolean;
+  featured: boolean;
+  publishedAt?: string;
+  city?: string;
+  description?: string;
+  inspection?: {
+    inspectedAt: string;
+    inspector?: string;
+    scores: Record<string, number>;
+    notes: Record<string, string>;
+    overall: number | null;
+    summary?: string;
+  };
+  views: number;
+  inquiries: number;
   label: string;
   daysInStock: number;
   aging: string;
