@@ -7,6 +7,7 @@ import { DealershipOverview } from "@/components/dealership/Overview";
 import { DealershipInventory } from "@/components/dealership/Inventory";
 import { DealershipCustomers } from "@/components/dealership/Customers";
 import { DealershipDeals, type DealPrefill } from "@/components/dealership/Deals";
+import { DealershipClassifieds } from "@/components/dealership/Classifieds";
 import type { Branch } from "@/components/dealership/shared";
 
 const TABS = [
@@ -14,6 +15,7 @@ const TABS = [
   ["inventory", "Inventory"],
   ["customers", "Customers & Leads"],
   ["deals", "Deals & Financing"],
+  ["classifieds", "Public Ads"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -57,7 +59,7 @@ export default function DealershipPage() {
     <>
       <Hero
         title="Dealership"
-        subtitle="Vehicle inventory, lead CRM, deal desk and financing across every branch"
+        subtitle="Cars & bikes: inventory, lead CRM, deal desk, financing and public ads across every branch"
       />
 
       <div className="accounting-toolbar no-print" style={{ justifyContent: "space-between" }}>
@@ -120,6 +122,7 @@ export default function DealershipPage() {
           onPrefillHandled={clearPrefill}
         />
       ) : null}
+      {tab === "classifieds" ? <DealershipClassifieds /> : null}
     </>
   );
 }

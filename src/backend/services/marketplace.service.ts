@@ -7,6 +7,8 @@ import type { z } from "zod";
 import { Types } from "mongoose";
 import { dbConnect } from "@/backend/config/database";
 import { DealerCustomer, DealerDeal, Vehicle, type IDealerDeal, type IVehicle } from "@/backend/models/Dealership";
+import { ClassifiedAd, ShopSettings, type IClassifiedAd } from "@/backend/models/Marketplace";
+import { InventoryItem } from "@/backend/models/Inventory";
 import { Settings } from "@/backend/models/Settings";
 import { ServiceError } from "@/backend/types";
 import { priceInsight, type PriceInsight } from "@/lib/dealership";
@@ -20,6 +22,8 @@ const LISTABLE = ["in_stock", "reserved"];
 export const PAGE_SIZE = 24;
 
 export type ListingFilters = {
+  type?: "car" | "bike";
+  seller?: "dealer" | "private";
   q?: string;
   make?: string;
   model?: string;
@@ -40,6 +44,9 @@ export type ListingFilters = {
 
 export type PublicListing = {
   _id: string;
+  vehicleType: "car" | "bike";
+  seller: { type: "dealer" | "private"; name?: string; phone?: string; memberSince?: string };
+  negotiable?: boolean;
   title: string;
   make: string;
   model: string;
@@ -76,8 +83,12 @@ export type PublicListing = {
 const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const exact = (x: string) => new RegExp(`^${esc(x.trim())}$`, "i");
 
-function filterQuery(f: ListingFilters) {
-  const q: Record<string, unknown> = { published: true, status: { $in: LISTABLE } };
+/** Filters shared by dealer stock and private ads (field names match on purpose). */
+function baseQuery(f: ListingFilters) {
+  const q: Record<string, unknown> = {};
+  if (f.type === "bike") q.vehicleType = "bike";
+  // Older dealer stock predates vehicleType: missing means "car".
+  if (f.type === "car") q.vehicleType = { $in: ["car", null] };
   if (f.make) q.make = exact(f.make);
   if (f.model) q.model = exact(f.model);
   if (f.city) q.city = exact(f.city);
@@ -92,7 +103,6 @@ function filterQuery(f: ListingFilters) {
     q.year = { ...(f.minYear ? { $gte: f.minYear } : {}), ...(f.maxYear ? { $lte: f.maxYear } : {}) };
   }
   if (f.maxKm) q.mileage = { $lte: f.maxKm };
-  if (f.inspected) q["inspection.overall"] = { $ne: null, $exists: true };
   if (f.q?.trim()) {
     const rx = new RegExp(esc(f.q.trim()), "i");
     q.$or = [{ make: rx }, { model: rx }, { variant: rx }, { color: rx }, { city: rx }];
@@ -100,16 +110,33 @@ function filterQuery(f: ListingFilters) {
   return q;
 }
 
+function dealerQuery(f: ListingFilters) {
+  const q: Record<string, unknown> = { ...baseQuery(f), published: true, status: { $in: LISTABLE } };
+  if (f.inspected) q["inspection.overall"] = { $ne: null, $exists: true };
+  return q;
+}
+
+function privateQuery(f: ListingFilters) {
+  return { ...baseQuery(f), status: "active", expiresAt: { $gt: new Date() } };
+}
+
+/** Private ads are excluded when the buyer asks for inspected or dealer-only stock. */
+function includePrivate(f: ListingFilters) {
+  return f.seller !== "dealer" && !f.inspected;
+}
+
 const SORTS: Record<string, Record<string, 1 | -1>> = {
-  newest: { featured: -1, publishedAt: -1, createdAt: -1 },
-  price_asc: { listPrice: 1 },
-  price_desc: { listPrice: -1 },
-  year_desc: { year: -1, listPrice: 1 },
-  km_asc: { mileage: 1 },
+  newest: { featured: -1, publishedAt: -1, _id: -1 },
+  price_asc: { listPrice: 1, _id: 1 },
+  price_desc: { listPrice: -1, _id: 1 },
+  year_desc: { year: -1, listPrice: 1, _id: 1 },
+  km_asc: { mileage: 1, _id: 1 },
 };
 
+type AnyListing = (Doc<IVehicle> & { _src?: "dealer" }) | (Doc<IClassifiedAd> & { _src: "private" });
+
 /** One comps query for a whole page of listings instead of one per car. */
-async function insightsFor(list: Doc<IVehicle>[]) {
+async function insightsFor(list: Pick<Doc<IVehicle>, "_id" | "make" | "model" | "year" | "mileage" | "listPrice">[]) {
   const out = new Map<string, PriceInsight | null>();
   if (!list.length) return out;
   const pairs = [...new Map(list.map((v) => [`${v.make}|${v.model}`.toLowerCase(), v])).values()];
@@ -159,6 +186,8 @@ function toPublic(
   const b = branches.get(v.branchCode);
   return {
     _id: String(v._id),
+    vehicleType: v.vehicleType || "car",
+    seller: { type: "dealer", name: b?.name },
     title: [v.year, v.make, v.model, v.variant].filter(Boolean).join(" "),
     make: v.make,
     model: v.model,
@@ -196,28 +225,181 @@ function toPublic(
   };
 }
 
+function adToPublic(a: Doc<IClassifiedAd>, insight: PriceInsight | null): PublicListing {
+  return {
+    _id: String(a._id),
+    vehicleType: a.vehicleType,
+    seller: { type: "private", name: a.sellerName, phone: a.showPhone ? a.sellerPhone : undefined, memberSince: a.createdAt ? new Date(a.createdAt).toISOString() : undefined },
+    negotiable: a.negotiable,
+    title: [a.year, a.make, a.model, a.variant].filter(Boolean).join(" "),
+    make: a.make,
+    model: a.model,
+    variant: a.variant,
+    year: a.year,
+    bodyType: a.bodyType,
+    fuel: a.fuel,
+    transmission: a.transmission,
+    color: a.color,
+    engineCc: a.engineCc,
+    mileage: a.mileage || 0,
+    condition: a.condition,
+    status: "in_stock",
+    city: a.city,
+    registeredIn: a.registeredIn,
+    price: a.listPrice,
+    photos: a.photos || [],
+    features: a.features || [],
+    description: a.description,
+    featured: Boolean(a.featured),
+    publishedAt: a.publishedAt ? new Date(a.publishedAt).toISOString() : undefined,
+    inspection: null,
+    insight,
+    branch: null,
+  };
+}
+
+function anyToPublic(
+  row: AnyListing,
+  insights: Map<string, PriceInsight | null>,
+  branches: Map<string, { code: string; name: string; phone?: string; address?: string }>
+) {
+  const insight = insights.get(String(row._id)) ?? null;
+  return row._src === "private"
+    ? adToPublic(row as Doc<IClassifiedAd>, insight)
+    : toPublic(row as Doc<IVehicle>, insight, branches);
+}
+
+/** Compares two rows the way MongoDB would sort them for `sort`. */
+function sortCompare(sort: Record<string, 1 | -1>) {
+  const val = (row: Record<string, unknown>, key: string) => {
+    const v = row[key];
+    if (v instanceof Date) return v.getTime();
+    if (typeof v === "boolean") return v ? 1 : 0;
+    if (v && typeof v === "object") return String(v); // ObjectId: hex is time-ordered
+    return v ?? null;
+  };
+  return (a: Record<string, unknown>, b: Record<string, unknown>) => {
+    for (const [key, dir] of Object.entries(sort)) {
+      const x = val(a, key);
+      const y = val(b, key);
+      if (x === y) continue;
+      if (x === null) return 1 * dir * -1; // nulls sort first ascending, like MongoDB
+      if (y === null) return -1 * dir * -1;
+      return (x < y ? -1 : 1) * dir;
+    }
+    return 0;
+  };
+}
+
+const MAX_MERGE_DEPTH = 1200; // page 50 at 24/page
+
+/**
+ * Dealer stock and private ads in one sorted, paginated result. Each side is
+ * queried for its first `skip + limit` rows and merged in memory, which keeps
+ * this portable (no $unionWith, so it also runs on DocumentDB/Cosmos/FerretDB).
+ */
+async function unionSearch(f: ListingFilters, sort: Record<string, 1 | -1>, skip: number, limit: number) {
+  const priv = includePrivate(f);
+  const adFields = "-messages";
+  if (f.seller === "private") {
+    const q = privateQuery(f);
+    const [rows, total] = await Promise.all([
+      ClassifiedAd.find(q).sort(sort).skip(skip).limit(limit).select(adFields).lean<Doc<IClassifiedAd>[]>(),
+      ClassifiedAd.countDocuments(q),
+    ]);
+    return { rows: rows.map((r) => ({ ...r, _src: "private" as const })), total };
+  }
+  const dq = dealerQuery(f);
+  if (!priv) {
+    const [rows, total] = await Promise.all([
+      Vehicle.find(dq).sort(sort).skip(skip).limit(limit).lean<Doc<IVehicle>[]>(),
+      Vehicle.countDocuments(dq),
+    ]);
+    return { rows: rows as AnyListing[], total };
+  }
+  const depth = Math.min(skip + limit, MAX_MERGE_DEPTH);
+  const pq = privateQuery(f);
+  const [dealer, ads, dTotal, pTotal] = await Promise.all([
+    Vehicle.find(dq).sort(sort).limit(depth).lean<Doc<IVehicle>[]>(),
+    ClassifiedAd.find(pq).sort(sort).limit(depth).select(adFields).lean<Doc<IClassifiedAd>[]>(),
+    Vehicle.countDocuments(dq),
+    ClassifiedAd.countDocuments(pq),
+  ]);
+  const merged = [
+    ...dealer.map((r) => ({ ...r, _src: "dealer" as const })),
+    ...ads.map((r) => ({ ...r, _src: "private" as const })),
+  ].sort(sortCompare(sort) as (a: unknown, b: unknown) => number);
+  return { rows: merged.slice(skip, skip + limit) as AnyListing[], total: dTotal + pTotal };
+}
+
+/** Min/max year and max price across what is listed (plain sorted finds: portable). */
+async function listingBounds(f: ListingFilters) {
+  const dq = dealerQuery({ type: f.type });
+  const pq = includePrivate(f) ? privateQuery({ type: f.type }) : null;
+  type Row = { year?: number; listPrice?: number } | null;
+  const edge = async (field: "year" | "listPrice", dir: 1 | -1) => {
+    const [d, p] = await Promise.all([
+      Vehicle.findOne(dq).sort({ [field]: dir }).select(field).lean<Row>(),
+      pq ? ClassifiedAd.findOne(pq).sort({ [field]: dir }).select(field).lean<Row>() : Promise.resolve(null),
+    ]);
+    const values = [d?.[field], p?.[field]].filter((v): v is number => typeof v === "number");
+    if (!values.length) return null;
+    return dir === 1 ? Math.min(...values) : Math.max(...values);
+  };
+  const [minYear, maxYear, maxPrice] = await Promise.all([edge("year", 1), edge("year", -1), edge("listPrice", -1)]);
+  return minYear == null ? [] : [{ minYear, maxYear: maxYear ?? minYear, maxPrice: maxPrice ?? 0 }];
+}
+
+async function mergedFacet(field: string, f: ListingFilters, extra: Record<string, unknown> = {}) {
+  const stage = (q: Record<string, unknown>) => [{ $match: { ...q, ...extra } }, { $group: { _id: `$${field}`, n: { $sum: 1 } } }];
+  const [dealer, priv] = await Promise.all([
+    Vehicle.aggregate(stage(dealerQuery({ type: f.type }))),
+    includePrivate(f) ? ClassifiedAd.aggregate(stage(privateQuery({ type: f.type }))) : Promise.resolve([]),
+  ]);
+  const map = new Map<string, number>();
+  [...dealer, ...priv].forEach((r: { _id: string; n: number }) => r._id && map.set(r._id, (map.get(r._id) || 0) + r.n));
+  return [...map.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([value, count]) => ({ value, count }));
+}
+
 export const marketplaceService = {
   async hasListings() {
+    const flags = await this.navFlags();
+    return flags.cars || flags.bikes;
+  },
+
+  /** Which public sections have content, for the site menu. */
+  async navFlags() {
     await dbConnect();
-    return Boolean(await Vehicle.exists({ published: true, status: { $in: LISTABLE } }));
+    const now = new Date();
+    const [carD, bikeD, carP, bikeP, shop, settings] = await Promise.all([
+      Vehicle.exists({ published: true, status: { $in: LISTABLE }, vehicleType: { $in: ["car", null] } }),
+      Vehicle.exists({ published: true, status: { $in: LISTABLE }, vehicleType: "bike" }),
+      ClassifiedAd.exists({ status: "active", vehicleType: "car", expiresAt: { $gt: now } }),
+      ClassifiedAd.exists({ status: "active", vehicleType: "bike", expiresAt: { $gt: now } }),
+      InventoryItem.exists({ "shop.published": true, salePrice: { $gt: 0 } }),
+      ShopSettings.findOne({ key: "default" }).select("enabled classifiedsEnabled").lean<{ enabled?: boolean; classifiedsEnabled?: boolean }>(),
+    ]);
+    const dealershipInUse = Boolean(await Vehicle.exists({}));
+    return {
+      cars: Boolean(carD || carP),
+      bikes: Boolean(bikeD || bikeP),
+      shop: Boolean(shop) && settings?.enabled !== false,
+      // Ads open once the dealership module is in use and the admin has not switched them off.
+      classifieds: (dealershipInUse || Boolean(carP || bikeP)) && settings?.classifiedsEnabled !== false,
+    };
   },
 
   async search(filters: ListingFilters) {
     await dbConnect();
     const page = Math.max(1, filters.page || 1);
-    const query = filterQuery(filters);
-    const [rows, total, branches] = await Promise.all([
-      Vehicle.find(query)
-        .sort(SORTS[filters.sort || "newest"] || SORTS.newest)
-        .skip((page - 1) * PAGE_SIZE)
-        .limit(PAGE_SIZE)
-        .lean<Doc<IVehicle>[]>(),
-      Vehicle.countDocuments(query),
+    const sort = SORTS[filters.sort || "newest"] || SORTS.newest;
+    const [{ rows, total }, branches] = await Promise.all([
+      unionSearch(filters, sort, (page - 1) * PAGE_SIZE, PAGE_SIZE),
       branchMap(),
     ]);
     const insights = await insightsFor(rows);
     return {
-      listings: rows.map((v) => toPublic(v, insights.get(String(v._id)) ?? null, branches)),
+      listings: rows.map((r) => anyToPublic(r, insights, branches)),
       total,
       page,
       pages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
@@ -225,23 +407,18 @@ export const marketplaceService = {
   },
 
   /** Filter options with counts, drawn from what is actually listed. */
-  async facets() {
+  async facets(f: ListingFilters = {}) {
     await dbConnect();
-    const base = { published: true, status: { $in: LISTABLE } };
     const [makes, cities, bodies, bounds] = await Promise.all([
-      Vehicle.aggregate([{ $match: base }, { $group: { _id: "$make", n: { $sum: 1 } } }, { $sort: { n: -1, _id: 1 } }]),
-      Vehicle.aggregate([{ $match: { ...base, city: { $nin: [null, ""] } } }, { $group: { _id: "$city", n: { $sum: 1 } } }, { $sort: { n: -1 } }]),
-      Vehicle.aggregate([{ $match: { ...base, bodyType: { $nin: [null, ""] } } }, { $group: { _id: "$bodyType", n: { $sum: 1 } } }, { $sort: { n: -1 } }]),
-      Vehicle.aggregate([
-        { $match: base },
-        { $group: { _id: null, minYear: { $min: "$year" }, maxYear: { $max: "$year" }, maxPrice: { $max: "$listPrice" } } },
-      ]),
+      mergedFacet("make", f),
+      mergedFacet("city", f, { city: { $nin: [null, ""] } }),
+      mergedFacet("bodyType", f, { bodyType: { $nin: [null, ""] } }),
+      listingBounds(f),
     ]);
-    const pick = (rows: { _id: string; n: number }[]) => rows.map((r) => ({ value: r._id, count: r.n }));
     return {
-      makes: pick(makes),
-      cities: pick(cities),
-      bodies: pick(bodies),
+      makes,
+      cities,
+      bodies,
       minYear: bounds[0]?.minYear ?? new Date().getFullYear() - 20,
       maxYear: bounds[0]?.maxYear ?? new Date().getFullYear(),
       maxPrice: bounds[0]?.maxPrice ?? 0,
@@ -251,38 +428,39 @@ export const marketplaceService = {
   async listing(id: string, countView = true) {
     await dbConnect();
     if (!Types.ObjectId.isValid(id)) throw new ServiceError("NOT_FOUND", "Listing not found", 404);
-    const v = countView
-      ? await Vehicle.findOneAndUpdate(
-          { _id: id, published: true, status: { $in: LISTABLE } },
-          { $inc: { views: 1 } },
-          { new: true }
-        ).lean<Doc<IVehicle>>()
-      : await Vehicle.findOne({ _id: id, published: true, status: { $in: LISTABLE } }).lean<Doc<IVehicle>>();
-    if (!v) throw new ServiceError("NOT_FOUND", "This car is no longer listed", 404);
-    const similarRows = await Vehicle.find({
-      _id: { $ne: v._id },
-      published: true,
-      status: { $in: LISTABLE },
-      $or: [
-        { make: exact(v.make), model: exact(v.model) },
-        { bodyType: v.bodyType || "__none__", listPrice: { $gte: v.listPrice * 0.8, $lte: v.listPrice * 1.2 } },
-      ],
-    })
-      .sort({ featured: -1, publishedAt: -1 })
-      .limit(4)
-      .lean<Doc<IVehicle>[]>();
-    const [insights, branches] = await Promise.all([insightsFor([v, ...similarRows]), branchMap()]);
+    const dealerFilter = { _id: id, published: true, status: { $in: LISTABLE } };
+    const adFilter = { _id: id, status: "active", expiresAt: { $gt: new Date() } };
+    const inc = { $inc: { views: 1 } };
+    let row: AnyListing | null = countView
+      ? await Vehicle.findOneAndUpdate(dealerFilter, inc, { new: true }).lean<Doc<IVehicle>>()
+      : await Vehicle.findOne(dealerFilter).lean<Doc<IVehicle>>();
+    if (!row) {
+      const ad = countView
+        ? await ClassifiedAd.findOneAndUpdate(adFilter, inc, { new: true }).lean<Doc<IClassifiedAd>>()
+        : await ClassifiedAd.findOne(adFilter).lean<Doc<IClassifiedAd>>();
+      if (ad) {
+        // Buyer messages are private to the seller; never let them reach the page.
+        const { messages: _messages, ...publicAd } = ad;
+        row = { ...(publicAd as Doc<IClassifiedAd>), _src: "private" };
+      }
+    }
+    if (!row) throw new ServiceError("NOT_FOUND", "This vehicle is no longer listed", 404);
+    const similarFilter: ListingFilters = { type: row.vehicleType || "car" };
+    const { rows: pool } = await unionSearch({ ...similarFilter, make: row.make }, SORTS.newest, 0, 8);
+    const similarRows = pool.filter((p) => String(p._id) !== String(row!._id)).slice(0, 4);
+    const [insights, branches] = await Promise.all([insightsFor([row, ...similarRows]), branchMap()]);
     return {
-      listing: toPublic(v, insights.get(String(v._id)) ?? null, branches),
-      similar: similarRows.map((s) => toPublic(s, insights.get(String(s._id)) ?? null, branches)),
+      listing: anyToPublic(row, insights, branches),
+      similar: similarRows.map((r) => anyToPublic(r, insights, branches)),
     };
   },
 
   /** "Contact dealer" on a listing → lead in the CRM (or an activity on an existing one). */
   async inquire(id: string, data: InquiryInput) {
     await dbConnect();
+    if (!Types.ObjectId.isValid(id)) throw new ServiceError("NOT_FOUND", "Listing not found", 404);
     const v = await Vehicle.findOne({ _id: id, published: true, status: { $in: LISTABLE } }).lean<Doc<IVehicle>>();
-    if (!v) throw new ServiceError("NOT_FOUND", "This car is no longer listed", 404);
+    if (!v) return this.messageSeller(id, data);
     const title = [v.year, v.make, v.model, v.variant].filter(Boolean).join(" ");
     const intentText: Record<InquiryInput["intent"], string> = {
       buy: "Enquired about",
@@ -326,6 +504,30 @@ export const marketplaceService = {
     }
     await Vehicle.updateOne({ _id: v._id }, { $inc: { inquiries: 1 } });
     return { ok: true };
+  },
+
+  /** Enquiry on a private ad goes to the seller's inbox, not the dealership CRM. */
+  async messageSeller(id: string, data: InquiryInput) {
+    const ad = await ClassifiedAd.findOne({ _id: id, status: "active", expiresAt: { $gt: new Date() } });
+    if (!ad) throw new ServiceError("NOT_FOUND", "This vehicle is no longer listed", 404);
+    const now = Date.now();
+    const dup = ad.messages.slice(-5).some((m: { phone: string; at: Date }) => m.phone === data.phone && now - new Date(m.at).getTime() < 600_000);
+    if (dup) return { ok: true, duplicate: true };
+    const intent: Record<InquiryInput["intent"], string> = {
+      buy: "", test_drive: "Wants to see / test drive. ", finance: "Asked about financing. ", offer: "",
+    };
+    ad.messages.push({
+      name: data.name,
+      phone: data.phone,
+      message: `${intent[data.intent]}${data.message || ""}`.trim() || undefined,
+      offerPrice: data.intent === "offer" ? data.offerPrice : undefined,
+      at: new Date(),
+      read: false,
+    });
+    ad.contacts = (ad.contacts || 0) + 1;
+    if (ad.messages.length > 200) ad.messages = ad.messages.slice(-200);
+    await ad.save();
+    return { ok: true, private: true };
   },
 
   /** "Sell your car" → acquisition lead carrying the car as a trade-in record. */
@@ -378,7 +580,11 @@ export function parseListingFilters(get: (key: string) => string | null | undefi
     return Number.isFinite(v) && v > 0 ? v : undefined;
   };
   const str = (k: string) => get(k)?.trim() || undefined;
+  const type = get("type");
+  const seller = get("seller");
   return {
+    type: type === "bike" || type === "car" ? type : undefined,
+    seller: seller === "dealer" || seller === "private" ? seller : undefined,
     q: str("q"),
     make: str("make"),
     model: str("model"),

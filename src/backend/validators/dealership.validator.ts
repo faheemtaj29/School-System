@@ -14,6 +14,7 @@ const optionalMoney = z.coerce.number().min(0).optional();
 const currentYear = new Date().getFullYear();
 
 export const vehicleSchema = z.object({
+  vehicleType: z.enum(["car", "bike"]).default("car"),
   stockNo: z.string().trim().optional(),
   vin: z
     .string()
@@ -37,7 +38,12 @@ export const vehicleSchema = z.object({
   purchaseCost: money,
   listPrice: money,
   floorPrice: money,
-  photos: z.array(z.string().trim().url("Photo must be a full URL")).max(20).default([]),
+  photos: z
+    .array(
+      z.string().trim().refine((v) => /^\/uploads\/[\w/.-]+$/.test(v) || /^https?:\/\/\S+$/.test(v), "Photo must be an upload or a full URL")
+    )
+    .max(20)
+    .default([]),
   features: z.array(z.string().trim().min(1)).max(60).default([]),
   acquiredFrom: z.string().optional(),
   acquiredAt: z.string().optional(),

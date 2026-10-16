@@ -31,6 +31,7 @@ export interface IInspection {
 }
 
 export interface IVehicle {
+  vehicleType: "car" | "bike";
   stockNo: string;
   vin?: string;
   registrationNo?: string;
@@ -96,6 +97,7 @@ const ReconSchema = new Schema<IReconEntry>({
 
 const VehicleSchema = new Schema<IVehicle>(
   {
+    vehicleType: { type: String, enum: ["car", "bike"], default: "car" },
     stockNo: { type: String, required: true, unique: true, trim: true, uppercase: true },
     vin: { type: String, trim: true, uppercase: true },
     registrationNo: { type: String, trim: true, uppercase: true },
@@ -137,7 +139,7 @@ const VehicleSchema = new Schema<IVehicle>(
   { timestamps: true }
 );
 
-VehicleSchema.index({ published: 1, status: 1, featured: -1, publishedAt: -1 });
+VehicleSchema.index({ published: 1, status: 1, vehicleType: 1, featured: -1, publishedAt: -1 });
 VehicleSchema.index(
   { vin: 1 },
   { unique: true, partialFilterExpression: { vin: { $type: "string", $gt: "" } } }

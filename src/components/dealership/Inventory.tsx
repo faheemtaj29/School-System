@@ -13,11 +13,15 @@ import {
 } from "@/lib/dealership";
 import { Branch, Deal, Pill, Sheet, Vehicle, api, label, pkr, withBranch } from "./shared";
 
-const BODY_TYPES = ["Sedan", "Hatchback", "SUV", "Crossover", "Pickup", "Van", "Coupe", "MPV"];
+import { BODY_TYPES as BODY_BY_TYPE } from "@/lib/shop";
+import { ImageUploader } from "@/components/ImageUploader";
+
+const BODY_TYPES = [...BODY_BY_TYPE.car, ...BODY_BY_TYPE.bike];
 const FUELS = ["Petrol", "Diesel", "Hybrid", "Electric", "CNG"];
 const TRANSMISSIONS = ["Automatic", "Manual"];
 
 type VehicleForm = {
+  vehicleType: "car" | "bike";
   stockNo: string;
   vin: string;
   registrationNo: string;
@@ -50,6 +54,7 @@ type VehicleForm = {
 
 function emptyForm(branch: string): VehicleForm {
   return {
+    vehicleType: "car",
     stockNo: "",
     vin: "",
     registrationNo: "",
@@ -83,6 +88,7 @@ function emptyForm(branch: string): VehicleForm {
 
 function toForm(v: Vehicle): VehicleForm {
   return {
+    vehicleType: v.vehicleType || "car",
     stockNo: v.stockNo,
     vin: v.vin || "",
     registrationNo: v.registrationNo || "",
@@ -151,6 +157,7 @@ export function DealershipInventory({
   const [status, setStatus] = useState("unsold");
   const [make, setMake] = useState("");
   const [body, setBody] = useState("");
+  const [vtype, setVtype] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [sort, setSort] = useState<Sort>("newest");
   const [formOpen, setFormOpen] = useState(false);
@@ -185,6 +192,7 @@ export function DealershipInventory({
       if (status === "unsold" ? v.status === "sold" : status && v.status !== status) return false;
       if (make && v.make !== make) return false;
       if (body && v.bodyType !== body) return false;
+      if (vtype && (v.vehicleType || "car") !== vtype) return false;
       if (maxPrice && v.listPrice > Number(maxPrice)) return false;
       if (!term) return true;
       return [v.stockNo, v.vin, v.registrationNo, v.label, v.color].some((x) => x?.toLowerCase().includes(term));
@@ -197,7 +205,7 @@ export function DealershipInventory({
       gross_desc: (a, b) => b.potentialGross - a.potentialGross,
     };
     return rows.sort(by[sort]);
-  }, [vehicles, q, status, make, body, maxPrice, sort]);
+  }, [vehicles, q, status, make, body, vtype, maxPrice, sort]);
 
   function openNew() {
     setEditing(null);
@@ -240,6 +248,11 @@ export function DealershipInventory({
           {VEHICLE_STATUSES.map((s) => (
             <option key={s} value={s}>{label(s)}</option>
           ))}
+        </select>
+        <select className={inputClass} value={vtype} onChange={(e) => setVtype(e.target.value)}>
+          <option value="">Cars & bikes</option>
+          <option value="car">Cars</option>
+          <option value="bike">Bikes</option>
         </select>
         <select className={inputClass} value={make} onChange={(e) => setMake(e.target.value)}>
           <option value="">All makes</option>
@@ -353,6 +366,12 @@ export function DealershipInventory({
         {formError ? <div className="alert err">{formError}</div> : null}
         <div className="form-section-title">Identity</div>
         <div className="form-grid three">
+          <Field label="Vehicle type" required>
+            <select className={inputClass} value={form.vehicleType} onChange={(e) => setForm((f) => ({ ...f, vehicleType: e.target.value as "car" | "bike", bodyType: "", transmission: e.target.value === "bike" ? "Manual" : f.transmission }))}>
+              <option value="car">Car</option>
+              <option value="bike">Motorbike</option>
+            </select>
+          </Field>
           <Field label="Make" required><input className={inputClass} value={form.make} onChange={(e) => set("make", e.target.value)} required placeholder="Toyota" /></Field>
           <Field label="Model" required><input className={inputClass} value={form.model} onChange={(e) => set("model", e.target.value)} required placeholder="Corolla" /></Field>
           <Field label="Variant / trim"><input className={inputClass} value={form.variant} onChange={(e) => set("variant", e.target.value)} placeholder="Altis Grande 1.8" /></Field>
@@ -380,7 +399,7 @@ export function DealershipInventory({
           <Field label="Body type">
             <select className={inputClass} value={form.bodyType} onChange={(e) => set("bodyType", e.target.value)}>
               <option value="">—</option>
-              {BODY_TYPES.map((b) => <option key={b}>{b}</option>)}
+              {BODY_BY_TYPE[form.vehicleType].map((b) => <option key={b}>{b}</option>)}
             </select>
           </Field>
           <Field label="Fuel">
@@ -414,7 +433,14 @@ export function DealershipInventory({
           Front-end margin at list: <b style={{ color: margin < 0 ? "var(--red)" : "var(--jade-dark)" }}>{pkr(margin)}</b>
         </div>
         <div className="form-grid">
-          <Field label="Photo URLs (one per line)"><textarea className={inputClass} rows={3} value={form.photos} onChange={(e) => set("photos", e.target.value)} /></Field>
+          <Field label="Photos (first is the cover)">
+            <ImageUploader
+              value={form.photos.split(/\s+/).filter(Boolean)}
+              onChange={(urls) => set("photos", urls.join("\n"))}
+              endpoint="/api/uploads/image"
+              max={20}
+            />
+          </Field>
           <Field label="Features (comma separated)"><textarea className={inputClass} rows={3} value={form.features} onChange={(e) => set("features", e.target.value)} placeholder="Sunroof, Push start, Cruise control" /></Field>
         </div>
         <Field label="Internal notes (never shown publicly)"><textarea className={inputClass} rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} /></Field>

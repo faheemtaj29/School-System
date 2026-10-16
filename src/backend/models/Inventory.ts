@@ -5,6 +5,22 @@ export interface IBranchStock {
   quantity: number;
 }
 
+/** Online-shop presentation of an inventory item. Stock still lives on the item. */
+export interface IShopListing {
+  published: boolean;
+  slug: string;
+  title?: string;
+  brand?: string;
+  shopCategory: string;
+  fit: "car" | "bike" | "universal";
+  description?: string;
+  images: string[];
+  compareAtPrice?: number;
+  featured: boolean;
+  tags: string[];
+  fitment?: string;
+}
+
 export interface IInventoryItem {
   sku: string;
   name: string;
@@ -21,6 +37,7 @@ export interface IInventoryItem {
   branchCode?: string;
   /** Per-branch balances; `quantity` stays the overall total. */
   stock: IBranchStock[];
+  shop?: IShopListing;
   updatedBy?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -30,6 +47,24 @@ const BranchStockSchema = new Schema<IBranchStock>(
   {
     branchCode: { type: String, required: true, uppercase: true, trim: true },
     quantity: { type: Number, default: 0 },
+  },
+  { _id: false }
+);
+
+const ShopListingSchema = new Schema<IShopListing>(
+  {
+    published: { type: Boolean, default: false },
+    slug: { type: String, trim: true, lowercase: true },
+    title: { type: String, trim: true },
+    brand: { type: String, trim: true },
+    shopCategory: { type: String, trim: true },
+    fit: { type: String, enum: ["car", "bike", "universal"], default: "universal" },
+    description: String,
+    images: { type: [String], default: [] },
+    compareAtPrice: { type: Number, min: 0 },
+    featured: { type: Boolean, default: false },
+    tags: { type: [String], default: [] },
+    fitment: String,
   },
   { _id: false }
 );
@@ -54,10 +89,17 @@ const InventorySchema = new Schema<IInventoryItem>(
     notes: String,
     branchCode: { type: String, uppercase: true, trim: true },
     stock: { type: [BranchStockSchema], default: [] },
+    shop: ShopListingSchema,
     updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );
+
+InventorySchema.index(
+  { "shop.slug": 1 },
+  { unique: true, partialFilterExpression: { "shop.slug": { $type: "string" } } }
+);
+InventorySchema.index({ "shop.published": 1, "shop.shopCategory": 1, "shop.fit": 1 });
 
 export const InventoryItem =
   models.InventoryItem || model<IInventoryItem>("InventoryItem", InventorySchema);

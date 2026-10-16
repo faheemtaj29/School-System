@@ -2488,3 +2488,101 @@ a.pay-stat:hover { box-shadow: var(--shadow-md); }
   .dl-insp-line { grid-template-columns: 1fr 80px; }
   .dl-insp-line input:last-child { grid-column: 1 / -1; }
 }
+
+/* ---- Image uploader ---- */
+.img-up-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+.img-up-tile { position: relative; aspect-ratio: 4 / 3; border-radius: 10px; background: #eef1ea center / cover no-repeat; border: 1px solid var(--line); overflow: hidden; }
+.img-up-cover { position: absolute; top: 6px; left: 6px; background: var(--jade); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+.img-up-actions { position: absolute; inset: auto 0 0 0; display: flex; justify-content: space-between; padding: 4px; background: linear-gradient(transparent, rgba(0,0,0,.55)); }
+.img-up-actions button { border: 0; background: rgba(255,255,255,.9); border-radius: 6px; width: 26px; height: 24px; cursor: pointer; font-size: 13px; }
+.img-up-actions button:disabled { opacity: .35; cursor: default; }
+.img-up-add { aspect-ratio: 4 / 3; border: 2px dashed var(--line); border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; color: var(--jade-dark); font-weight: 600; font-size: 13px; text-align: center; padding: 6px; background: #fff; }
+.img-up-add small { color: var(--text-dim); font-weight: 400; font-size: 10.5px; }
+.img-up-add.busy { opacity: .6; cursor: progress; }
+.img-up-error { color: var(--red); font-size: 12.5px; margin-top: 6px; }
+.dl-thumb { width: 46px; height: 34px; border-radius: 6px; background: var(--paper) center / cover no-repeat; border: 1px solid var(--line); }
+.dl-ad-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 14px; }
+.dl-ad-photos a { aspect-ratio: 4 / 3; border-radius: 8px; background: #eef1ea center / cover no-repeat; }
+
+/* ---- Marketplace additions: tabs, sellers, shop ---- */
+.mk-type-tabs { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+.mk-type-tabs a { padding: 8px 16px; border-radius: 22px; border: 1px solid var(--line); background: #fff; color: var(--text); text-decoration: none; font-weight: 600; font-size: 13.5px; }
+.mk-type-tabs a.active { background: var(--jade); border-color: var(--jade); color: #fff; }
+.mk-seller-badge { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 20px; }
+.mk-seller-badge.dealer { background: var(--jade-light); color: var(--jade-dark); }
+.mk-seller-badge.private { background: #f1ecfb; color: #6b46c1; }
+.mk-safety { margin-top: 12px; font-size: 12px; color: var(--text-dim); background: var(--paper); border-radius: 8px; padding: 10px; }
+.mk-link { background: none; border: 0; padding: 0; color: var(--jade-dark); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.mk-link.danger { color: var(--red); }
+.mk-check-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13.5px; }
+.mk-check-row input { width: auto; }
+.mk-auth { max-width: 640px; }
+.mk-account-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mk-my-ads { display: grid; gap: 12px; }
+.mk-my-ad { display: grid; grid-template-columns: 150px 1fr; gap: 14px; padding: 12px !important; }
+.mk-my-ad-photo { border-radius: 10px; background: #eef1ea center / cover no-repeat; min-height: 100px; }
+.mk-my-ad-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.mk-status { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; background: var(--paper); }
+.mk-status.active { background: var(--jade-light); color: var(--jade-dark); }
+.mk-status.pending { background: var(--saffron-light); color: #96650f; }
+.mk-status.rejected, .mk-status.expired { background: var(--red-light); color: var(--red); }
+.mk-msgs { list-style: none; display: grid; gap: 8px; margin-top: 10px; font-size: 13px; }
+.mk-msgs li { background: var(--paper); border-radius: 8px; padding: 8px 10px; }
+.mk-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mk-table th, .mk-table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+
+.mk-shop-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.mk-cart-badge { position: relative; font-size: 20px; text-decoration: none; padding: 4px 8px; }
+.mk-cart-badge span { position: absolute; top: -4px; right: -4px; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
+.mk-cats { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 18px; }
+.mk-cats a { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; text-decoration: none; color: var(--text); font-size: 13px; }
+.mk-cats a small { color: var(--text-dim); }
+.mk-cats a.active { border-color: var(--jade); background: var(--jade-light); }
+.mk-product .mk-card-title { color: var(--text); text-decoration: none; }
+.mk-product .mk-card-photo { text-decoration: none; }
+.mk-low { color: #96650f; font-size: 12px; font-weight: 600; }
+.mk-instock { color: var(--jade-dark); font-weight: 600; }
+.mk-add { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.mk-add .site-btn { padding: 8px 14px; }
+.mk-qty { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
+.mk-qty button { width: 32px; height: 34px; border: 0; background: var(--paper); cursor: pointer; font-size: 16px; }
+.mk-qty button:disabled { opacity: .4; cursor: default; }
+.mk-qty span { min-width: 34px; text-align: center; font-weight: 700; }
+.mk-cart { display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
+.mk-cart-line { display: grid; grid-template-columns: 64px 1fr auto auto auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.mk-cart-line:last-child { border-bottom: 0; }
+.mk-cart-img { width: 64px; height: 50px; border-radius: 8px; background: var(--paper) center / cover no-repeat; }
+.mk-cart-title { font-weight: 600; color: var(--text); text-decoration: none; }
+.mk-summary { display: grid; gap: 8px; position: sticky; top: 12px; }
+.mk-summary > div { display: flex; justify-content: space-between; }
+.mk-summary .total { border-top: 1px solid var(--line); padding-top: 8px; font-size: 16px; }
+.mk-pay { display: flex; gap: 18px; flex-wrap: wrap; font-size: 14px; }
+.mk-pay label { display: flex; gap: 6px; align-items: center; }
+.mk-pay input { width: auto; }
+.mk-callout { background: var(--saffron-light); border-radius: 10px; padding: 12px; margin: 10px 0; }
+.mk-callout pre { white-space: pre-wrap; font-family: var(--font-mono), monospace; margin: 6px 0; }
+.mk-steps-track { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 12px 0; }
+.mk-steps-track li { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--text-dim); }
+.mk-steps-track li span { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--line); display: flex; align-items: center; justify-content: center; font-weight: 700; background: #fff; }
+.mk-steps-track li.done { color: var(--jade-dark); }
+.mk-steps-track li.done span { background: var(--jade); border-color: var(--jade); color: #fff; }
+
+@media (max-width: 860px) {
+  .mk-cart { grid-template-columns: 1fr; }
+  .mk-summary { position: static; }
+  .mk-cart-line { grid-template-columns: 56px 1fr auto; }
+  .mk-cart-line > b, .mk-cart-line > .mk-link { grid-column: 2 / -1; }
+  .mk-my-ad { grid-template-columns: 1fr; }
+  .mk-my-ad-photo { min-height: 160px; }
+}
+
+/* uploader inside public forms: .site-form label rules must not squash it */
+.site-form .img-up-add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 13px; }
+.site-form .img-up-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.mk-results-head { display: flex; justify-content: space-between; align-items: center; }
+.mk-filter-jump { display: none; font-size: 13px; font-weight: 600; color: var(--jade-dark); text-decoration: none; }
+@media (max-width: 960px) {
+  /* Phones: results first, filters after (jump link at the top of results). */
+  .mk-layout > .mk-filters { order: 2; }
+  .mk-filter-jump { display: inline; }
+}

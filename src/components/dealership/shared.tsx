@@ -10,6 +10,7 @@ export type Recon = { _id: string; date: string; description: string; vendor?: s
 
 export type Vehicle = {
   _id: string;
+  vehicleType?: "car" | "bike";
   stockNo: string;
   vin?: string;
   registrationNo?: string;
@@ -194,6 +195,16 @@ const tone: Record<string, string> = {
   approved: "present",
   rejected: "absent",
   none: "",
+  pending: "leave",
+  confirmed: "info",
+  dispatched: "info",
+  returned: "absent",
+  active: "present",
+  expired: "",
+  removed: "absent",
+  paid: "present",
+  unpaid: "leave",
+  refunded: "absent",
 };
 
 export function Pill({ value }: { value: string }) {

@@ -9,7 +9,9 @@
     "lint": "eslint",
     "db:backup": "node scripts/db/backup.js",
     "db:migrate": "node scripts/migrations/run.js up",
-    "db:migrate:status": "node scripts/migrations/run.js status"
+    "db:migrate:status": "node scripts/migrations/run.js status",
+    "test:e2e": "node scripts/e2e/marketplace.mjs",
+    "test:e2e:reset": "node scripts/e2e/reset-test-db.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.8.0",

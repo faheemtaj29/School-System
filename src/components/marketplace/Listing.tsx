@@ -19,9 +19,13 @@ export function InspectionBadge({ score }: { score: number | null | undefined })
   return <span className="mk-insp-badge">✓ Inspected {score}/10</span>;
 }
 
+export function listingHref(car: Pick<PublicListing, "_id" | "vehicleType">) {
+  return `/${car.vehicleType === "bike" ? "bikes" : "cars"}/${car._id}`;
+}
+
 export function ListingCard({ car }: { car: PublicListing }) {
   return (
-    <Link href={`/cars/${car._id}`} className={`mk-card${car.featured ? " featured" : ""}`}>
+    <Link href={listingHref(car)} className={`mk-card${car.featured ? " featured" : ""}`}>
       <div className="mk-card-photo" style={car.photos[0] ? { backgroundImage: `url("${car.photos[0]}")` } : undefined}>
         {!car.photos[0] ? <span>{car.make}</span> : null}
         {car.featured ? <span className="mk-ribbon">Featured</span> : null}
@@ -34,12 +38,13 @@ export function ListingCard({ car }: { car: PublicListing }) {
         <div className="mk-card-specs">
           <span>{car.year}</span>
           <span>{car.mileage.toLocaleString()} km</span>
-          <span>{car.fuel || "—"}</span>
-          <span>{car.transmission || "—"}</span>
+          {car.vehicleType === "bike" ? <span>{car.engineCc ? `${car.engineCc} cc` : "—"}</span> : <span>{car.fuel || "—"}</span>}
+          {car.vehicleType === "bike" ? null : <span>{car.transmission || "—"}</span>}
         </div>
         <div className="mk-card-foot">
           <span>{car.city || car.branch?.name || ""}</span>
           <span className="mk-badges">
+            <span className={`mk-seller-badge ${car.seller.type}`}>{car.seller.type === "dealer" ? "Dealer" : "Private"}</span>
             <InspectionBadge score={car.inspection?.overall} />
             <PriceBadge insight={car.insight} />
           </span>

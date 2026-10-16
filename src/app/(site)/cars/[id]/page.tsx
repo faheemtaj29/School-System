@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { EmiCalculator, Gallery, InquiryForm } from "@/components/marketplace/Interactive";
 import { InspectionBadge, InspectionReport, ListingCard, PriceBadge, PriceMeter } from "@/components/marketplace/Listing";
+import { ShowPhone } from "@/components/marketplace/Interactive";
 import { marketplaceService } from "@/backend/services/marketplace.service";
 import { ServiceError } from "@/backend/types";
 import { formatPKR, formatPKRShort } from "@/lib/dealership";
@@ -35,12 +36,15 @@ export default async function CarPage({ params }: { params: Params }) {
   const data = await load((await params).id, true);
   if (!data) notFound();
   const { listing: car, similar } = data;
+  const isBike = car.vehicleType === "bike";
+  const base = isBike ? "/bikes" : "/cars";
+  const isPrivate = car.seller.type === "private";
 
   const specs: [string, string | undefined][] = [
     ["Model year", String(car.year)],
     ["Mileage", `${car.mileage.toLocaleString()} km`],
     ["Fuel", car.fuel],
-    ["Transmission", car.transmission],
+    ["Transmission", isBike ? undefined : car.transmission],
     ["Engine", car.engineCc ? `${car.engineCc} cc` : undefined],
     ["Body type", car.bodyType],
     ["Colour", car.color],
@@ -53,8 +57,8 @@ export default async function CarPage({ params }: { params: Params }) {
   return (
     <section className="site-section mk-wrap">
       <nav className="mk-crumbs">
-        <Link href="/cars">Cars</Link> › <Link href={`/cars?make=${encodeURIComponent(car.make)}`}>{car.make}</Link> ›{" "}
-        <Link href={`/cars?make=${encodeURIComponent(car.make)}&model=${encodeURIComponent(car.model)}`}>{car.model}</Link>
+        <Link href={base}>{isBike ? "Bikes" : "Cars"}</Link> › <Link href={`${base}?make=${encodeURIComponent(car.make)}`}>{car.make}</Link> ›{" "}
+        <Link href={`${base}?make=${encodeURIComponent(car.make)}&model=${encodeURIComponent(car.model)}`}>{car.model}</Link>
       </nav>
 
       <div className="mk-detail">
@@ -79,7 +83,7 @@ export default async function CarPage({ params }: { params: Params }) {
 
           {car.description ? (
             <div className="site-card mk-block">
-              <h3>Seller&apos;s comments</h3>
+              <h3>{isPrivate ? "About this vehicle" : "Seller's comments"}</h3>
               <p style={{ whiteSpace: "pre-line" }}>{car.description}</p>
             </div>
           ) : null}
@@ -106,14 +110,29 @@ export default async function CarPage({ params }: { params: Params }) {
             {car.insight ? <PriceMeter insight={car.insight} price={car.price} /> : null}
           </div>
 
-          <div className="site-card">
-            <h3>Contact the dealer</h3>
-            {car.branch ? <p className="mk-muted">{car.branch.name}{car.branch.address ? ` · ${car.branch.address}` : ""}</p> : null}
-            <InquiryForm listingId={car._id} phone={car.branch?.phone} />
-          </div>
+          {isPrivate ? (
+            <div className="site-card">
+              <h3>Private seller</h3>
+              <p><b>{car.seller.name}</b>{car.city ? ` · ${car.city}` : ""}</p>
+              {car.seller.memberSince ? <p className="mk-muted">On the site since {new Date(car.seller.memberSince).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}</p> : null}
+              {car.negotiable ? <p className="mk-muted">Price is negotiable</p> : null}
+              {car.seller.phone ? <ShowPhone phone={car.seller.phone} /> : null}
+              <InquiryForm listingId={car._id} privateSeller />
+              <div className="mk-safety">
+                <b>Stay safe:</b> meet in a public place, inspect the vehicle and documents (registration, CNIC match,
+                tax token) before paying, and never send an advance payment.
+              </div>
+            </div>
+          ) : (
+            <div className="site-card">
+              <h3>Contact the dealer</h3>
+              {car.branch ? <p className="mk-muted">{car.branch.name}{car.branch.address ? ` · ${car.branch.address}` : ""}</p> : null}
+              <InquiryForm listingId={car._id} phone={car.branch?.phone} />
+            </div>
+          )}
 
           <div className="site-card">
-            <h3>Car finance calculator</h3>
+            <h3>{isBike ? "Bike" : "Car"} finance calculator</h3>
             <EmiCalculator price={car.price} />
           </div>
         </aside>

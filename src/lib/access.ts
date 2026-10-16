@@ -10,7 +10,7 @@ export const ADMIN_PAGES = [
 ];
 
 /** Finance / ops — admin + campus staff */
-export const OPS_PAGES = ["/fees", "/inventory", "/dealership", "/hr", "/campus", "/approvals"];
+export const OPS_PAGES = ["/fees", "/inventory", "/dealership", "/ecommerce", "/hr", "/campus", "/approvals"];
 
 /** Teaching academics — admin + teacher */
 export const ACADEMIC_PAGES = [

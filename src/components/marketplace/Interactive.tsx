@@ -67,7 +67,18 @@ export function EmiCalculator({ price }: { price: number }) {
 
 type Intent = "buy" | "test_drive" | "finance" | "offer";
 
-export function InquiryForm({ listingId, phone }: { listingId: string; phone?: string }) {
+export function ShowPhone({ phone }: { phone: string }) {
+  const [shown, setShown] = useState(false);
+  return shown ? (
+    <a className="site-btn" href={`tel:${phone}`} style={{ marginBottom: 10, display: "inline-flex" }}>📞 {phone}</a>
+  ) : (
+    <button type="button" className="site-btn" style={{ marginBottom: 10 }} onClick={() => setShown(true)}>
+      📞 Show phone number
+    </button>
+  );
+}
+
+export function InquiryForm({ listingId, phone, privateSeller }: { listingId: string; phone?: string; privateSeller?: boolean }) {
   const [intent, setIntent] = useState<Intent>("buy");
   const [form, setForm] = useState({ name: "", phone: "", email: "", message: "", offerPrice: "", website: "" });
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
@@ -96,7 +107,10 @@ export function InquiryForm({ listingId, phone }: { listingId: string; phone?: s
     return (
       <div className="mk-contact sent">
         <b>Thanks, {form.name.split(" ")[0]}!</b>
-        <p>Our sales team will call you shortly{phone ? <> — or call us now on <a href={`tel:${phone}`}>{phone}</a></> : null}.</p>
+        <p>
+          {privateSeller ? "Your message was sent to the seller." : "Our sales team will call you shortly"}
+          {phone ? <> — or call us now on <a href={`tel:${phone}`}>{phone}</a></> : null}.
+        </p>
       </div>
     );
   }
@@ -105,7 +119,10 @@ export function InquiryForm({ listingId, phone }: { listingId: string; phone?: s
   return (
     <form className="mk-contact" onSubmit={submit}>
       <div className="mk-chips">
-        {([["buy", "I'm interested"], ["test_drive", "Test drive"], ["finance", "Financing"], ["offer", "Make offer"]] as const).map(([k, l]) => (
+        {(privateSeller
+          ? ([["buy", "I'm interested"], ["test_drive", "View in person"], ["offer", "Make offer"]] as const)
+          : ([["buy", "I'm interested"], ["test_drive", "Test drive"], ["finance", "Financing"], ["offer", "Make offer"]] as const)
+        ).map(([k, l]) => (
           <button key={k} type="button" className={intent === k ? "active" : ""} onClick={() => setIntent(k)}>{l}</button>
         ))}
       </div>
@@ -120,7 +137,7 @@ export function InquiryForm({ listingId, phone }: { listingId: string; phone?: s
       <input className="mk-hp" tabIndex={-1} autoComplete="off" value={form.website} onChange={(e) => set("website", e.target.value)} aria-hidden="true" />
       {error ? <div className="mk-error">{error}</div> : null}
       <button type="submit" className="site-btn" disabled={state === "sending"}>
-        {state === "sending" ? "Sending…" : "Contact dealer"}
+        {state === "sending" ? "Sending…" : privateSeller ? "Message seller" : "Contact dealer"}
       </button>
       {phone ? <a className="site-btn ghost" href={`tel:${phone}`}>📞 Call {phone}</a> : null}
     </form>

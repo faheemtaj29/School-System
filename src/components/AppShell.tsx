@@ -30,7 +30,7 @@ import {
 
 type NavSubItem = { href: string; label: string };
 type NavTree = {
-  key: "accounting" | "inventory" | "dealership";
+  key: "accounting" | "inventory" | "dealership" | "ecommerce";
   sections: { label: string; items: NavSubItem[] }[];
 };
 
@@ -186,6 +186,26 @@ const navGroups: NavGroup[] = [
                 { href: "/dealership?tab=inventory", label: "Vehicle Inventory" },
                 { href: "/dealership?tab=customers", label: "Customers & Leads" },
                 { href: "/dealership?tab=deals", label: "Deals & Financing" },
+                { href: "/dealership?tab=classifieds", label: "Public Ads (review)" },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        href: "/ecommerce",
+        label: "Online Shop",
+        Icon: InventoryIcon,
+        roles: ["admin", "staff"],
+        tree: {
+          key: "ecommerce",
+          sections: [
+            {
+              label: "Shop",
+              items: [
+                { href: "/ecommerce?tab=orders", label: "Orders" },
+                { href: "/ecommerce?tab=products", label: "Products" },
+                { href: "/ecommerce?tab=settings", label: "Shop Settings" },
               ],
             },
           ],
@@ -228,7 +248,7 @@ export function AppShell({
   ]);
   const [campus, setCampus] = useState("MAIN");
   const [academicYear, setAcademicYear] = useState("");
-  const [expandedTrees, setExpandedTrees] = useState({ accounting: false, inventory: false, dealership: false });
+  const [expandedTrees, setExpandedTrees] = useState({ accounting: false, inventory: false, dealership: false, ecommerce: false });
   const currentRole = (user.role || "").toLowerCase();
 
   const visibleGroups = navGroups
@@ -246,6 +266,7 @@ export function AppShell({
       accounting: prev.accounting || pathname.startsWith("/accounting"),
       inventory: prev.inventory || pathname.startsWith("/inventory"),
       dealership: prev.dealership || pathname.startsWith("/dealership"),
+      ecommerce: prev.ecommerce || pathname.startsWith("/ecommerce"),
     }));
   }, [pathname]);
 

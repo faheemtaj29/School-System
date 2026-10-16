@@ -1192,23 +1192,12 @@ export async function dealershipSnapshot() {
   const endOfToday = new Date(now);
   endOfToday.setHours(23, 59, 59, 999);
   const since7 = new Date(now.getTime() - 7 * 86_400_000);
-  const [vehicleCount, stock, mtd, openDeals, followUps, webLeads, listed] = await Promise.all([
+  // Plain finds summed in code: unsold stock and one month of deliveries are
+  // small, and this runs on any MongoDB-compatible store.
+  const [vehicleCount, unsold, delivered, openDeals, followUps, webLeads, listed] = await Promise.all([
     Vehicle.estimatedDocumentCount(),
-    Vehicle.aggregate([
-      { $match: { status: { $ne: "sold" } } },
-      {
-        $group: {
-          _id: null,
-          units: { $sum: 1 },
-          cost: { $sum: { $add: ["$purchaseCost", { $sum: "$recon.amount" }] } },
-          list: { $sum: "$listPrice" },
-        },
-      },
-    ]),
-    DealerDeal.aggregate([
-      { $match: { status: "delivered", deliveredAt: { $gte: monthStart } } },
-      { $group: { _id: null, units: { $sum: 1 }, gross: { $sum: { $ifNull: ["$grossProfit", 0] } } } },
-    ]),
+    Vehicle.find({ status: { $ne: "sold" } }).select("purchaseCost recon.amount listPrice").lean<Pick<IVehicle, "purchaseCost" | "recon" | "listPrice">[]>(),
+    DealerDeal.find({ status: "delivered", deliveredAt: { $gte: monthStart } }).select("grossProfit").lean<Pick<IDealerDeal, "grossProfit">[]>(),
     DealerDeal.countDocuments({ status: { $in: [...OPEN_DEAL] } }),
     DealerCustomer.countDocuments({ stage: { $nin: ["won", "lost"] }, nextFollowUp: { $lte: endOfToday } }),
     DealerCustomer.countDocuments({ source: "website", createdAt: { $gte: since7 } }),
@@ -1216,11 +1205,11 @@ export async function dealershipSnapshot() {
   ]);
   if (!vehicleCount && !(await DealerCustomer.estimatedDocumentCount())) return null;
   return {
-    unitsInStock: stock[0]?.units ?? 0,
-    stockCost: round2(stock[0]?.cost ?? 0),
-    stockList: round2(stock[0]?.list ?? 0),
-    mtdUnits: mtd[0]?.units ?? 0,
-    mtdGross: round2(mtd[0]?.gross ?? 0),
+    unitsInStock: unsold.length,
+    stockCost: round2(unsold.reduce((sum, v) => sum + totalCost(v), 0)),
+    stockList: round2(unsold.reduce((sum, v) => sum + (v.listPrice || 0), 0)),
+    mtdUnits: delivered.length,
+    mtdGross: round2(delivered.reduce((sum, d) => sum + (d.grossProfit || 0), 0)),
     openDeals,
     followUpsDue: followUps,
     webLeads7d: webLeads,

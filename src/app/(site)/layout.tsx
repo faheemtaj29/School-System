@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ReactNode } from "react";
 import { siteService } from "@/backend/services/site.service";
 import { marketplaceService } from "@/backend/services/marketplace.service";
+import { CartBadge } from "@/components/marketplace/ShopClient";
 
 export const dynamic = "force-dynamic";
 
@@ -13,14 +14,20 @@ const links = [
 ];
 
 export default async function SiteLayout({ children }: { children: ReactNode }) {
-  const [{ content, branches }, carsListed] = await Promise.all([
+  const [{ content, branches }, flags] = await Promise.all([
     siteService.publicData(),
-    marketplaceService.hasListings().catch(() => false),
+    marketplaceService.navFlags().catch(() => ({ cars: false, bikes: false, shop: false, classifieds: false })),
   ]);
-  // Car pages appear in the menu only once the dealership publishes stock.
-  const nav = carsListed
-    ? [...links, { href: "/cars", label: "Cars for Sale" }, { href: "/sell-car", label: "Sell Your Car" }]
-    : links;
+  // Marketplace sections appear in the menu only once they have content.
+  const nav = [
+    ...links,
+    ...(flags.cars ? [{ href: "/cars", label: "Cars" }] : []),
+    ...(flags.bikes ? [{ href: "/bikes", label: "Bikes" }] : []),
+    ...(flags.shop ? [{ href: "/shop", label: "Shop" }] : []),
+    ...(flags.classifieds ? [{ href: "/post-ad", label: "Post an Ad" }] : []),
+    ...(flags.cars ? [{ href: "/sell-car", label: "Sell to Us" }] : []),
+  ];
+  const marketplace = flags.cars || flags.bikes || flags.shop || flags.classifieds;
 
   return (
     <div className="site">
@@ -40,6 +47,12 @@ export default async function SiteLayout({ children }: { children: ReactNode }) 
           ))}
         </nav>
         <div className="site-nav-actions">
+          {flags.shop ? <CartBadge /> : null}
+          {marketplace ? (
+            <Link href="/account" className="site-btn ghost">
+              My Account
+            </Link>
+          ) : null}
           <Link href="/admissions" className="site-btn">
             {content.heroCtaLabel}
           </Link>
