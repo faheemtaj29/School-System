@@ -65,6 +65,7 @@ MongoDB
 | Exams | Exam | exam | exam | exam | `/api/exams` |
 | Fees | Fee | fee | fee | fee | `/api/fees` |
 | Dashboard | (aggregate) | — | dashboard | dashboard | `/api/dashboard` |
+| Dealership | Dealership (Vehicle, DealerCustomer, DealerDeal) | dealership | dealership | dealership | `/api/dealership/*` |
 
 ## Import alias
 

@@ -6,7 +6,7 @@ import { AuditEvent } from "@/backend/models/Platform";
 import type { SessionUser } from "@/backend/types";
 
 export async function recordAudit(params: {
-  module: "accounting" | "inventory";
+  module: "accounting" | "inventory" | "dealership";
   action: string;
   entity: string;
   entityId?: string;
@@ -35,7 +35,7 @@ export async function recordAudit(params: {
 }
 
 export async function getAuditTrail(
-  module: "accounting" | "inventory",
+  module: "accounting" | "inventory" | "dealership",
   entity: string,
   entityId: string
 ) {

@@ -188,7 +188,7 @@ const VoucherSchema = new Schema<IVoucher>(
     lines: { type: [VoucherLineSchema], required: true },
     sourceType: {
       type: String,
-      enum: ["manual", "fee", "payslip", "inventory", "elearning", "ai", "whatsapp", "other"],
+      enum: ["manual", "fee", "payslip", "inventory", "elearning", "dealership", "ai", "whatsapp", "other"],
       default: "manual",
     },
     sourceId: String,

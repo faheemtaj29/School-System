@@ -25,6 +25,7 @@ accounting, reports/print, notices and settings.
 | Notices & Events | `/notices` | ✅ |
 | Reports & Print | `/reports` | ✅ |
 | Settings | `/settings` | ✅ |
+| Dealership (vehicles, lead CRM, deal desk, financing) | `/dealership` | ✅ |
 | Auth / Setup | `/login`, `/setup` | ✅ |
 
 ---

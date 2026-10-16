@@ -7,6 +7,7 @@ import {
   AccountingIcon,
   AttendanceIcon,
   BellIcon,
+  CarIcon,
   ChevronDownIcon,
   ClassesIcon,
   DashboardIcon,
@@ -29,7 +30,7 @@ import {
 
 type NavSubItem = { href: string; label: string };
 type NavTree = {
-  key: "accounting" | "inventory";
+  key: "accounting" | "inventory" | "dealership";
   sections: { label: string; items: NavSubItem[] }[];
 };
 
@@ -168,6 +169,31 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: "Business Modules",
+    items: [
+      {
+        href: "/dealership",
+        label: "Dealership",
+        Icon: CarIcon,
+        roles: ["admin", "staff"],
+        tree: {
+          key: "dealership",
+          sections: [
+            {
+              label: "Dealership",
+              items: [
+                { href: "/dealership?tab=overview", label: "Overview" },
+                { href: "/dealership?tab=inventory", label: "Vehicle Inventory" },
+                { href: "/dealership?tab=customers", label: "Customers & Leads" },
+                { href: "/dealership?tab=deals", label: "Deals & Financing" },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+  },
+  {
     label: "System",
     items: [
       { href: "/website", label: "Website & Admissions", Icon: GlobeIcon, roles: ["admin"] },
@@ -202,7 +228,7 @@ export function AppShell({
   ]);
   const [campus, setCampus] = useState("MAIN");
   const [academicYear, setAcademicYear] = useState("");
-  const [expandedTrees, setExpandedTrees] = useState({ accounting: false, inventory: false });
+  const [expandedTrees, setExpandedTrees] = useState({ accounting: false, inventory: false, dealership: false });
   const currentRole = (user.role || "").toLowerCase();
 
   const visibleGroups = navGroups
@@ -219,6 +245,7 @@ export function AppShell({
     setExpandedTrees((prev) => ({
       accounting: prev.accounting || pathname.startsWith("/accounting"),
       inventory: prev.inventory || pathname.startsWith("/inventory"),
+      dealership: prev.dealership || pathname.startsWith("/dealership"),
     }));
   }, [pathname]);
 
