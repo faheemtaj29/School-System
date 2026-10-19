@@ -20,6 +20,7 @@ export { Account, Voucher, AccountingCounter, type VoucherStatus, type VoucherTy
 export { InventoryItem, StockVoucher, type StockVoucherType } from "./Inventory";
 export { LeaveRequest, Payslip } from "./HR";
 export { Notice } from "./Notice";
+export { Timetable } from "./Timetable";
 export { Course, Lecture, Enrollment, Diploma } from "./ELearning";
 export { SiteContent, Admission } from "./Site";
 export { Staff } from "./Staff";
