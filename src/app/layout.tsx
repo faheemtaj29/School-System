@@ -1,25 +1,38 @@
 import type { Metadata } from "next";
-import { Spectral, Work_Sans, Space_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { settingsService } from "@/backend/services/settings.service";
 import { themeCss } from "@/lib/theme";
 import "./globals.css";
 
-const display = Spectral({
+/** Fonts bundled locally — no Google Fonts network request needed. */
+const display = localFont({
   variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
+  src: [
+    { path: "./fonts/spectral-latin-500-normal.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/spectral-latin-600-normal.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/spectral-latin-700-normal.woff2", weight: "700", style: "normal" },
+  ],
+  display: "swap",
 });
 
-const sans = Work_Sans({
+const sans = localFont({
   variable: "--font-sans",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  src: [
+    { path: "./fonts/work-sans-latin-400-normal.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/work-sans-latin-500-normal.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/work-sans-latin-600-normal.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/work-sans-latin-700-normal.woff2", weight: "700", style: "normal" },
+  ],
+  display: "swap",
 });
 
-const mono = Space_Mono({
+const mono = localFont({
   variable: "--font-mono",
-  subsets: ["latin"],
-  weight: ["400", "700"],
+  src: [
+    { path: "./fonts/space-mono-latin-400-normal.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/space-mono-latin-700-normal.woff2", weight: "700", style: "normal" },
+  ],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -40,10 +53,7 @@ async function themeStyle() {
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const css = await themeStyle();
   return (
-    <html
-      lang="en"
-      className={`${display.variable} ${sans.variable} ${mono.variable}`}
-    >
+    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
       <head>
         <style id="sabaq-theme" dangerouslySetInnerHTML={{ __html: css }} />
       </head>
