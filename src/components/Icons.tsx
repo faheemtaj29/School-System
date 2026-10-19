@@ -204,6 +204,13 @@ export const TimetableIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const LibraryIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 19V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v13" />
+    <path d="M4 19h16M9 3v16M9 7h6M9 11h6M9 15h4" />
+  </Svg>
+);
+
 export const PrintIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M6 9V3h12v6" />
