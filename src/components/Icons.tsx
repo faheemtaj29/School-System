@@ -196,6 +196,21 @@ export const GlobeIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const TimetableIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="18" height="17" rx="2" />
+    <path d="M3 10h18M8 4V2m8 2V2" />
+    <path d="M7 14h2m4 0h2M7 17h2m4 0h2" />
+  </Svg>
+);
+
+export const LibraryIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 19V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v13" />
+    <path d="M4 19h16M9 3v16M9 7h6M9 11h6M9 15h4" />
+  </Svg>
+);
+
 export const PrintIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M6 9V3h12v6" />

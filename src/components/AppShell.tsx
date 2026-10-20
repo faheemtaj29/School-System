@@ -25,6 +25,8 @@ import {
   StudentsIcon,
   SubjectsIcon,
   TeachersIcon,
+  TimetableIcon,
+  LibraryIcon,
 } from "@/components/Icons";
 
 type NavSubItem = { href: string; label: string };
@@ -60,7 +62,9 @@ const navGroups: NavGroup[] = [
       { href: "/classes", label: "Classes & Sections", Icon: ClassesIcon, roles: ["admin", "teacher"] },
       { href: "/subjects", label: "Subjects", Icon: SubjectsIcon, roles: ["admin", "teacher"] },
       { href: "/attendance", label: "Attendance", Icon: AttendanceIcon, roles: ["admin", "teacher"] },
+      { href: "/timetable", label: "Timetable", Icon: TimetableIcon, roles: ["admin", "teacher"] },
       { href: "/exams", label: "Exams & Results", Icon: ExamsIcon, roles: ["admin", "teacher"] },
+      { href: "/library", label: "Library", Icon: LibraryIcon, roles: ["admin", "staff", "teacher"] },
       { href: "/distance-learning", label: "Distance Learning", Icon: DistanceIcon },
     ],
   },
