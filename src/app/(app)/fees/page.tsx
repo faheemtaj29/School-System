@@ -38,6 +38,14 @@ export default function FeesPage() {
   const [classes, setClasses] = useState<{ _id: string; name: string; section: string }[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkMsg, setBulkMsg] = useState("");
+  const [school, setSchool] = useState<{
+    name: string;
+    address?: string;
+    phone?: string;
+    currency: string;
+    logoUrl?: string | null;
+  }>({ name: "", currency: "PKR" });
+  const cur = school.currency || "PKR";
   const [bulk, setBulk] = useState({
     classId: "",
     dueDate: toDateInput(new Date()),
@@ -50,8 +58,20 @@ export default function FeesPage() {
     const me = await fetch("/api/auth/me").then((r) => r.json()).catch(() => ({}));
     const myRole = me.user?.role || "admin";
     setRole(myRole);
-    const f = await fetch("/api/fees").then((r) => r.json());
+    const [f, st] = await Promise.all([
+      fetch("/api/fees").then((r) => r.json()),
+      fetch("/api/settings").then((r) => r.json()).catch(() => ({})),
+    ]);
     setFees(f.fees || []);
+    if (st.settings) {
+      setSchool({
+        name: st.settings.schoolName,
+        address: st.settings.address,
+        phone: st.settings.phone,
+        currency: st.settings.currency,
+        logoUrl: st.settings.logoUrl,
+      });
+    }
     if (myRole === "admin" || myRole === "staff") {
       const [s, c] = await Promise.all([
         fetch("/api/students").then((r) => r.json()),
@@ -81,9 +101,9 @@ export default function FeesPage() {
       return;
     }
     setBulkMsg(
-      `${data.created} voucher(s) raised · ${data.skipped} already billed · PKR ${formatNumber(data.billedAmount)} receivable` +
+      `${data.created} voucher(s) raised · ${data.skipped} already billed · ${cur} ${formatNumber(data.billedAmount)} receivable` +
         (data.discountTotal
-          ? ` · PKR ${formatNumber(data.discountTotal)} concessions applied`
+          ? ` · ${cur} ${formatNumber(data.discountTotal)} concessions applied`
           : "")
     );
     load();
@@ -140,15 +160,15 @@ export default function FeesPage() {
         <div className="pay-stat-row">
           <div className="pay-stat">
             <div className="tag">Total Billed</div>
-            <div className="num">PKR {formatNumber(totals.billed)}</div>
+            <div className="num">{cur} {formatNumber(totals.billed)}</div>
           </div>
           <div className="pay-stat">
             <div className="tag">Collected</div>
-            <div className="num">PKR {formatNumber(totals.collected)}</div>
+            <div className="num">{cur} {formatNumber(totals.collected)}</div>
           </div>
           <div className="pay-stat">
             <div className="tag">Outstanding</div>
-            <div className="num">PKR {formatNumber(totals.pending)}</div>
+            <div className="num">{cur} {formatNumber(totals.pending)}</div>
           </div>
           <div className="pay-stat">
             <div className="tag">Paid Vouchers</div>
@@ -336,6 +356,19 @@ export default function FeesPage() {
         <div className="modal-backdrop" onMouseDown={() => setVoucherId("")}>
           <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
             <div className="fee-voucher">
+              {school.name ? (
+                <div className="fv-school">
+                  {school.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={school.logoUrl} alt="" />
+                  ) : null}
+                  <div>
+                    <b>{school.name}</b>
+                    {school.address ? <small>{school.address}</small> : null}
+                    {school.phone ? <small>Phone: {school.phone}</small> : null}
+                  </div>
+                </div>
+              ) : null}
               <div className="fv-head">
                 <div>
                   <h2 style={{ fontSize: 17 }}>Fee Challan</h2>
@@ -345,6 +378,12 @@ export default function FeesPage() {
                 </div>
                 <div className="fv-tag">{voucher.status}</div>
               </div>
+              {voucher.receiptNo ? (
+                <div className="fee-row">
+                  <span>Receipt No.</span>
+                  <span className="mono" style={{ fontWeight: 600 }}>{voucher.receiptNo}</span>
+                </div>
+              ) : null}
               <div className="fee-row">
                 <span>Student</span>
                 <span style={{ fontWeight: 600 }}>
@@ -388,7 +427,7 @@ export default function FeesPage() {
               </div>
               <div className="fee-row total">
                 <span>BALANCE DUE</span>
-                <span>PKR {formatNumber(voucher.amount - voucher.paidAmount)}</span>
+                <span>{cur} {formatNumber(voucher.amount - voucher.paidAmount)}</span>
               </div>
               <div className="form-actions">
                 <button type="button" className="btn-dark" onClick={() => window.print()}>
@@ -498,7 +537,7 @@ export default function FeesPage() {
             + Add fee head line
           </button>
           <div className="voucher-balance">
-            Per student · PKR{" "}
+            Per student · {cur}{" "}
             {formatNumber(bulkLines.reduce((sum, l) => sum + (Number(l.amount) || 0), 0))}
           </div>
         </div>

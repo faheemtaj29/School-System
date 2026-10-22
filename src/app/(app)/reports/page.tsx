@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import { EmptyState, Hero, Panel, StatusBadge, NameCell, inputClass } from "@/components/ui";
 import { PrintIcon } from "@/components/Icons";
 import { formatNumber, fullName, labelOfClass, prettyDate } from "@/lib/types";
@@ -358,6 +359,7 @@ function ResultCardView({
   card: ResultCard & { classLabel?: string; academicYear?: string };
   meta: ResultData;
 }) {
+  const school = useSchoolProfile();
   const classLine =
     card.classLabel ||
     `${meta.class.name}${meta.class.section ? `-${meta.class.section}` : ""}`;
@@ -367,7 +369,13 @@ function ResultCardView({
     <article className="result-card doc-sheet">
       <header className="result-card-head doc-sheet-head">
         <div>
-          <h3>Sabaq School System</h3>
+          <h3 className="doc-school">
+            {school.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={school.logoUrl} alt="" />
+            ) : null}
+            {school.name || "School"}
+          </h3>
           <p>
             Result Card · {classLine} · {year}
             {meta.examType && meta.examType !== "all" ? ` · ${meta.examType}` : ""}

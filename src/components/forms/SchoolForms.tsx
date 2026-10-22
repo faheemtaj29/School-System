@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import { Field, ModalForm, OptionSelect, inputClass } from "@/components/ui";
 import {
   ClassItem,
@@ -489,6 +490,7 @@ export function FeeForm({
   initial?: FeeItem | null;
   students: StudentItem[];
 }) {
+  const { currency: cur } = useSchoolProfile();
   const [form, setForm] = useState({
     studentId: "",
     dueDate: "",
@@ -686,7 +688,7 @@ export function FeeForm({
         <button type="button" className="btn-ghost" onClick={addLine}>
           + Add another line
         </button>
-        <div className="voucher-balance">Gross total · PKR {gross.toLocaleString()}</div>
+        <div className="voucher-balance">Gross total · {cur} {gross.toLocaleString()}</div>
       </div>
 
       <div className="form-grid" style={{ marginTop: 16 }}>

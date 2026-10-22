@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import { useSearchParams } from "next/navigation";
 import {
   EmptyState,
@@ -172,6 +173,7 @@ const voucherLabels: Record<string, string> = {
 };
 
 export default function AccountingPage() {
+  const { name: schoolName } = useSchoolProfile();
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
   const [tab, setTab] = useState<Tab>("overview");
@@ -1235,7 +1237,7 @@ export default function AccountingPage() {
         .summary { margin-left:auto; width:310px; margin-top:16px; border:1px solid #dce7dd; }.summary div { display:flex; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #e5ece5; }.summary div:last-child { border:0; background:#e3f2ec; font-weight:700; font-size:13px; }
         .signatures { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-top:70px; }.signatures div { border-top:1px solid #44534a; padding-top:7px; text-align:center; font-size:10px; color:#4e5e55; }
       </style></head><body><main class="document">
-        <header class="header"><div><h1>Sabaq School System</h1><p class="muted">${escapeHtml(branchName)}</p></div><div><h2>${escapeHtml(voucherLabels[voucher.voucherType] || voucher.voucherType)}</h2><div class="number">${escapeHtml(voucher.number)}</div></div></header>
+        <header class="header"><div><h1>${escapeHtml(schoolName || "School")}</h1><p class="muted">${escapeHtml(branchName)}</p></div><div><h2>${escapeHtml(voucherLabels[voucher.voucherType] || voucher.voucherType)}</h2><div class="number">${escapeHtml(voucher.number)}</div></div></header>
         <section class="meta"><div><span>Date</span><b>${escapeHtml(prettyDate(voucher.date))}</b></div><div><span>Party</span><b>${escapeHtml(voucher.partyName || "- ")}</b></div><div><span>Status</span><b>${escapeHtml(voucher.status.toUpperCase())}</b></div><div><span>Reference</span><b>${escapeHtml(voucher.reference || "- ")}</b></div><div><span>Branch</span><b>${escapeHtml(voucher.branchCode)}</b></div><div><span>Currency</span><b>${escapeHtml(voucher.currency)}</b></div></section>
         <div class="narration"><strong>Narration:</strong> ${escapeHtml(voucher.narration)}</div>
         ${items}<h3>Double-entry Posting</h3><table><thead><tr><th>Account</th><th>Narration</th><th class="amount">Debit</th><th class="amount">Credit</th></tr></thead><tbody>${lines}<tr class="total"><td colspan="2">TOTAL</td><td class="amount">${formatNumber(debitTotal)}</td><td class="amount">${formatNumber(creditTotal)}</td></tr></tbody></table>
@@ -2545,10 +2547,11 @@ function VoucherLinesTable({ voucher }: { voucher: Voucher }) {
 }
 
 function VoucherPrint({ voucher, branches }: { voucher: Voucher; branches: Branch[] }) {
+  const { name: schoolName } = useSchoolProfile();
   return (
     <div className="print-only voucher-print">
       <div className="voucher-print-head">
-        <div><h1>Sabaq School System</h1><p>{branches.find((b) => b.code === voucher.branchCode)?.name || voucher.branchCode}</p></div>
+        <div><h1>{schoolName || "School"}</h1><p>{branches.find((b) => b.code === voucher.branchCode)?.name || voucher.branchCode}</p></div>
         <div><h2>{voucherLabels[voucher.voucherType]}</h2><div className="num">{voucher.number}</div></div>
       </div>
       <div className="voucher-print-meta">

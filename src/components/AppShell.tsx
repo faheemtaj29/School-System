@@ -202,6 +202,10 @@ export function AppShell({
   ]);
   const [campus, setCampus] = useState("MAIN");
   const [academicYear, setAcademicYear] = useState("");
+  const [school, setSchool] = useState<{ name: string; logoUrl: string | null }>({
+    name: "Sabaq",
+    logoUrl: null,
+  });
   const [expandedTrees, setExpandedTrees] = useState({ accounting: false, inventory: false });
   const currentRole = (user.role || "").toLowerCase();
 
@@ -236,6 +240,9 @@ export function AppShell({
         const year =
           d.activeSession?.name || d.settings?.academicYear || "";
         if (year) setAcademicYear(year);
+        if (d.settings?.schoolName) {
+          setSchool({ name: d.settings.schoolName, logoUrl: d.settings.logoUrl || null });
+        }
       })
       .catch(() => {});
   }, []);
@@ -313,10 +320,17 @@ export function AppShell({
     <div className="app">
       <aside className={`sidebar${open ? " open" : ""}`}>
         <div className="brand">
-          <div className="brand-badge">S</div>
+          <div className={`brand-badge${school.logoUrl ? " has-logo" : ""}`}>
+            {school.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={school.logoUrl} alt="" />
+            ) : (
+              school.name.slice(0, 1).toUpperCase()
+            )}
+          </div>
           <div className="brand-text">
-            Sabaq
-            <small>ALL-IN-ONE SCHOOL ERP</small>
+            {school.name}
+            <small>MANAGEMENT SYSTEM</small>
           </div>
         </div>
 

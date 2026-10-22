@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import { EmptyState, Field, Hero, ModalForm, NameCell, Panel, StatusBadge, inputClass } from "@/components/ui";
 import { TeacherItem, formatNumber, fullName, prettyDate, toDateInput } from "@/lib/types";
 
@@ -27,6 +28,7 @@ type Payslip = {
 };
 
 export default function HrPage() {
+  const { currency: cur } = useSchoolProfile();
   const [tab, setTab] = useState<"payroll" | "leave">("payroll");
   const [teachers, setTeachers] = useState<TeacherItem[]>([]);
   const [leaves, setLeaves] = useState<Leave[]>([]);
@@ -140,9 +142,9 @@ export default function HrPage() {
       />
 
       <div className="pay-stat-row">
-        <div className="pay-stat"><div className="tag">Payroll Total</div><div className="num">PKR {formatNumber(payroll.total)}</div></div>
-        <div className="pay-stat"><div className="tag">Paid</div><div className="num" style={{ color: "var(--jade-dark)" }}>PKR {formatNumber(payroll.paid)}</div></div>
-        <div className="pay-stat"><div className="tag">Pending</div><div className="num" style={{ color: "#96650f" }}>PKR {formatNumber(payroll.pending)}</div></div>
+        <div className="pay-stat"><div className="tag">Payroll Total</div><div className="num">{cur} {formatNumber(payroll.total)}</div></div>
+        <div className="pay-stat"><div className="tag">Paid</div><div className="num" style={{ color: "var(--jade-dark)" }}>{cur} {formatNumber(payroll.paid)}</div></div>
+        <div className="pay-stat"><div className="tag">Pending</div><div className="num" style={{ color: "#96650f" }}>{cur} {formatNumber(payroll.pending)}</div></div>
       </div>
 
       <div className="tabs">

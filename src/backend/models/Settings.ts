@@ -66,6 +66,15 @@ export interface ISettings {
   lateFeeGraceDays?: number;
   /** Withholding tax % for vendor payments (FBR-style). */
   whtRate?: number;
+  /** Prefix for auto-generated admission numbers, e.g. ADM → ADM-MAIN-2026-00001. */
+  admissionPrefix?: string;
+  /** Prefix for fee receipt numbers, e.g. RCP → RCP-MAIN-2026-00001. */
+  receiptPrefix?: string;
+  /** UDISE+ school code (India) — printed on transfer certificates. */
+  udiseCode?: string;
+  /** School logo as a data URL; excluded from normal reads, served by /api/settings/logo. */
+  logoData?: string;
+  logoUpdatedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -148,6 +157,11 @@ const SettingsSchema = new Schema<ISettings>(
     lateFeePercent: { type: Number, default: 5, min: 0, max: 100 },
     lateFeeGraceDays: { type: Number, default: 7, min: 0, max: 90 },
     whtRate: { type: Number, default: 0, min: 0, max: 100 },
+    admissionPrefix: { type: String, uppercase: true, trim: true, default: "STD" },
+    receiptPrefix: { type: String, uppercase: true, trim: true, default: "RCP" },
+    udiseCode: { type: String, trim: true },
+    logoData: { type: String, select: false },
+    logoUpdatedAt: Date,
   },
   { timestamps: true }
 );

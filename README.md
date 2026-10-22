@@ -12,7 +12,9 @@ Full school management app built with **Next.js (App Router)**, **React**, **Mon
 - HR: Leave requests + Payroll / payslips
 - Notices & Events
 - Reports & Print (students, fees, attendance, exams, staff, finance, inventory)
-- Settings (school profile + notification toggles)
+- Settings: school profile with logo upload, currency symbol, admission & receipt number
+  prefixes, UDISE code, network (LAN) address for other computers, and one-click
+  **Backup & Download** of the whole database
 - Related/nested forms throughout
 
 ## Stack

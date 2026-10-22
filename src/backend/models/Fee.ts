@@ -29,6 +29,8 @@ export interface IFee {
   installmentTotal?: number;
   lateFeeAmount?: number;
   lateFeeApplied?: boolean;
+  /** Sequential receipt number, issued the first time a payment is recorded. */
+  receiptNo?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -67,6 +69,7 @@ const FeeSchema = new Schema<IFee>(
     installmentTotal: { type: Number, min: 1 },
     lateFeeAmount: { type: Number, default: 0, min: 0 },
     lateFeeApplied: { type: Boolean, default: false },
+    receiptNo: { type: String, trim: true, index: { unique: true, sparse: true } },
   },
   { timestamps: true }
 );

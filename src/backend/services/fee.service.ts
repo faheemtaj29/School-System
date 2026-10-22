@@ -12,6 +12,7 @@ import { accountingService } from "@/backend/services/accounting.service";
 import { DISCOUNT_DEFAULTS } from "@/backend/services/student.service";
 import { Settings } from "@/backend/models/Settings";
 import { platformService } from "@/backend/services/platform.service";
+import { allocateCode } from "@/backend/services/numbering.service";
 import type { SessionUser } from "@/backend/types";
 
 const studentPopulate = {
@@ -116,11 +117,18 @@ async function syncFeeLedger(fee: {
   method?: string;
   branchCode?: string;
   studentId: unknown;
+  receiptNo?: string;
 }) {
   const paid = fee.paidAmount || 0;
   if (paid <= 0 || fee.status === "pending") {
     await accountingService.removeBySource("fee", String(fee._id));
     return;
+  }
+  // Issue a receipt number once, on the first recorded payment; it never changes after.
+  let receiptNo = fee.receiptNo;
+  if (!receiptNo) {
+    receiptNo = await allocateCode("receipt", fee.branchCode);
+    await Fee.updateOne({ _id: fee._id, receiptNo: { $exists: false } }, { $set: { receiptNo } });
   }
   await accountingService.upsertLinked({
     type: "income",
@@ -129,7 +137,7 @@ async function syncFeeLedger(fee: {
     amount: paid,
     date: fee.paymentDate || new Date(),
     method: fee.method as "cash" | "bank" | "online" | undefined,
-    reference: `FEE-${String(fee._id).slice(-6).toUpperCase()}`,
+    reference: receiptNo,
     notes: "Auto-posted from fee voucher",
     branchCode: fee.branchCode,
     sourceType: "fee",
@@ -220,7 +228,7 @@ export const feeService = {
     ).populate(studentPopulate);
     if (!item) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
     await syncFeeLedger(item);
-    return item;
+    return Fee.findById(item._id).populate(studentPopulate).lean();
   },
 
   async remove(id: string) {
