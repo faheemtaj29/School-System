@@ -9,6 +9,7 @@ import {
   requireAuth,
 } from "@/backend/lib/http";
 import { feeService } from "@/backend/services/fee.service";
+import { feeBillingService } from "@/backend/services/feeBilling.service";
 import { resolveStudent } from "@/backend/lib/portal";
 import { bulkFeeSchema, feeSchema, installmentFeeSchema } from "@/backend/validators/fee.validator";
 import { z } from "zod";
@@ -33,6 +34,10 @@ export const feeController = {
         const student = await resolveStudent(session!);
         if (!student) return jsonOk({ fees: [], portal: "student", linked: false });
         studentId = String(student._id);
+      }
+      // Staff opening the fee screen also triggers this month's automatic billing if it is due.
+      if (session!.role === "admin" || session!.role === "staff") {
+        await feeBillingService.runAutoIfDue().catch(() => null);
       }
       const fees = await feeService.list({
         studentId,

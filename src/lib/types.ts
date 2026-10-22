@@ -151,6 +151,7 @@ export type FeeItem = {
   method?: "cash" | "card" | "bank" | "online";
   notes?: string;
   receiptNo?: string;
+  billingMonth?: string;
 };
 
 export function idOf(value: IdRef | null | undefined): string {

@@ -13,10 +13,12 @@ import {
   inputClass,
 } from "@/components/ui";
 import { FeeForm } from "@/components/forms/SchoolForms";
+import { CollectModal, FeeStructurePanel, monthName, type CollectTarget } from "@/components/fees/FeeTools";
 import {
   FeeItem,
   StudentItem,
   formatNumber,
+  idOf,
   fullName,
   labelOfClass,
   prettyDate,
@@ -32,6 +34,11 @@ export default function FeesPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<FeeItem | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [view, setView] = useState<"vouchers" | "structure">("vouchers");
+  const [search, setSearch] = useState("");
+  const [classFilter, setClassFilter] = useState("");
+  const [monthFilter, setMonthFilter] = useState("");
+  const [collecting, setCollecting] = useState<CollectTarget | null>(null);
   const [voucherId, setVoucherId] = useState("");
   const [role, setRole] = useState("admin");
   const canEdit = role === "admin" || role === "staff";
@@ -131,7 +138,34 @@ export default function FeesPage() {
     };
   }, [fees]);
 
-  const visible = fees.filter((f) => filter === "all" || f.status === filter);
+  const months = useMemo(
+    () => Array.from(new Set(fees.map((f) => f.billingMonth).filter(Boolean) as string[])).sort().reverse(),
+    [fees]
+  );
+  const term = search.trim().toLowerCase();
+  const visible = fees.filter((f) => {
+    if (filter !== "all" && f.status !== filter) return false;
+    if (monthFilter && f.billingMonth !== monthFilter) return false;
+    const st = typeof f.studentId === "object" ? f.studentId : null;
+    if (classFilter && idOf(st?.classId as never) !== classFilter) return false;
+    if (term && st) {
+      const hay = `${fullName(st)} ${st.admissionNo} ${f.receiptNo || ""}`.toLowerCase();
+      if (!hay.includes(term)) return false;
+    }
+    return true;
+  });
+
+  function printChallans() {
+    const q = new URLSearchParams();
+    if (monthFilter) q.set("month", monthFilter);
+    if (classFilter) q.set("classId", classFilter);
+    if (!monthFilter && !classFilter) {
+      alert("Pick a month or a class first, then print its challans.");
+      return;
+    }
+    q.set("status", filter === "paid" ? "all" : "unpaid");
+    window.open(`/print/fee-challans?${q.toString()}`, "_blank", "noopener");
+  }
   const voucher = fees.find((f) => f._id === voucherId) ?? null;
   const voucherStudent =
     voucher && typeof voucher.studentId === "object" ? voucher.studentId : null;
@@ -156,6 +190,20 @@ export default function FeesPage() {
         }
       />
 
+      {canEdit ? (
+        <div className="tabs" style={{ marginBottom: 14 }}>
+          <button type="button" className={`tab${view === "vouchers" ? " active" : ""}`} onClick={() => setView("vouchers")}>
+            Vouchers &amp; Collection
+          </button>
+          <button type="button" className={`tab${view === "structure" ? " active" : ""}`} onClick={() => setView("structure")}>
+            Fee Structure &amp; Monthly Billing
+          </button>
+        </div>
+      ) : null}
+
+      {view === "structure" && canEdit ? <FeeStructurePanel onGenerated={load} /> : null}
+
+      {view === "vouchers" ? (
       <Panel>
         <div className="pay-stat-row">
           <div className="pay-stat">
@@ -245,6 +293,38 @@ export default function FeesPage() {
           </div>
         ) : null}
 
+        <div className="fee-filters no-print">
+          <input
+            className={inputClass}
+            placeholder="Search name, admission no. or receipt no."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {canEdit ? (
+            <select className={inputClass} value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
+              <option value="">All classes</option>
+              {classes.map((c) => (
+                <option key={c._id} value={c._id}>
+                  {c.name} - {c.section}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          <select className={inputClass} value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
+            <option value="">All months</option>
+            {months.map((m) => (
+              <option key={m} value={m}>
+                {monthName(m)}
+              </option>
+            ))}
+          </select>
+          {canEdit ? (
+            <button type="button" className="btn-dark" onClick={printChallans}>
+              Print challans
+            </button>
+          ) : null}
+        </div>
+
         <div className="chips" style={{ marginBottom: 18 }}>
           {filters.map((f) => (
             <button
@@ -311,6 +391,32 @@ export default function FeesPage() {
                       </td>
                       <td>
                         <div className="row-actions">
+                          {canEdit && fee.amount - fee.paidAmount > 0 ? (
+                            <button
+                              type="button"
+                              className="link-btn collect"
+                              onClick={() =>
+                                setCollecting({
+                                  _id: fee._id,
+                                  studentName: student ? fullName(student) : "Student",
+                                  title: fee.title,
+                                  amount: fee.amount,
+                                  paidAmount: fee.paidAmount,
+                                })
+                              }
+                            >
+                              Collect
+                            </button>
+                          ) : null}
+                          {canEdit && fee.paidAmount > 0 ? (
+                            <button
+                              type="button"
+                              className="link-btn"
+                              onClick={() => window.open(`/print/fee-receipt?id=${fee._id}`, "_blank", "noopener")}
+                            >
+                              Receipt
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             className="link-btn"
@@ -351,6 +457,19 @@ export default function FeesPage() {
           </div>
         )}
       </Panel>
+      ) : null}
+
+      {collecting ? (
+        <CollectModal
+          fee={collecting}
+          currency={cur}
+          onClose={() => setCollecting(null)}
+          onDone={() => {
+            setCollecting(null);
+            load();
+          }}
+        />
+      ) : null}
 
       {voucher ? (
         <div className="modal-backdrop" onMouseDown={() => setVoucherId("")}>

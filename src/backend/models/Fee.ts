@@ -5,6 +5,15 @@ export interface IFeeLine {
   amount: number;
 }
 
+export interface IFeePayment {
+  amount: number;
+  date: Date;
+  method: "cash" | "card" | "bank" | "online";
+  receiptNo: string;
+  receivedBy?: string;
+  note?: string;
+}
+
 export interface IFee {
   studentId: Types.ObjectId;
   title: string;
@@ -31,6 +40,10 @@ export interface IFee {
   lateFeeApplied?: boolean;
   /** Sequential receipt number, issued the first time a payment is recorded. */
   receiptNo?: string;
+  /** Each collection at the counter, with its own receipt number. */
+  payments?: IFeePayment[];
+  /** "YYYY-MM" for monthly challans, so a month is never billed twice. */
+  billingMonth?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -70,6 +83,21 @@ const FeeSchema = new Schema<IFee>(
     lateFeeAmount: { type: Number, default: 0, min: 0 },
     lateFeeApplied: { type: Boolean, default: false },
     receiptNo: { type: String, trim: true, index: { unique: true, sparse: true } },
+    payments: {
+      type: [
+        {
+          _id: false,
+          amount: { type: Number, required: true, min: 0 },
+          date: { type: Date, required: true },
+          method: { type: String, enum: ["cash", "card", "bank", "online"], default: "cash" },
+          receiptNo: { type: String, required: true },
+          receivedBy: String,
+          note: String,
+        },
+      ],
+      default: [],
+    },
+    billingMonth: { type: String, index: true },
   },
   { timestamps: true }
 );

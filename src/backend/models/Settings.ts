@@ -75,6 +75,11 @@ export interface ISettings {
   /** School logo as a data URL; excluded from normal reads, served by /api/settings/logo. */
   logoData?: string;
   logoUpdatedAt?: Date;
+  /** Raise every class's monthly challans automatically on `feeGenerateDay`. */
+  autoMonthlyFees?: boolean;
+  feeGenerateDay?: number;
+  /** "YYYY-MM" of the last automatic run, so each month runs once. */
+  lastAutoFeeMonth?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -162,6 +167,9 @@ const SettingsSchema = new Schema<ISettings>(
     udiseCode: { type: String, trim: true },
     logoData: { type: String, select: false },
     logoUpdatedAt: Date,
+    autoMonthlyFees: { type: Boolean, default: false },
+    feeGenerateDay: { type: Number, default: 1, min: 1, max: 28 },
+    lastAutoFeeMonth: String,
   },
   { timestamps: true }
 );

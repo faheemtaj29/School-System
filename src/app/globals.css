@@ -2536,3 +2536,40 @@ td.rs-fail { color: #b3261e; font-weight: 700; }
 }
 .ec-note { font-size: 11px; background: var(--saffron-light); color: #96650f; border-radius: 6px; padding: 2px 8px; }
 .doc-page > .rc-info, .doc-page > dl { flex: none; }
+
+/* ---- Fees: filters, structure, collection ---- */
+.fee-filters { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; margin-bottom: 14px; }
+.fee-generate { display: flex; align-items: end; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.fee-generate .field { min-width: 200px; }
+.fee-cols { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.fee-cols .ec-chip { cursor: pointer; }
+.link-btn.collect { color: var(--jade-dark); font-weight: 700; }
+@media (max-width: 900px) { .fee-filters { grid-template-columns: 1fr 1fr; } }
+/* fee challans & receipts: copies stacked on one A4, cut along the dashed line */
+.fee-sheet { gap: 0; }
+.fee-doc { flex: 1; display: flex; flex-direction: column; padding: 5mm 2mm; break-inside: avoid; position: relative; }
+.fee-sheet.copies-2 .fee-doc + .fee-doc { border-top: 1.5px dashed #777; margin-top: 4mm; padding-top: 8mm; }
+.fee-sheet.copies-3 { flex-direction: row; gap: 0; }
+.fee-sheet.copies-3 .fee-doc + .fee-doc { border-left: 1.5px dashed #777; padding-left: 6mm; margin-left: 4mm; }
+.fee-doc-head { display: flex; align-items: center; gap: 10px; border-bottom: 2px solid #111; padding-bottom: 6px; margin-bottom: 8px; }
+.fee-doc-head img { width: 42px; height: 42px; object-fit: contain; }
+.fee-doc-head > div:nth-child(2), .fee-doc-head > div:first-child:not(.fee-doc-copy) { flex: 1; }
+.fee-doc-head h1 { font-family: var(--font-display), serif; font-size: 17px; line-height: 1.1; }
+.fee-doc-head p { font-size: 10.5px; color: #444; }
+.fee-doc-copy { text-align: right; }
+.fee-doc-copy b { display: block; font-size: 12px; letter-spacing: .08em; }
+.fee-doc-copy span { display: inline-block; margin-top: 2px; font-size: 10px; border: 1px solid #111; border-radius: 4px; padding: 1px 6px; }
+.fee-info { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 14px; margin-bottom: 8px; }
+.fee-info dt { font-size: 9.5px; text-transform: uppercase; color: #555; }
+.fee-info dd { font-weight: 600; border-bottom: 1px dotted #999; }
+table.fee-lines td { padding: 4px 6px; }
+.fee-for { font-size: 11px; color: #444; background: #f6f7f4; }
+.fee-words { margin-top: 6px; font-size: 11px; font-style: italic; }
+.fee-note { font-size: 10px; color: #444; margin-top: 3px; }
+.fee-stamp {
+  position: absolute; right: 10mm; bottom: 26mm; transform: rotate(-12deg); border: 3px solid; border-radius: 6px;
+  padding: 3px 12px; font-weight: 800; font-size: 18px; letter-spacing: .1em; opacity: .75;
+}
+.fee-stamp.paid { color: #157a5c; }
+.fee-stamp.part { color: #b26a00; font-size: 14px; }
+.fee-doc .signs { padding-top: 18px; }
