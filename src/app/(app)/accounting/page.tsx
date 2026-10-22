@@ -93,6 +93,7 @@ type Tab =
   | "trial"
   | "pnl"
   | "balance"
+  | "cashflow"
   | "bank";
 
 type ReportGroup = {
@@ -220,6 +221,15 @@ export default function AccountingPage() {
   const [pnl, setPnl] = useState<{ income: Section; expense: Section; surplus: number } | null>(
     null
   );
+  const [cashFlow, setCashFlow] = useState<{
+    operating: Section;
+    investing: Section;
+    financing: Section;
+    netChange: number;
+    openingCash: number;
+    closingCash: number;
+    reconciled: boolean;
+  } | null>(null);
   const [balanceSheet, setBalanceSheet] = useState<{
     assets: Section;
     liabilities: Section;
@@ -279,6 +289,7 @@ export default function AccountingPage() {
       "trial-balance": { section: "Reports", leaf: "Trial Balance" },
       "income-statement": { section: "Reports", leaf: "Income Statement" },
       "balance-sheet": { section: "Reports", leaf: "Balance Sheet" },
+      "cash-flow": { section: "Reports", leaf: "Cash Flow Statement" },
       "bank-reconciliation": { section: "Reports", leaf: "Bank Reconciliation" },
       "accounting-reports": { section: "Reports", leaf: "Accounting Reports" },
     };
@@ -302,6 +313,7 @@ export default function AccountingPage() {
     if (navNode === "trial-balance") return "Trial Balance";
     if (navNode === "income-statement") return "Income Statement";
     if (navNode === "balance-sheet") return "Balance Sheet";
+    if (navNode === "cash-flow") return "Cash Flow Statement";
     if (navNode === "bank-reconciliation") return "Bank Reconciliation";
     if (navNode === "accounting-reports") return "Accounting Reports";
     return "Accounting & Finance";
@@ -326,6 +338,7 @@ export default function AccountingPage() {
     if (navNode === "trial-balance") return "Debit and credit position across all posting accounts.";
     if (navNode === "income-statement") return "Income and expense statement for selected period.";
     if (navNode === "balance-sheet") return "Assets, liabilities and equity position for selected period.";
+    if (navNode === "cash-flow") return "Cash received and paid, split into operating, investing and financing activities.";
     if (navNode === "bank-reconciliation") return "Unreconciled bank entries and WHT monitoring.";
     if (navNode === "accounting-reports") return "Summary reporting view across core accounting books.";
     return "5-level chart of accounts · double-entry vouchers · invoices · branch books";
@@ -363,6 +376,7 @@ export default function AccountingPage() {
       "trial-balance": "trial",
       "income-statement": "pnl",
       "balance-sheet": "balance",
+      "cash-flow": "cashflow",
       "bank-reconciliation": "bank",
     };
     return byNode[navNode] || tab;
@@ -371,7 +385,7 @@ export default function AccountingPage() {
   const isDashboardNode = navNode === "accounting-dashboard";
 
   const needsPeriodControls = useMemo(
-    () => ["party-ledger", "general-ledger", "cash-book", "bank-book", "trial-balance", "income-statement", "balance-sheet", "bank-reconciliation", "accounting-reports"].includes(navNode),
+    () => ["party-ledger", "general-ledger", "cash-book", "bank-book", "trial-balance", "income-statement", "balance-sheet", "cash-flow", "bank-reconciliation", "accounting-reports"].includes(navNode),
     [navNode]
   );
 
@@ -477,7 +491,7 @@ export default function AccountingPage() {
     if (effectiveVoucherTypeFilter) voucherQuery.set("type", effectiveVoucherTypeFilter);
     if (statusFilter) voucherQuery.set("status", statusFilter);
 
-    const [a, v, t, s, cash, settings, day, profit, bs] = await Promise.all([
+    const [a, v, t, s, cash, settings, day, profit, bs, cf] = await Promise.all([
       fetch("/api/accounting?view=accounts").then((r) => r.json()),
       fetch(`/api/accounting?${voucherQuery}`).then((r) => r.json()),
       fetch(withView("trial-balance")).then((r) => r.json()),
@@ -489,7 +503,9 @@ export default function AccountingPage() {
       fetch(withView("day-book")).then((r) => r.json()),
       fetch(withView("profit-loss")).then((r) => r.json()),
       fetch(withView("balance-sheet")).then((r) => r.json()),
+      fetch(withView("cash-flow")).then((r) => r.json()),
     ]);
+    setCashFlow(cf.operating ? cf : null);
     setDayBook(day.vouchers || []);
     setPnl(profit.income ? profit : null);
     setBalanceSheet(bs.assets ? bs : null);
@@ -1339,6 +1355,7 @@ export default function AccountingPage() {
               ["trial", "Trial Balance"],
               ["pnl", "Income & Expenditure"],
               ["balance", "Balance Sheet"],
+              ["cashflow", "Cash Flow"],
               ["bank", "Bank & WHT"],
             ] as const
           ).map(([key, label]) => (
@@ -1890,6 +1907,38 @@ export default function AccountingPage() {
         </Panel>
       ) : null}
 
+      {activeTab === "cashflow" ? (
+        <Panel
+          title="Statement of Cash Flows"
+          meta={cashFlow ? (cashFlow.reconciled ? "RECONCILED TO CASH & BANK" : "CHECK CASH ACCOUNTS") : ""}
+        >
+          {!cashFlow ? (
+            <EmptyState message="No cash or bank movement yet." />
+          ) : (
+            <div className="cashflow">
+              <div className="statement-result">
+                <span>Opening cash &amp; bank balance</span>
+                <strong>{formatNumber(cashFlow.openingCash)}</strong>
+              </div>
+              <SectionTable title="Operating activities" section={cashFlow.operating} />
+              <SectionTable title="Investing activities" section={cashFlow.investing} />
+              <SectionTable title="Financing activities" section={cashFlow.financing} />
+              <div className="statement-result">
+                <span>Net increase / (decrease) in cash</span>
+                <strong>{formatNumber(cashFlow.netChange)}</strong>
+              </div>
+              <div className={`statement-result${cashFlow.reconciled ? " ok" : " bad"}`}>
+                <span>Closing cash &amp; bank balance</span>
+                <strong>{formatNumber(cashFlow.closingCash)}</strong>
+              </div>
+              <p style={{ fontSize: 11.5, color: "var(--text-dim)", marginTop: 8 }}>
+                Direct method: positive amounts are cash received, negative amounts are cash paid. Transfers between cash and bank are not counted.
+              </p>
+            </div>
+          )}
+        </Panel>
+      ) : null}
+
       {activeTab === "balance" ? (
         <Panel
           title="Statement of Financial Position"
@@ -2403,6 +2452,7 @@ const REPORT_TITLES: Record<Tab, string> = {
   trial: "Trial Balance",
   pnl: "Income & Expenditure Statement",
   balance: "Statement of Financial Position",
+  cashflow: "Statement of Cash Flows",
   bank: "Bank Reconciliation & WHT",
 };
 

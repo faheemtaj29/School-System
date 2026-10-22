@@ -179,6 +179,9 @@ export const accountingController = {
       if (view === "balance-sheet") {
         return jsonOk(await accountingService.balanceSheet(range));
       }
+      if (view === "cash-flow") {
+        return jsonOk(await accountingService.cashFlow(range));
+      }
       if (view === "day-book") {
         return jsonOk(await accountingService.dayBook(range));
       }
