@@ -31,6 +31,12 @@ export async function dbConnect() {
     });
   }
 
-  cached.conn = await cached.promise;
+  try {
+    cached.conn = await cached.promise;
+  } catch (e) {
+    // Don't keep a failed attempt cached — e.g. the app started before MongoDB did.
+    cached.promise = null;
+    throw e;
+  }
   return cached.conn;
 }

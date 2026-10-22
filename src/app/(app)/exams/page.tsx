@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState, Hero, NameCell, Panel, StatusBadge, inputClass } from "@/components/ui";
 import { ExamForm } from "@/components/forms/SchoolForms";
+import { ExamCenter, type ExamStep } from "@/components/exams/ExamCenter";
 import {
   ClassItem,
   ExamItem,
@@ -22,7 +23,10 @@ function gradeTone(percent: number) {
   return "absent";
 }
 
-type WorkflowTab = "results" | "types" | "terms" | "schedules";
+type WorkflowTab = ExamStep | "tests" | "types" | "terms" | "schedules";
+
+const STEP_TABS: ExamStep[] = ["datesheet", "slips", "marks", "results"];
+const ALL_TABS: WorkflowTab[] = [...STEP_TABS, "tests", "types", "terms", "schedules"];
 
 type ExamTypeItem = {
   _id: string;
@@ -92,7 +96,25 @@ const emptyTermForm = {
 };
 
 export default function ExamsPage() {
-  const [tab, setTab] = useState<WorkflowTab>("results");
+  const [tab, setTabState] = useState<WorkflowTab>("datesheet");
+  const [role, setRole] = useState("");
+  // Deep links like /exams?tab=marks from the sidebar.
+  const setTab = useCallback((next: WorkflowTab) => {
+    setTabState(next);
+    window.history.replaceState(null, "", `/exams?tab=${next}`);
+  }, []);
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("tab") as WorkflowTab | null;
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => {
+        const myRole = d.user?.role || "";
+        setRole(myRole);
+        const fallback: WorkflowTab = myRole === "admin" ? "datesheet" : "marks";
+        setTabState(wanted && ALL_TABS.includes(wanted) ? wanted : fallback);
+      })
+      .catch(() => {});
+  }, []);
   const [exams, setExams] = useState<ExamItem[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [subjects, setSubjects] = useState<SubjectItem[]>([]);
@@ -403,10 +425,10 @@ export default function ExamsPage() {
     <>
       <Hero
         title="Exams & Results"
-        subtitle="Legacy results + exam workflow in one module"
-        actionLabel={tab === "results" ? "Schedule Exam" : undefined}
+        subtitle="Date sheet → roll number slips → marks entry → result cards, for many classes at once"
+        actionLabel={tab === "tests" ? "Schedule Exam" : undefined}
         onAction={
-          tab === "results"
+          tab === "tests"
             ? () => {
                 setEditing(null);
                 setOpen(true);
@@ -415,45 +437,20 @@ export default function ExamsPage() {
         }
       />
 
-      <div className="tabs">
-        <button
-          type="button"
-          className={`tab${tab === "results" ? " active" : ""}`}
-          onClick={() => setTab("results")}
-        >
-          Results Register
-        </button>
-        <button
-          type="button"
-          className={`tab${tab === "types" ? " active" : ""}`}
-          onClick={() => setTab("types")}
-        >
-          Exam Types
-        </button>
-        <button
-          type="button"
-          className={`tab${tab === "terms" ? " active" : ""}`}
-          onClick={() => setTab("terms")}
-        >
-          Terms
-        </button>
-        <button
-          type="button"
-          className={`tab${tab === "schedules" ? " active" : ""}`}
-          onClick={() => setTab("schedules")}
-        >
-          Schedules
-        </button>
-      </div>
+      {role ? <ExamCenterTabs tab={tab} setTab={setTab} role={role} /> : null}
+
+      {STEP_TABS.includes(tab as ExamStep) && role ? (
+        <ExamCenter step={tab as ExamStep} onStep={setTab} role={role} />
+      ) : null}
 
       {workflowErr ? <div className="alert err">{workflowErr}</div> : null}
       {workflowMsg ? <div className="alert ok">{workflowMsg}</div> : null}
 
-      {tab === "results" && !exams.length ? (
+      {tab === "tests" && !exams.length ? (
         <EmptyState message="No exams yet. Schedule your first exam and enter results." />
       ) : null}
 
-      {tab === "results" ? (
+      {tab === "tests" ? (
         <>
           <div className="grid-2">
             <div>
@@ -1225,5 +1222,38 @@ export default function ExamsPage() {
         students={students}
       />
     </>
+  );
+}
+
+/** Setup / older tools live behind a small secondary row so the 4-step flow stays front and centre. */
+function ExamCenterTabs({
+  tab,
+  setTab,
+  role,
+}: {
+  tab: WorkflowTab;
+  setTab: (t: WorkflowTab) => void;
+  role: string;
+}) {
+  const setup: [WorkflowTab, string][] = [
+    ["terms", "Terms"],
+    ["types", "Exam Types"],
+    ["schedules", "Date sheets (manual)"],
+    ["tests", "Class tests register"],
+  ];
+  return (
+    <div className="ec-setup">
+      <span>Setup &amp; other tools:</span>
+      {(role === "admin" ? setup : setup.filter(([k]) => k === "tests")).map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          className={`tab${tab === key ? " active" : ""}`}
+          onClick={() => setTab(tab === key ? (role === "admin" ? "datesheet" : "marks") : key)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }

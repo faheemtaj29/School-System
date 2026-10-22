@@ -67,6 +67,13 @@ ExamTermSchema.index({ institutionCode: 1, academicYear: 1, name: 1 }, { unique:
 
 export const ExamTerm = models.ExamTerm || model<IExamTerm>("ExamTerm", ExamTermSchema);
 
+/** One marks component of a paper, e.g. Theory 75 + Practical 25. */
+export interface IMarksComponent {
+  key: string;
+  label: string;
+  maxMarks: number;
+}
+
 export interface IExamScheduleRow {
   subjectId: Types.ObjectId;
   examDate?: Date;
@@ -78,6 +85,13 @@ export interface IExamScheduleRow {
   invigilatorId?: Types.ObjectId;
   instructions?: string;
   status: "draft" | "published";
+  /** Marks split; empty means a single "Total" component worth totalMarks. */
+  components?: IMarksComponent[];
+}
+
+export interface IExamRollNumber {
+  studentId: Types.ObjectId;
+  rollNo: string;
 }
 
 export interface IExamSchedule {
@@ -88,6 +102,8 @@ export interface IExamSchedule {
   status: "draft" | "published";
   publishedAt?: Date;
   rows: IExamScheduleRow[];
+  /** Exam roll numbers issued for this term (printed on slips and result cards). */
+  rollNumbers?: IExamRollNumber[];
   institutionCode: string;
   createdBy?: Types.ObjectId;
   updatedBy?: Types.ObjectId;
@@ -107,6 +123,19 @@ const ExamScheduleRowSchema = new Schema<IExamScheduleRow>(
     invigilatorId: { type: Schema.Types.ObjectId, ref: "Teacher" },
     instructions: String,
     status: { type: String, enum: ["draft", "published"], default: "draft" },
+    components: {
+      type: [
+        new Schema<IMarksComponent>(
+          {
+            key: { type: String, required: true, trim: true },
+            label: { type: String, required: true, trim: true },
+            maxMarks: { type: Number, required: true, min: 1 },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
   },
   { _id: false }
 );
@@ -120,6 +149,18 @@ const ExamScheduleSchema = new Schema<IExamSchedule>(
     status: { type: String, enum: ["draft", "published"], default: "draft" },
     publishedAt: Date,
     rows: { type: [ExamScheduleRowSchema], default: [] },
+    rollNumbers: {
+      type: [
+        new Schema<IExamRollNumber>(
+          {
+            studentId: { type: Schema.Types.ObjectId, ref: "Student", required: true },
+            rollNo: { type: String, required: true, trim: true },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
     institutionCode: { type: String, required: true, uppercase: true, trim: true, default: "MAIN" },
     createdBy: { type: Schema.Types.ObjectId, ref: "User" },
     updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
@@ -131,3 +172,51 @@ ExamScheduleSchema.index({ institutionCode: 1, academicYear: 1, termId: 1, class
 
 export const ExamSchedule =
   models.ExamSchedule || model<IExamSchedule>("ExamSchedule", ExamScheduleSchema);
+
+/** Marks one student obtained in one paper of a term (component-wise). */
+export interface IExamMark {
+  termId: Types.ObjectId;
+  scheduleId: Types.ObjectId;
+  classId: Types.ObjectId;
+  subjectId: Types.ObjectId;
+  studentId: Types.ObjectId;
+  marks: { key: string; obtained: number }[];
+  total: number;
+  absent: boolean;
+  remarks?: string;
+  enteredBy?: Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const ExamMarkSchema = new Schema<IExamMark>(
+  {
+    termId: { type: Schema.Types.ObjectId, ref: "ExamTerm", required: true },
+    scheduleId: { type: Schema.Types.ObjectId, ref: "ExamSchedule", required: true },
+    classId: { type: Schema.Types.ObjectId, ref: "Class", required: true },
+    subjectId: { type: Schema.Types.ObjectId, ref: "Subject", required: true },
+    studentId: { type: Schema.Types.ObjectId, ref: "Student", required: true },
+    marks: {
+      type: [
+        new Schema(
+          {
+            key: { type: String, required: true },
+            obtained: { type: Number, required: true, min: 0 },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+    total: { type: Number, default: 0, min: 0 },
+    absent: { type: Boolean, default: false },
+    remarks: String,
+    enteredBy: { type: Schema.Types.ObjectId, ref: "User" },
+  },
+  { timestamps: true }
+);
+
+ExamMarkSchema.index({ scheduleId: 1, subjectId: 1, studentId: 1 }, { unique: true });
+ExamMarkSchema.index({ termId: 1, classId: 1 });
+
+export const ExamMark = models.ExamMark || model<IExamMark>("ExamMark", ExamMarkSchema);

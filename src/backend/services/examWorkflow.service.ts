@@ -31,7 +31,7 @@ function timeToMinutes(value?: string | null) {
   return hh * 60 + mm;
 }
 
-function validateRows(rows: ExamScheduleInput["rows"], term: { startDate: Date; endDate: Date }) {
+export function validateRows(rows: ExamScheduleInput["rows"], term: { startDate: Date; endDate: Date }) {
   const subjectSet = new Set<string>();
 
   for (const row of rows) {
@@ -101,6 +101,7 @@ async function classSubjectRows(
     totalMarks: defaults.totalMarks,
     passingMarks: defaults.passingMarks,
     status: "draft" as const,
+    components: [],
   }));
 }
 
