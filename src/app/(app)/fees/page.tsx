@@ -102,7 +102,7 @@ export default function FeesPage() {
   // ── Builder helpers ─────────────────────────────────────────────────────
   const builderTotal = builderLines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
 
-  function setLine(i: number, patch: Partial<{ head: string; amount: number }>) {
+  function setLine(i: number, patch: Partial<{ head: string; amount: number; accountCode?: string }>) {
     setBuilderLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
 

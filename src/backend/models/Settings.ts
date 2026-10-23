@@ -76,6 +76,12 @@ export interface ISettings {
   principalName?: string;
   boardName?: string;
   fax?: string;
+  /** Two-way sync with a remote server */
+  syncEnabled?: boolean;
+  syncRemoteUri?: string;
+  syncLastAt?: Date;
+  syncStatus?: "idle" | "syncing" | "ok" | "error";
+  syncError?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -167,6 +173,11 @@ const SettingsSchema = new Schema<ISettings>(
     principalName: String,
     boardName: String,
     fax: String,
+    syncEnabled: { type: Boolean, default: false },
+    syncRemoteUri: String,
+    syncLastAt: Date,
+    syncStatus: { type: String, enum: ["idle", "syncing", "ok", "error"], default: "idle" },
+    syncError: String,
   },
   { timestamps: true }
 );

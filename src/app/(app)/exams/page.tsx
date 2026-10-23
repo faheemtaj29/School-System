@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState, Hero, NameCell, Panel, StatusBadge, inputClass } from "@/components/ui";
 import { ExamForm } from "@/components/forms/SchoolForms";
 import {
@@ -606,14 +606,14 @@ export default function ExamsPage() {
                       </tr>
                       <tr>
                         {sheetSubjects.map((sub) => (
-                          <>
+                          <React.Fragment key={sub.subjectId}>
                             {COMP_KEYS.map((k) => (
                               <th key={`${sub.subjectId}-${k}`} style={{ textAlign: "right", fontWeight: 500, color: "var(--text-dim)", borderLeft: k === "theory" ? "2px solid var(--border)" : undefined }}>
                                 {COMP_LABEL[k]}<br /><span style={{ fontSize: 9 }}>/{sub.markComponents[k]}</span>
                               </th>
                             ))}
                             <th style={{ textAlign: "right", fontWeight: 700 }}>Tot</th>
-                          </>
+                          </React.Fragment>
                         ))}
                       </tr>
                     </thead>

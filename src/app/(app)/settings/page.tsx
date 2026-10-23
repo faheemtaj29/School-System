@@ -165,8 +165,16 @@ export default function SettingsPage() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [tab, setTab] = useState<
-    "profile" | "sessions" | "appearance" | "finance" | "branches" | "notify" | "platform"
+    "profile" | "sessions" | "appearance" | "finance" | "branches" | "notify" | "platform" | "server"
   >("profile");
+
+  // Server / Sync state
+  const [lanIps, setLanIps] = useState<{ iface: string; address: string }[]>([]);
+  const [lanPort, setLanPort] = useState(3000);
+  const [syncUri, setSyncUri] = useState("");
+  const [syncEnabled, setSyncEnabled] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ status: string; lastAt: string | null; error: string | null }>({ status: "idle", lastAt: null, error: null });
+  const [syncMsg, setSyncMsg] = useState("");
   const [newBranch, setNewBranch] = useState({ code: "", name: "", address: "", phone: "" });
   const [busy, setBusy] = useState(false);
   const [platform, setPlatform] = useState<PlatformOverview | null>(null);
@@ -219,9 +227,22 @@ export default function SettingsPage() {
     load();
   }, [load]);
 
+  const loadServer = useCallback(async () => {
+    const [info, sync] = await Promise.all([
+      fetch("/api/system/info").then((r) => r.json()).catch(() => ({})),
+      fetch("/api/system/sync").then((r) => r.json()).catch(() => ({})),
+    ]);
+    setLanIps(info.ips || []);
+    setLanPort(info.port || 3000);
+    setSyncUri(sync.syncRemoteUri || "");
+    setSyncEnabled(sync.syncEnabled || false);
+    setSyncStatus({ status: sync.syncStatus || "idle", lastAt: sync.syncLastAt || null, error: sync.syncError || null });
+  }, []);
+
   useEffect(() => {
     if (tab === "platform") loadPlatform();
-  }, [tab, loadPlatform]);
+    if (tab === "server") loadServer();
+  }, [tab, loadPlatform, loadServer]);
   // Live preview: inline variables win over the server-rendered theme style tag.
   useEffect(() => {
     const root = document.documentElement;
@@ -387,6 +408,44 @@ export default function SettingsPage() {
     });
   }
 
+  async function saveSyncSettings() {
+    setSyncMsg("");
+    const res = await fetch("/api/system/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "save", syncEnabled, syncRemoteUri: syncUri }),
+    });
+    const d = await res.json();
+    setSyncMsg(res.ok ? "Sync settings saved." : d.error || "Save failed");
+  }
+
+  async function testSync() {
+    setSyncMsg("Testing connection…");
+    const res = await fetch("/api/system/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "test", uri: syncUri }),
+    });
+    const d = await res.json();
+    setSyncMsg(d.ok ? "Connection successful — remote server is reachable." : `Connection failed: ${d.error}`);
+  }
+
+  async function runSync() {
+    setSyncMsg("Syncing…");
+    const res = await fetch("/api/system/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "sync" }),
+    });
+    const d = await res.json();
+    if (d.ok) {
+      setSyncMsg(`Sync complete — pushed ${d.pushed}, pulled ${d.pulled} records (${d.duration}ms)`);
+    } else {
+      setSyncMsg(`Sync failed: ${d.error}`);
+    }
+    await loadServer();
+  }
+
   const active = sessions.find((s) => s.status === "active");
 
   return (
@@ -410,6 +469,7 @@ export default function SettingsPage() {
               ["branches", "Branches"],
               ["notify", "Notifications"],
               ["platform", "Platform"],
+              ["server", "Server & Sync"],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -1249,7 +1309,101 @@ export default function SettingsPage() {
             </>
           ) : null}
 
-          {tab !== "sessions" ? (
+          {tab === "server" ? (
+            <div>
+              {/* ── LAN Access ──────────────────────────────────────────── */}
+              <div className="form-section-title">Local Network Access (LAN)</div>
+              <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, padding: "14px 16px", marginBottom: 18 }}>
+                <div style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 10 }}>
+                  Other computers on the same WiFi or network can open EduCore using any of these addresses:
+                </div>
+                {lanIps.length === 0 ? (
+                  <div style={{ fontSize: 13, color: "var(--text-dim)" }}>No LAN interfaces detected — server may be running on localhost only.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {lanIps.map((ip) => (
+                      <div key={ip.address} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <code style={{ fontSize: 15, fontWeight: 700, background: "var(--paper)", padding: "4px 10px", borderRadius: 5, border: "1px solid var(--line)" }}>
+                          http://{ip.address}:{lanPort}
+                        </code>
+                        <span style={{ fontSize: 12, color: "var(--text-dim)" }}>{ip.iface}</span>
+                        <button type="button" className="link-btn" style={{ fontSize: 12 }}
+                          onClick={() => navigator.clipboard?.writeText(`http://${ip.address}:${lanPort}`).catch(() => {})}>
+                          Copy
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 10 }}>
+                  Make sure the server is started with <code>npm run start</code> (not dev mode) and port 3000 is allowed in Windows Firewall.
+                </div>
+              </div>
+
+              {/* ── Two-way Sync ─────────────────────────────────────────── */}
+              <div className="form-section-title">Two-Way Sync (Local ↔ Online Server)</div>
+              <div style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 14 }}>
+                Connect this local installation to an online MongoDB server. Both systems stay in sync — changes made locally push to the server, and changes on the server pull here automatically.
+              </div>
+              {syncMsg ? (
+                <div className={`alert${syncMsg.toLowerCase().includes("fail") || syncMsg.toLowerCase().includes("error") ? " err" : ""}`} style={{ marginBottom: 14 }}>
+                  {syncMsg}
+                </div>
+              ) : null}
+              <div className="form-grid">
+                <Field label="Enable Two-Way Sync">
+                  <select className={inputClass} value={syncEnabled ? "yes" : "no"} onChange={(e) => setSyncEnabled(e.target.value === "yes")}>
+                    <option value="no">Disabled — work offline only</option>
+                    <option value="yes">Enabled — sync with remote server</option>
+                  </select>
+                </Field>
+                <Field label="Sync Status">
+                  <div style={{ paddingTop: 6 }}>
+                    <StatusBadge status={syncStatus.status === "ok" ? "active" : syncStatus.status === "error" ? "overdue" : syncStatus.status === "syncing" ? "pending" : "pending"} />
+                    {syncStatus.lastAt ? <span style={{ fontSize: 12, color: "var(--text-dim)", marginLeft: 8 }}>Last sync: {prettyDate(syncStatus.lastAt)}</span> : null}
+                    {syncStatus.error ? <div style={{ fontSize: 11, color: "var(--danger, #dc2626)", marginTop: 4 }}>{syncStatus.error}</div> : null}
+                  </div>
+                </Field>
+              </div>
+              <div className="form-grid one">
+                <Field label="Remote MongoDB URI" required={syncEnabled}>
+                  <input
+                    className={inputClass}
+                    value={syncUri}
+                    onChange={(e) => setSyncUri(e.target.value)}
+                    placeholder="mongodb+srv://user:password@cluster.mongodb.net/schooldb"
+                    type="password"
+                  />
+                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>
+                    Get this from MongoDB Atlas, your VPS, or another EduCore server. Stored encrypted at rest.
+                  </div>
+                </Field>
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+                <button type="button" className="btn-dark" onClick={saveSyncSettings}>Save Sync Settings</button>
+                <button type="button" className="btn-ghost" onClick={testSync} disabled={!syncUri}>Test Connection</button>
+                <button type="button" className="btn-ghost" onClick={runSync} disabled={!syncEnabled || !syncUri}>Sync Now</button>
+                <button type="button" className="btn-ghost" onClick={loadServer}>Refresh Status</button>
+              </div>
+
+              {/* ── Installer hint ───────────────────────────────────────── */}
+              <div className="form-section-title" style={{ marginTop: 24 }}>Windows Installer</div>
+              <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, padding: "14px 16px", fontSize: 13 }}>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>Install EduCore on another computer</div>
+                <div style={{ color: "var(--text-dim)", marginBottom: 10 }}>
+                  The <code>setup/</code> folder in the project contains an installer script and Inno Setup configuration to build a <code>.exe</code> installer for Windows.
+                </div>
+                <ol style={{ color: "var(--text-dim)", paddingLeft: 18, lineHeight: 1.8 }}>
+                  <li>Copy the project folder to the target PC</li>
+                  <li>Run <code>setup\install.ps1</code> as Administrator — it installs Node.js, MongoDB, builds the app and creates a Windows service</li>
+                  <li>To build a standalone <code>.exe</code>: install <a href="https://jrsoftware.org/isdl.php" target="_blank" rel="noreferrer">Inno Setup</a>, then compile <code>setup\EduCore-Setup.iss</code></li>
+                  <li>The service starts automatically on boot and is accessible on the LAN</li>
+                </ol>
+              </div>
+            </div>
+          ) : null}
+
+          {tab !== "sessions" && tab !== "server" ? (
             <div style={{ marginTop: 22 }}>
               <button type="submit" className="btn-dark">
                 Save Settings

@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -H 0.0.0.0 -p 3000",
+    "start:lan": "next start -H 0.0.0.0 -p 3000",
     "lint": "eslint",
     "db:backup": "node scripts/db/backup.js",
     "db:migrate": "node scripts/migrations/run.js up",
