@@ -213,3 +213,11 @@ export const CampusIcon = (p: IconProps) => (
     <rect x="10" y="13" width="4" height="8" />
   </Svg>
 );
+
+export const HelpIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+    <circle cx="12" cy="17" r=".5" fill="currentColor" />
+  </Svg>
+);

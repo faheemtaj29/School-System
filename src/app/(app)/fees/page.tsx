@@ -48,6 +48,7 @@ export default function FeesPage() {
 
   // Received/Pending filters
   const [filterClass, setFilterClass] = useState("");
+  const [feeSearch, setFeeSearch] = useState("");
 
   // Single voucher edit
   const [editOpen, setEditOpen] = useState(false);
@@ -182,13 +183,23 @@ export default function FeesPage() {
     return typeof cls === "object" ? (cls as { _id: string })._id : String(cls);
   }
 
+  function feeStudentName(fee: FeeItem): string {
+    const s = typeof fee.studentId === "object" ? fee.studentId : null;
+    if (!s) return "";
+    return `${fullName(s)} ${s.admissionNo || ""}`.toLowerCase();
+  }
+
   const receivedFees = useMemo(() =>
-    fees.filter((f) => f.status === "paid" && (!filterClass || studentClass(f) === filterClass)),
-    [fees, filterClass]);
+    fees.filter((f) => f.status === "paid" &&
+      (!filterClass || studentClass(f) === filterClass) &&
+      (!feeSearch || feeStudentName(f).includes(feeSearch.toLowerCase()))),
+    [fees, filterClass, feeSearch]);
 
   const pendingFees = useMemo(() =>
-    fees.filter((f) => (f.status === "pending" || f.status === "overdue" || f.status === "partial") && (!filterClass || studentClass(f) === filterClass)),
-    [fees, filterClass]);
+    fees.filter((f) => (f.status === "pending" || f.status === "overdue" || f.status === "partial") &&
+      (!filterClass || studentClass(f) === filterClass) &&
+      (!feeSearch || feeStudentName(f).includes(feeSearch.toLowerCase()))),
+    [fees, filterClass, feeSearch]);
 
   const voucher = fees.find((f) => f._id === voucherId) ?? null;
   const voucherStudent = voucher && typeof voucher.studentId === "object" ? voucher.studentId : null;
@@ -278,8 +289,16 @@ export default function FeesPage() {
 
   function ClassFilter() {
     return (
-      <div style={{ marginBottom: 16, maxWidth: 280 }}>
-        <select className={inputClass} value={filterClass} onChange={(e) => setFilterClass(e.target.value)}>
+      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+        <input
+          type="search"
+          className={inputClass}
+          placeholder="Search by student name or admission no…"
+          value={feeSearch}
+          onChange={(e) => setFeeSearch(e.target.value)}
+          style={{ maxWidth: 260 }}
+        />
+        <select className={inputClass} value={filterClass} onChange={(e) => setFilterClass(e.target.value)} style={{ maxWidth: 200 }}>
           <option value="">All Classes</option>
           {classes.map((c) => <option key={c._id} value={c._id}>{c.name} — {c.section}</option>)}
         </select>
@@ -546,8 +565,8 @@ export default function FeesPage() {
 
       {/* ── Voucher print modal ─────────────────────────────────────────── */}
       {voucher ? (
-        <div className="modal-backdrop" onMouseDown={() => setVoucherId("")}>
-          <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setVoucherId(""); }}>
+          <div className="modal">
             <div className="fee-voucher">
               <div className="fv-head">
                 <div>
@@ -601,8 +620,25 @@ export default function FeesPage() {
                   <span>{prettyDate(voucher.paymentDate)} via {voucher.method || "—"}</span>
                 </div>
               ) : null}
-              <div className="form-actions">
-                <button type="button" className="btn-dark" onClick={() => window.print()}>Print</button>
+              <div className="form-actions" style={{ flexWrap: "wrap", gap: 8 }}>
+                <button type="button" className="btn-dark" onClick={() => {
+                  document.body.classList.add("printing-modal");
+                  window.print();
+                  setTimeout(() => document.body.classList.remove("printing-modal"), 500);
+                }}>Print Challan</button>
+                {voucherStudent?.parentPhone ? (
+                  <a
+                    href={`https://api.whatsapp.com/send?phone=${voucherStudent.parentPhone.replace(/\D/g, "")}&text=${encodeURIComponent(
+                      `*Fee Challan*\nStudent: ${fullName(voucherStudent)}\nAdmission No: ${voucherStudent.admissionNo}\nTitle: ${voucher.title}\nDue Date: ${prettyDate(voucher.dueDate)}\nBalance Due: PKR ${formatNumber(voucher.amount - voucher.paidAmount)}\nStatus: ${voucher.status}`
+                    )}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn-ghost"
+                    style={{ textDecoration: "none" }}
+                  >
+                    Share on WhatsApp
+                  </a>
+                ) : null}
                 <button type="button" className="btn-ghost" onClick={() => setVoucherId("")}>Close</button>
               </div>
             </div>

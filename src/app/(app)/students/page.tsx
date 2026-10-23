@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   EmptyState,
@@ -289,6 +290,9 @@ export default function StudentsPage() {
                     </td>
                     <td>
                       <div className="row-actions">
+                        <Link href={`/students/${s._id}`} className="link-btn">
+                          Profile
+                        </Link>
                         <button
                           type="button"
                           className="link-btn"
@@ -339,12 +343,12 @@ export default function StudentsPage() {
 
       {/* ── Documents Modal ── */}
       {docStudent ? (
-        <div className="modal-backdrop" onMouseDown={() => setDocStudent(null)}>
+        <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setDocStudent(null); }}>
           <div
             className="modal"
             style={{ maxWidth: 680, width: "95vw" }}
-            onMouseDown={(e) => e.stopPropagation()}
           >
+            <div style={{ overflowY: "auto", maxHeight: "calc(90vh - 40px)", padding: "22px 26px 24px" }}>
             {/* Tab bar */}
             <div className="chips" style={{ marginBottom: 18 }}>
               <button
@@ -464,8 +468,12 @@ export default function StudentsPage() {
                 </div>
 
                 <div className="form-actions no-print" style={{ marginTop: 20 }}>
-                  <button type="button" className="btn-dark" onClick={() => window.print()}>
-                    Print
+                  <button type="button" className="btn-dark" onClick={() => {
+                    document.body.classList.add("printing-modal");
+                    window.print();
+                    setTimeout(() => document.body.classList.remove("printing-modal"), 500);
+                  }}>
+                    Print Admission Form
                   </button>
                   <button type="button" className="btn-ghost" onClick={() => setDocStudent(null)}>
                     Close
@@ -550,7 +558,11 @@ export default function StudentsPage() {
                     </div>
 
                     <div className="form-actions no-print" style={{ marginTop: 20 }}>
-                      <button type="button" className="btn-dark" onClick={() => window.print()}>
+                      <button type="button" className="btn-dark" onClick={() => {
+                        document.body.classList.add("printing-modal");
+                        window.print();
+                        setTimeout(() => document.body.classList.remove("printing-modal"), 500);
+                      }}>
                         Print TC
                       </button>
                       <button
@@ -628,6 +640,7 @@ export default function StudentsPage() {
                 )}
               </div>
             ) : null}
+            </div>{/* end scrollable wrapper */}
           </div>
         </div>
       ) : null}

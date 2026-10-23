@@ -15,6 +15,7 @@ import {
   ExamsIcon,
   FeesIcon,
   GlobeIcon,
+  HelpIcon,
   HrIcon,
   InventoryIcon,
   LogoutIcon,
@@ -175,6 +176,7 @@ const navGroups: NavGroup[] = [
       { href: "/website", label: "Website & Admissions", Icon: GlobeIcon, roles: ["admin"] },
       { href: "/notices", label: "Notices & Events", Icon: NoticeIcon },
       { href: "/settings", label: "Settings", Icon: SettingsIcon, roles: ["admin"] },
+      { href: "/help", label: "Help & Guide", Icon: HelpIcon },
     ],
   },
 ];

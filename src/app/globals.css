@@ -1009,7 +1009,7 @@ textarea.inp {
   width: 100%;
   max-width: 560px;
   box-shadow: 0 24px 60px rgba(14, 33, 26, 0.25);
-  overflow: hidden;
+  overflow: clip;
   margin: auto 0;
 }
 .modal.wide {
@@ -1050,6 +1050,8 @@ textarea.inp {
 .modal-body {
   padding: 22px 26px 24px;
   background: linear-gradient(180deg, #ffffff 0%, #fcfdfb 100%);
+  overflow-y: auto;
+  max-height: calc(90vh - 120px);
 }
 
 /* ---- Attendance ---- */
@@ -2434,4 +2436,12 @@ textarea.inp {
   /* Single-card print: body gets .printing-one, non-target cards hidden */
   body.printing-one .result-card:not(.print-target) { display: none !important; }
   body.printing-one .result-card-actions { display: none !important; }
+  /* Modal document print: hide the main layout, only show modal */
+  body.printing-modal .sidebar,
+  body.printing-modal .topbar,
+  body.printing-modal .main { display: none !important; }
+  body.printing-modal .modal-backdrop { display: block; }
+  body.printing-modal .modal { max-width: none !important; border: none !important; }
+  body.printing-modal .modal-head { display: none !important; }
+  body.printing-modal .modal-body { padding: 0 !important; max-height: none !important; overflow: visible !important; }
 }

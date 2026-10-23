@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   EmptyState,
   Field,
@@ -47,6 +47,14 @@ export default function StaffPage() {
   const [editing, setEditing] = useState<StaffItem | null>(null);
   const [form, setForm] = useState(blank);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+
+  const filtered = useMemo(() =>
+    !search ? staff : staff.filter((s) =>
+      fullName(s).toLowerCase().includes(search.toLowerCase()) ||
+      s.employeeId.toLowerCase().includes(search.toLowerCase()) ||
+      s.department.toLowerCase().includes(search.toLowerCase())
+    ), [staff, search]);
 
   const load = useCallback(async () => {
     const d = await fetch("/api/staff").then((r) => r.json());
@@ -127,10 +135,23 @@ export default function StaffPage() {
         }}
       />
 
+      {staff.length > 0 ? (
+        <div className="toolbar">
+          <input
+            type="search"
+            className={inputClass}
+            placeholder="Search by name, ID or department…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ maxWidth: 260 }}
+          />
+        </div>
+      ) : null}
+
       {!staff.length ? (
         <EmptyState message="Add clerks, accountants, librarians and other campus staff, then create their Staff portal login." />
       ) : (
-        <Panel title="Staff directory" meta={`${staff.length} PEOPLE`}>
+        <Panel title="Staff directory" meta={`${filtered.length} PEOPLE`}>
           <div className="table-scroll">
             <table className="reg">
               <thead>
@@ -144,7 +165,7 @@ export default function StaffPage() {
                 </tr>
               </thead>
               <tbody>
-                {staff.map((s) => (
+                {filtered.length ? filtered.map((s) => (
                   <tr key={s._id}>
                     <td>
                       <NameCell name={fullName(s)} sub={s.email} />
@@ -183,7 +204,13 @@ export default function StaffPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                )) : (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: "center", color: "var(--text-dim)", padding: "20px 0" }}>
+                      No staff match &ldquo;{search}&rdquo;
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
