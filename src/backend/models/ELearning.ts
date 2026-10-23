@@ -88,6 +88,8 @@ export interface ILecture {
   /** Video URL / YouTube / Vimeo / file path for recorded */
   recordingUrl?: string;
   notes?: string;
+  /** Study material / notes PDF link or upload path */
+  attachmentUrl?: string;
   status: "scheduled" | "live" | "completed" | "cancelled";
   order: number;
   createdAt: Date;
@@ -105,6 +107,7 @@ const LectureSchema = new Schema<ILecture>(
     meetingUrl: String,
     recordingUrl: String,
     notes: String,
+    attachmentUrl: String,
     status: {
       type: String,
       enum: ["scheduled", "live", "completed", "cancelled"],

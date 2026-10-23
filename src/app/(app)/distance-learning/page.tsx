@@ -58,6 +58,7 @@ type Lecture = {
   meetingUrl?: string;
   recordingUrl?: string;
   notes?: string;
+  attachmentUrl?: string;
   status: string;
   order: number;
 };
@@ -113,6 +114,7 @@ const lectureBlank = {
   meetingUrl: "",
   recordingUrl: "",
   notes: "",
+  attachmentUrl: "",
   status: "scheduled",
   order: 1,
 };
@@ -187,6 +189,7 @@ export default function DistanceLearningPage() {
   const [err, setErr] = useState("");
   const [role, setRole] = useState("admin");
   const [uploading, setUploading] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [watching, setWatching] = useState<Lecture | null>(null);
   const canManage = role === "admin" || role === "teacher";
   const isStudent = role === "student" || role === "parent";
@@ -371,6 +374,7 @@ export default function DistanceLearningPage() {
         meetingUrl: lec.meetingUrl || "",
         recordingUrl: lec.recordingUrl || "",
         notes: lec.notes || "",
+        attachmentUrl: lec.attachmentUrl || "",
         status,
         order: lec.order,
       }),
@@ -457,6 +461,24 @@ export default function DistanceLearningPage() {
       setLectureForm((f) => ({ ...f, recordingUrl: data.url, type: "recorded" }));
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function uploadAttachment(file: File) {
+    setUploadingAttachment(true);
+    setErr("");
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/uploads/lecture", { method: "POST", body });
+      const data = await res.json();
+      if (!res.ok) {
+        setErr(data.error || "Upload failed");
+        return;
+      }
+      setLectureForm((f) => ({ ...f, attachmentUrl: data.url }));
+    } finally {
+      setUploadingAttachment(false);
     }
   }
 
@@ -660,6 +682,16 @@ export default function DistanceLearningPage() {
                   Open recording
                 </a>
               )}
+              {watching.notes ? (
+                <div style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 8 }}>
+                  <strong>Notes:</strong> {watching.notes}
+                </div>
+              ) : null}
+              {watching.attachmentUrl ? (
+                <a className="btn-ghost" href={watching.attachmentUrl} target="_blank" rel="noreferrer" style={{ marginTop: 8, display: "inline-block" }}>
+                  Download Study Material
+                </a>
+              ) : null}
               <button type="button" className="link-btn" onClick={() => setWatching(null)}>
                 Close player
               </button>
@@ -712,7 +744,20 @@ export default function DistanceLearningPage() {
                               </a>
                             </>
                           ) : null}
+                          {lec.attachmentUrl ? (
+                            <>
+                              {" · "}
+                              <a href={lec.attachmentUrl} target="_blank" rel="noreferrer">
+                                Study material
+                              </a>
+                            </>
+                          ) : null}
                         </div>
+                        {lec.notes ? (
+                          <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 2, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {lec.notes}
+                          </div>
+                        ) : null}
                       </td>
                       <td>{courseLabel(lec.courseId as RefCourse)}</td>
                       <td style={{ textTransform: "capitalize" }}>{lec.type}</td>
@@ -1227,6 +1272,7 @@ export default function DistanceLearningPage() {
         ) : null}
 
         {tab === "lectures" ? (
+          <>
           <div className="form-grid">
             <Field label="Course" required>
               <select
@@ -1319,16 +1365,17 @@ export default function DistanceLearningPage() {
               </select>
             </Field>
             {lectureForm.type === "live" ? (
-              <Field label="Meeting URL (Zoom / Meet / Teams)">
+              <Field label="Meeting URL (Zoom / Google Meet / Teams)">
                 <input
                   className={inputClass}
                   value={lectureForm.meetingUrl}
+                  placeholder="https://meet.google.com/… or https://zoom.us/j/…"
                   onChange={(e) => setLectureForm({ ...lectureForm, meetingUrl: e.target.value })}
                 />
               </Field>
             ) : (
               <>
-                <Field label="Upload recording (mp4 / webm / mp3)">
+                <Field label="Upload Recorded Lecture (mp4 / webm / mp3)">
                   <input
                     className={inputClass}
                     type="file"
@@ -1343,28 +1390,71 @@ export default function DistanceLearningPage() {
                     <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>
                       Uploading…
                     </div>
+                  ) : lectureForm.recordingUrl ? (
+                    <div style={{ fontSize: 11, color: "#16a34a", marginTop: 4 }}>
+                      ✓ Recording ready — {lectureForm.recordingUrl.split("/").pop()}
+                    </div>
                   ) : null}
                 </Field>
-                <Field label="Or paste recording URL (YouTube / Vimeo / file)">
+                <Field label="Or paste Recording Link (YouTube / Vimeo / Google Drive)">
                   <input
                     className={inputClass}
                     value={lectureForm.recordingUrl}
                     onChange={(e) =>
                       setLectureForm({ ...lectureForm, recordingUrl: e.target.value })
                     }
-                    placeholder="/uploads/lectures/… or https://…"
+                    placeholder="https://youtu.be/… or https://drive.google.com/…"
                   />
                 </Field>
               </>
             )}
-            <Field label="Notes">
+          </div>
+
+          {/* Study Material Section */}
+          <div style={{ margin: "18px 0 10px", fontWeight: 600, fontSize: 13, borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+            Study Material &amp; Notes
+          </div>
+          <div className="form-grid">
+            <Field label="Upload Notes / PDF / Slides">
               <input
                 className={inputClass}
-                value={lectureForm.notes}
-                onChange={(e) => setLectureForm({ ...lectureForm, notes: e.target.value })}
+                type="file"
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.txt"
+                disabled={uploadingAttachment}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) uploadAttachment(file);
+                }}
+              />
+              {uploadingAttachment ? (
+                <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>Uploading…</div>
+              ) : lectureForm.attachmentUrl ? (
+                <div style={{ fontSize: 11, color: "#16a34a", marginTop: 4 }}>
+                  ✓ File ready — <a href={lectureForm.attachmentUrl} target="_blank" rel="noreferrer" style={{ color: "inherit" }}>{lectureForm.attachmentUrl.split("/").pop()}</a>
+                </div>
+              ) : null}
+            </Field>
+            <Field label="Or paste Study Material Link (Google Drive / Dropbox)">
+              <input
+                className={inputClass}
+                value={lectureForm.attachmentUrl}
+                onChange={(e) => setLectureForm({ ...lectureForm, attachmentUrl: e.target.value })}
+                placeholder="https://drive.google.com/… or https://dropbox.com/…"
               />
             </Field>
           </div>
+          <div className="form-grid one">
+            <Field label="Lecture Notes (visible to students)">
+              <textarea
+                className={inputClass}
+                rows={4}
+                value={lectureForm.notes}
+                onChange={(e) => setLectureForm({ ...lectureForm, notes: e.target.value })}
+                placeholder="Topics covered, key points, homework, references…"
+              />
+            </Field>
+          </div>
+          </>
         ) : null}
 
         {tab === "enrollments" ? (

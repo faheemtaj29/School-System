@@ -23,11 +23,13 @@ import {
 } from "@/lib/types";
 
 type MainTab = "generate" | "received" | "pending" | "all";
+type CoaAccount = { _id: string; code: string; name: string; type: string; level: number; isPosting: boolean };
 
 export default function FeesPage() {
   const [fees, setFees] = useState<FeeItem[]>([]);
   const [students, setStudents] = useState<StudentItem[]>([]);
   const [classes, setClasses] = useState<{ _id: string; name: string; section: string }[]>([]);
+  const [coaAccounts, setCoaAccounts] = useState<CoaAccount[]>([]);
   const [role, setRole] = useState("admin");
   const canEdit = role === "admin" || role === "staff";
 
@@ -40,7 +42,7 @@ export default function FeesPage() {
   const [builderStudentId, setBuilderStudentId] = useState("");
   const [builderDue, setBuilderDue] = useState(toDateInput(new Date()));
   const [builderTitle, setBuilderTitle] = useState("");
-  const [builderLines, setBuilderLines] = useState<{ head: string; amount: number }[]>([
+  const [builderLines, setBuilderLines] = useState<{ head: string; amount: number; accountCode?: string }[]>([
     { head: "Tuition Fee", amount: 0 },
   ]);
   const [builderMsg, setBuilderMsg] = useState("");
@@ -72,12 +74,14 @@ export default function FeesPage() {
     const f = await fetch("/api/fees").then((r) => r.json());
     setFees(f.fees || []);
     if (myRole === "admin" || myRole === "staff") {
-      const [s, c] = await Promise.all([
+      const [s, c, a] = await Promise.all([
         fetch("/api/students").then((r) => r.json()),
         fetch("/api/classes").then((r) => r.json()),
+        fetch("/api/accounting?view=accounts").then((r) => r.json()).catch(() => ({})),
       ]);
       setStudents(s.students || []);
       setClasses(c.classes || []);
+      setCoaAccounts((a.accounts || []).filter((ac: CoaAccount) => ac.isPosting));
     }
   }, []);
 
@@ -427,14 +431,22 @@ export default function FeesPage() {
             </div>
 
             {/* Fee heads */}
-            <div style={{ margin: "18px 0 8px", fontWeight: 600, fontSize: 13 }}>Fee Heads</div>
-            <div className="voucher-line-head fee-line-head">
+            <div style={{ margin: "18px 0 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>Fee Heads</span>
+              {coaAccounts.length > 0 && (
+                <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
+                  Link each head to a Chart of Accounts entry for bookkeeping
+                </span>
+              )}
+            </div>
+            <div className="voucher-line-head fee-line-head" style={{ gridTemplateColumns: coaAccounts.length ? "1fr 130px 1fr 28px" : "1fr 130px 28px" }}>
               <span>Fee Head</span>
               <span>Amount (PKR)</span>
+              {coaAccounts.length > 0 && <span>COA Account</span>}
               <span />
             </div>
             {builderLines.map((line, i) => (
-              <div className="voucher-line-row fee-line-row" key={i}>
+              <div className="voucher-line-row fee-line-row" key={i} style={{ gridTemplateColumns: coaAccounts.length ? "1fr 130px 1fr 28px" : "1fr 130px 28px" }}>
                 <OptionSelect
                   listKey="feeHeads"
                   value={line.head}
@@ -446,6 +458,26 @@ export default function FeesPage() {
                   value={line.amount}
                   onChange={(e) => setLine(i, { amount: Number(e.target.value) })}
                   placeholder="0" />
+                {coaAccounts.length > 0 && (
+                  <select
+                    className={inputClass}
+                    value={line.accountCode || ""}
+                    onChange={(e) => setLine(i, { accountCode: e.target.value || undefined })}
+                    title="Link this fee head to a Chart of Accounts income account"
+                  >
+                    <option value="">— No COA link —</option>
+                    {coaAccounts.filter(a => a.type === "income").map(a => (
+                      <option key={a.code} value={a.code}>{a.code} · {a.name}</option>
+                    ))}
+                    {coaAccounts.filter(a => a.type !== "income").length > 0 && (
+                      <optgroup label="Other accounts">
+                        {coaAccounts.filter(a => a.type !== "income").map(a => (
+                          <option key={a.code} value={a.code}>{a.code} · {a.name} ({a.type})</option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                )}
                 <button type="button" className="link-btn danger"
                   onClick={() => setBuilderLines((p) => p.length <= 1 ? p : p.filter((_, idx) => idx !== i))}
                   disabled={builderLines.length <= 1}>✕</button>

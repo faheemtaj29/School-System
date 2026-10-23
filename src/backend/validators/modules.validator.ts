@@ -295,6 +295,7 @@ export const lectureSchema = z.object({
   meetingUrl: z.string().optional(),
   recordingUrl: z.string().optional(),
   notes: z.string().optional(),
+  attachmentUrl: z.string().optional(),
   status: z.enum(["scheduled", "live", "completed", "cancelled"]).default("scheduled"),
   order: z.coerce.number().min(1).default(1),
 });

@@ -3,6 +3,8 @@ import mongoose, { Schema, models, model, Types } from "mongoose";
 export interface IFeeLine {
   head: string;
   amount: number;
+  /** Optional COA account code this fee head maps to (income account) */
+  accountCode?: string;
 }
 
 export interface IFee {
@@ -37,6 +39,7 @@ const FeeLineSchema = new Schema<IFeeLine>(
   {
     head: { type: String, required: true, trim: true },
     amount: { type: Number, required: true, min: 0 },
+    accountCode: { type: String, trim: true },
   },
   { _id: false }
 );
