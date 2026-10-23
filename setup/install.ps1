@@ -30,13 +30,13 @@ Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
 # ── Helper: check if a command exists ────────────────────────────────────────
-function Has-Command([string]$name) {
+function Test-Command([string]$name) {
     return [bool](Get-Command $name -ErrorAction SilentlyContinue)
 }
 
 # ── 1. Node.js ────────────────────────────────────────────────────────────────
 Write-Host "[1/7] Checking Node.js..." -ForegroundColor Yellow
-if (Has-Command "node") {
+if (Test-Command "node") {
     $ver = node --version
     Write-Host "      Node.js already installed: $ver" -ForegroundColor Green
 } else {
@@ -50,7 +50,7 @@ if (Has-Command "node") {
     }
     # Refresh PATH
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-    if (-not (Has-Command "node")) {
+    if (-not (Test-Command "node")) {
         Write-Host "      Node.js not found after install — please restart PowerShell and try again." -ForegroundColor Red
         exit 1
     }
@@ -138,7 +138,6 @@ NODE_ENV=production
 Write-Host "[7/7] Creating Windows services..." -ForegroundColor Yellow
 
 $nodePath = (Get-Command node).Source
-$npmPath  = (Get-Command npm).Source
 
 if ($nssmPath -and (Test-Path $nssmPath)) {
     # MongoDB service

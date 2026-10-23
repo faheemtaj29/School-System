@@ -14,6 +14,7 @@
 
 #define AppName      "EduCore School System"
 #define AppVersion   "1.0.0"
+#define BuildDate    "2026-10-23"
 #define AppPublisher "Your School"
 #define AppURL       "http://localhost:3000"
 #define AppExeName   "EduCore"
@@ -22,7 +23,7 @@
 AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
 AppName={#AppName}
 AppVersion={#AppVersion}
-AppVerName={#AppName} {#AppVersion}
+AppVerName={#AppName} {#AppVersion} (Build {#BuildDate})
 AppPublisher={#AppPublisher}
 AppPublisherURL={#AppURL}
 AppSupportURL={#AppURL}
@@ -55,10 +56,26 @@ Name: "startupservice"; Description: "Start automatically on &boot (Windows Serv
 Name: "firewallrule";   Description: "Allow &LAN access (open port 3000 in Windows Firewall)"; GroupDescription: "Network:"; Flags: checkedonce
 
 [Files]
-; App source (pre-built)
-Source: "..\*";             DestDir: "{app}";         Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: ".git,node_modules,.next\cache,setup\Output,*.log"
-Source: "..\node_modules\*"; DestDir: "{app}\node_modules"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\setup\*";       DestDir: "{app}\setup";   Flags: ignoreversion recursesubdirs createallsubdirs
+; App source files (without large/excluded dirs)
+Source: "..\*.json";          DestDir: "{app}";         Flags: ignoreversion
+Source: "..\*.ts";            DestDir: "{app}";         Flags: ignoreversion
+Source: "..\*.mjs";           DestDir: "{app}";         Flags: ignoreversion
+Source: "..\*.config.*";      DestDir: "{app}";         Flags: ignoreversion
+Source: "..\src\*";           DestDir: "{app}\src";     Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\public\*";        DestDir: "{app}\public";  Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\scripts\*";       DestDir: "{app}\scripts"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: DirExists(ExpandConstant('{src}') + '\..\scripts')
+
+; Pre-built Next.js output (must run npm run build before compiling installer)
+Source: "..\\.next\*";        DestDir: "{app}\.next";   Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "cache"
+
+; node_modules (large — consider running npm ci on target instead)
+Source: "..\node_modules\*";  DestDir: "{app}\node_modules"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; Setup scripts
+Source: ".\*";                DestDir: "{app}\setup";   Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "Output,*.exe"
+
+; NSSM service manager (bundled — download from https://nssm.cc and place in setup\tools\)
+Source: "tools\nssm.exe";     DestDir: "{app}\tools";   Flags: ignoreversion; Check: FileExists(ExpandConstant('{src}') + '\tools\nssm.exe')
 
 ; NSSM service manager (bundled)
 Source: "tools\nssm.exe"; DestDir: "{app}\tools"; Flags: ignoreversion; Check: Is64BitInstallMode
