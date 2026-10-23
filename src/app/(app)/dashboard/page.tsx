@@ -65,11 +65,11 @@ function TrendChart({ data }: { data: Charts["attendanceTrend"] }) {
       <svg viewBox={`0 0 ${w} ${h}`} width="100%" height="160" preserveAspectRatio="none">
         <defs>
           <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#157A5C" stopOpacity="0.32" />
-            <stop offset="100%" stopColor="#157A5C" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
           </linearGradient>
         </defs>
-        <g stroke="#EEF1EA" strokeWidth="1">
+        <g stroke="var(--line)" strokeWidth="1">
           <line x1="0" y1="20" x2={w} y2="20" />
           <line x1="0" y1="60" x2={w} y2="60" />
           <line x1="0" y1="100" x2={w} y2="100" />
@@ -77,10 +77,10 @@ function TrendChart({ data }: { data: Charts["attendanceTrend"] }) {
         </g>
         {area ? <path d={area} fill="url(#areaFill)" /> : null}
         {line ? (
-          <path d={line} fill="none" stroke="#157A5C" strokeWidth="3" strokeLinecap="round" />
+          <path d={line} fill="none" stroke="var(--primary)" strokeWidth="3" strokeLinecap="round" />
         ) : null}
         {points.map((p) => (
-          <circle key={p.date} cx={p.x} cy={p.y} r="4" fill="#157A5C" stroke="#fff" strokeWidth="2" />
+          <circle key={p.date} cx={p.x} cy={p.y} r="4" fill="var(--primary)" stroke="var(--card)" strokeWidth="2" />
         ))}
       </svg>
       <div className="chart-labels">
@@ -108,6 +108,23 @@ function BarChart({ data }: { data: Charts["classStrength"] }) {
   );
 }
 
+type RecentStudent = {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  admissionNo: string;
+  createdAt?: string;
+  classId?: { name: string; section: string } | string;
+};
+
+type UpcomingExam = {
+  _id: string;
+  date: string;
+  examType?: string;
+  classId?: { name: string; section: string } | string;
+  subjectId?: { name: string; code?: string } | string;
+};
+
 type RoleData =
   | ({ role: "teacher"; linked: boolean } & Partial<TeacherData>)
   | ({ role: "student" | "parent"; linked: boolean } & Partial<StudentData>)
@@ -117,6 +134,8 @@ export default function DashboardPage() {
   const [role, setRole] = useState<RoleData | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [charts, setCharts] = useState<Charts | null>(null);
+  const [recentStudents, setRecentStudents] = useState<RecentStudent[]>([]);
+  const [upcomingExams, setUpcomingExams] = useState<UpcomingExam[]>([]);
 
   useEffect(() => {
     fetch("/api/dashboard")
@@ -125,6 +144,8 @@ export default function DashboardPage() {
         setRole(d);
         setStats(d.stats ?? null);
         setCharts(d.charts ?? null);
+        setRecentStudents(d.recentStudents ?? []);
+        setUpcomingExams(d.upcomingExams ?? []);
       })
       .catch(() => undefined);
   }, []);
@@ -206,6 +227,13 @@ export default function DashboardPage() {
               >
                 Reports & Print
               </Link>
+              <Link
+                href="/help"
+                className="btn-primary"
+                style={{ background: "rgba(255,255,255,.12)", color: "#fff", boxShadow: "none" }}
+              >
+                ? Help Guide
+              </Link>
             </>
           )}
         </div>
@@ -276,6 +304,64 @@ export default function DashboardPage() {
             <div className="deadline-row"><div className="dname">Overdue</div><div className="num" style={{ color: "var(--red)" }}>{formatCompact(fees?.overdue ?? 0)}</div></div>
             <div className="deadline-row"><div className="dname">Overdue Vouchers</div><div className="num">{fees?.overdueCount ?? 0}</div></div>
           </Panel>
+
+          {/* Recent Admissions */}
+          <Panel title="Recent Admissions" meta="LATEST 5 STUDENTS">
+            {recentStudents.length === 0 ? (
+              <div style={{ padding: "12px 0", color: "var(--text-dim)", fontSize: 13 }}>No students enrolled yet.</div>
+            ) : (
+              <div>
+                {recentStudents.map((s) => {
+                  const cls = typeof s.classId === "object" && s.classId
+                    ? `${s.classId.name}-${s.classId.section}`
+                    : "";
+                  return (
+                    <div key={s._id} className="deadline-row" style={{ alignItems: "center" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{
+                          width: 32, height: 32, borderRadius: "50%",
+                          background: "var(--primary)", color: "#fff",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 12, fontWeight: 700, flexShrink: 0,
+                        }}>
+                          {`${s.firstName?.[0] ?? ""}${s.lastName?.[0] ?? ""}`.toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{s.firstName} {s.lastName}</div>
+                          <div style={{ fontSize: 11, color: "var(--text-dim)" }}>{s.admissionNo}{cls ? ` · ${cls}` : ""}</div>
+                        </div>
+                      </div>
+                      <Link href={`/students/${s._id}`} className="link-btn" style={{ fontSize: 12 }}>View</Link>
+                    </div>
+                  );
+                })}
+                <div style={{ marginTop: 12, textAlign: "right" }}>
+                  <Link href="/students" className="link-btn" style={{ fontSize: 12 }}>All students →</Link>
+                </div>
+              </div>
+            )}
+          </Panel>
+
+          {/* Upcoming Exams */}
+          {upcomingExams.length > 0 ? (
+            <Panel title="Upcoming Exams" meta={`${upcomingExams.length} SCHEDULED`}>
+              {upcomingExams.map((e) => {
+                const cls = typeof e.classId === "object" && e.classId ? `${e.classId.name}-${e.classId.section}` : "";
+                const subj = typeof e.subjectId === "object" && e.subjectId ? e.subjectId.name : "";
+                return (
+                  <div key={e._id} className="deadline-row">
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{subj || e.examType || "Exam"}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-dim)" }}>{cls}{cls && e.examType ? ` · ${e.examType}` : e.examType}</div>
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--primary)" }}>
+                      {new Date(e.date).toLocaleDateString("en-PK", { day: "numeric", month: "short" })}
+                    </div>
+                  </div>
+                );
+              })}
+            </Panel>
+          ) : null}
         </div>
       </div>
     </>

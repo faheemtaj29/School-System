@@ -53,6 +53,14 @@ type Settings = {
   receiptPrefix?: string;
   udiseCode?: string;
   logoUrl?: string | null;
+  motto?: string;
+  website?: string;
+  city?: string;
+  province?: string;
+  country?: string;
+  principalName?: string;
+  boardName?: string;
+  fax?: string;
 };
 
 type PlatformOverview = {
@@ -128,6 +136,7 @@ const empty: Settings = {
   whtRate: 0,
   admissionPrefix: "STD",
   receiptPrefix: "RCP",
+  country: "Pakistan",
 };
 
 const hintStyle = { fontSize: 11, color: "var(--text-dim)", marginTop: 4 } as const;
@@ -523,25 +532,98 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+              <div className="form-section-title">Identity</div>
               <div className="form-grid">
-                <Field label="School Name" required>
+                <Field label="School / Institution Name" required>
                   <input className={inputClass} value={form.schoolName} onChange={(e) => setForm({ ...form, schoolName: e.target.value })} required />
                 </Field>
-                <Field label="Registration No.">
-                  <input className={inputClass} value={form.registrationNo || ""} onChange={(e) => setForm({ ...form, registrationNo: e.target.value })} />
+                <Field label="Motto / Tagline">
+                  <input className={inputClass} value={form.motto || ""} onChange={(e) => setForm({ ...form, motto: e.target.value })} placeholder="e.g. Shaping Futures" />
                 </Field>
+                <Field label="Institution Type">
+                  <select className={inputClass} value={form.institutionType || "school"} onChange={(e) => setForm({ ...form, institutionType: e.target.value as Settings["institutionType"] })}>
+                    <option value="school">School</option>
+                    <option value="college">College</option>
+                    <option value="university">University</option>
+                    <option value="academy">Academy / Institute</option>
+                  </select>
+                </Field>
+                <Field label="Registration / EMIS No.">
+                  <input className={inputClass} value={form.registrationNo || ""} onChange={(e) => setForm({ ...form, registrationNo: e.target.value })} placeholder="e.g. PEMIS-12345" />
+                </Field>
+                <Field label="Board / Affiliation">
+                  <input className={inputClass} value={form.boardName || ""} onChange={(e) => setForm({ ...form, boardName: e.target.value })} placeholder="e.g. BISE Lahore" />
+                </Field>
+                <Field label="Principal / Head Name">
+                  <input className={inputClass} value={form.principalName || ""} onChange={(e) => setForm({ ...form, principalName: e.target.value })} placeholder="e.g. Dr. Abdul Rahman" />
+                </Field>
+              </div>
+
+              <div className="form-section-title" style={{ marginTop: 20 }}>Contact & Location</div>
+              <div className="form-grid">
                 <Field label="Phone">
-                  <input className={inputClass} value={form.phone || ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+                  <input className={inputClass} value={form.phone || ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="e.g. 042-35760001" />
+                </Field>
+                <Field label="Fax">
+                  <input className={inputClass} value={form.fax || ""} onChange={(e) => setForm({ ...form, fax: e.target.value })} placeholder="e.g. 042-35760002" />
                 </Field>
                 <Field label="Email">
-                  <input type="email" className={inputClass} value={form.email || ""} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                  <input type="email" className={inputClass} value={form.email || ""} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="school@example.com" />
                 </Field>
+                <Field label="Website">
+                  <input className={inputClass} value={form.website || ""} onChange={(e) => setForm({ ...form, website: e.target.value })} placeholder="https://school.edu.pk" />
+                </Field>
+                <Field label="Address">
+                  <input className={inputClass} value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Street / Area" />
+                </Field>
+                <Field label="City">
+                  <input className={inputClass} value={form.city || ""} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="e.g. Lahore" />
+                </Field>
+                <Field label="Province">
+                  <select className={inputClass} value={form.province || ""} onChange={(e) => setForm({ ...form, province: e.target.value })}>
+                    <option value="">Select province</option>
+                    <option value="Punjab">Punjab</option>
+                    <option value="Sindh">Sindh</option>
+                    <option value="KPK">Khyber Pakhtunkhwa (KPK)</option>
+                    <option value="Balochistan">Balochistan</option>
+                    <option value="AJK">Azad Jammu & Kashmir</option>
+                    <option value="Gilgit-Baltistan">Gilgit-Baltistan</option>
+                    <option value="ICT">Islamabad Capital Territory</option>
+                  </select>
+                </Field>
+                <Field label="Country">
+                  <input className={inputClass} value={form.country || "Pakistan"} onChange={(e) => setForm({ ...form, country: e.target.value })} />
+                </Field>
+              </div>
+
+              <div className="form-section-title" style={{ marginTop: 20 }}>Academic Settings</div>
+              <div className="form-grid">
                 <Field label="Active Academic Year">
                   <input className={inputClass} value={form.academicYear} readOnly />
-                  <div style={hintStyle}>Managed under Year / Sessions — activate a session to change this.</div>
+                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>
+                    Managed under Year / Sessions tab.
+                  </div>
+                </Field>
+                <Field label="Fee Due Day (of month)">
+                  <input type="number" min="1" max="28" className={inputClass} value={form.feeDueDay} onChange={(e) => setForm({ ...form, feeDueDay: Number(e.target.value) })} />
                 </Field>
                 <Field label="Currency Symbol">
-                  <input className={inputClass} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} placeholder="e.g. ₹, Rs, PKR" />
+                  <input className={inputClass} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} placeholder="e.g. Rs, PKR, ₹" />
+                </Field>
+                <Field label="Pass Percentage">
+                  <input type="number" min="1" max="100" className={inputClass} value={form.passPercent ?? 40} onChange={(e) => setForm({ ...form, passPercent: Number(e.target.value) })} />
+                </Field>
+                <Field label="Student ID Mode">
+                  <select className={inputClass} value={form.studentIdMode || "auto"} onChange={(e) => setForm({ ...form, studentIdMode: e.target.value as "auto" | "manual" })}>
+                    <option value="auto">Auto-generate</option>
+                    <option value="manual">Manual entry</option>
+                  </select>
+                </Field>
+                <Field label="Employee ID Mode">
+                  <select className={inputClass} value={form.employeeIdMode || "auto"} onChange={(e) => setForm({ ...form, employeeIdMode: e.target.value as "auto" | "manual" })}>
+                    <option value="auto">Auto-generate</option>
+                    <option value="manual">Manual entry</option>
+                  </select>
                 </Field>
                 <Field label="Admission Number Prefix">
                   <input
@@ -578,13 +660,7 @@ export default function SettingsPage() {
                   />
                   <div style={hintStyle}>11-digit Unified District Information System for Education code. Leave blank if not applicable.</div>
                 </Field>
-                <Field label="Fee Due Day">
-                  <input type="number" min={1} max={28} className={inputClass} value={form.feeDueDay} onChange={(e) => setForm({ ...form, feeDueDay: Number(e.target.value) })} />
-                </Field>
               </div>
-              <Field label="School Address">
-                <textarea className={inputClass} rows={3} value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-              </Field>
 
               <div className="lan-box">
                 <div className="form-section-title" style={{ marginTop: 0 }}>Network sharing (LAN)</div>

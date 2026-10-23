@@ -362,10 +362,9 @@ export function ModalForm({
   }
 
   return (
-    <div className="modal-backdrop" onMouseDown={onClose}>
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div
         className={`modal${wide ? " wide" : ""}`}
-        onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="modal-head">
           <div>

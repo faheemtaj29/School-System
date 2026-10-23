@@ -260,6 +260,10 @@ export function ExamForm({
   teachers: TeacherItem[];
   students: StudentItem[];
 }) {
+  type CompKey = "theory" | "viva" | "assignment" | "attendance" | "project";
+  const COMP_KEYS: CompKey[] = ["theory", "viva", "assignment", "attendance", "project"];
+  const COMP_LABEL: Record<CompKey, string> = { theory: "Theory", viva: "Viva", assignment: "Asn", attendance: "Att", project: "Proj" };
+
   const [form, setForm] = useState({
     title: "",
     examType: "midterm",
@@ -268,13 +272,18 @@ export function ExamForm({
     teacherId: "",
     date: "",
     maxMarks: 100,
-    results: [] as { studentId: string; marks: number; grade: string; remarks: string }[],
+    useComponents: false,
+    markComponents: { theory: 60, viva: 10, assignment: 10, attendance: 10, project: 10 } as Record<CompKey, number>,
+    results: [] as { studentId: string; marks: number; components: Record<CompKey, number>; grade: string; remarks: string }[],
   });
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!open) return;
     if (initial) {
+      const raw = initial as { markComponents?: Record<string, number> };
+      const mc = raw.markComponents || { theory: 60, viva: 10, assignment: 10, attendance: 10, project: 10 };
+      const hasComp = Boolean(raw.markComponents);
       setForm({
         title: initial.title,
         examType: initial.examType,
@@ -283,12 +292,12 @@ export function ExamForm({
         teacherId: idOf(initial.teacherId as never),
         date: toDateInput(initial.date),
         maxMarks: initial.maxMarks,
-        results: (initial.results || []).map((r) => ({
-          studentId: idOf(r.studentId),
-          marks: r.marks,
-          grade: r.grade ?? "",
-          remarks: r.remarks ?? "",
-        })),
+        useComponents: hasComp,
+        markComponents: mc as Record<"theory" | "viva" | "assignment" | "attendance" | "project", number>,
+        results: (initial.results || []).map((r) => {
+          const rComp = (r as { components?: Record<string, number> }).components;
+          return { studentId: idOf(r.studentId), marks: r.marks, components: (rComp || { theory: 0, viva: 0, assignment: 0, attendance: 0, project: 0 }) as Record<"theory" | "viva" | "assignment" | "attendance" | "project", number>, grade: r.grade ?? "", remarks: r.remarks ?? "" };
+        }),
       });
     } else {
       setForm({
@@ -299,6 +308,8 @@ export function ExamForm({
         teacherId: "",
         date: "",
         maxMarks: 100,
+        useComponents: false,
+        markComponents: { theory: 60, viva: 10, assignment: 10, attendance: 10, project: 10 },
         results: [],
       });
     }
@@ -315,19 +326,28 @@ export function ExamForm({
         ...prev,
         results: students
           .filter((s) => idOf(s.classId) === prev.classId)
-          .map(
-            (s) => map.get(s._id) ?? { studentId: s._id, marks: 0, grade: "", remarks: "" }
-          ),
+          .map((s) => map.get(s._id) ?? { studentId: s._id, marks: 0, components: { theory: 0, viva: 0, assignment: 0, attendance: 0, project: 0 }, grade: "", remarks: "" }),
       };
     });
   }, [form.classId, students]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    const payload = {
+      ...form,
+      markComponents: form.useComponents ? form.markComponents : undefined,
+      results: form.results.map((r) => ({
+        ...r,
+        marks: form.useComponents
+          ? Object.values(r.components).reduce((a, b) => a + b, 0)
+          : r.marks,
+        components: form.useComponents ? r.components : undefined,
+      })),
+    };
     const res = await fetch(initial ? `/api/exams/${initial._id}` : "/api/exams", {
       method: initial ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -403,70 +423,66 @@ export function ExamForm({
 
       {form.classId ? (
         <>
-          <div className="form-section-title">Result Sheet</div>
-          <div style={{ maxHeight: 240, overflowY: "auto" }}>
-            <table className="reg">
+          <div className="form-section-title" style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            Result Sheet
+            <label style={{ fontSize: 12, fontWeight: 400, display: "flex", alignItems: "center", gap: 6 }}>
+              <input type="checkbox" checked={form.useComponents} onChange={(e) => setForm({ ...form, useComponents: e.target.checked })} />
+              Use component marks (Theory / Viva / Assignment / Attendance / Project)
+            </label>
+          </div>
+
+          {form.useComponents && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10, background: "var(--bg-soft,#f8f8f8)", padding: 10, borderRadius: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, alignSelf: "center" }}>Max Marks:</span>
+              {COMP_KEYS.map((k) => (
+                <label key={k} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}>
+                  {COMP_LABEL[k]}
+                  <input type="number" style={{ width: 52, padding: "4px 6px", border: "1px solid var(--border)", borderRadius: 5 }} value={form.markComponents[k]} min={0} onChange={(e) => setForm({ ...form, markComponents: { ...form.markComponents, [k]: Number(e.target.value) }, maxMarks: Object.values({ ...form.markComponents, [k]: Number(e.target.value) }).reduce((a, b) => a + b, 0) })} />
+                </label>
+              ))}
+              <span style={{ fontSize: 12, fontWeight: 700, alignSelf: "center" }}>Total: {form.maxMarks}</span>
+            </div>
+          )}
+
+          <div style={{ maxHeight: 260, overflowY: "auto" }}>
+            <table className="reg" style={{ fontSize: 12 }}>
               <thead>
                 <tr>
                   <th>Student</th>
-                  <th style={{ width: 90 }}>Marks</th>
-                  <th style={{ width: 90 }}>Grade</th>
+                  {form.useComponents ? COMP_KEYS.map((k) => <th key={k} style={{ width: 60 }}>{COMP_LABEL[k]}</th>) : <th style={{ width: 90 }}>Marks</th>}
+                  {form.useComponents && <th style={{ width: 60 }}>Total</th>}
+                  <th style={{ width: 70 }}>Grade</th>
                   <th>Remarks</th>
                 </tr>
               </thead>
               <tbody>
                 {form.results.map((r, idx) => {
                   const student = classStudents.find((s) => s._id === r.studentId);
+                  const compTotal = Object.values(r.components).reduce((a, b) => a + b, 0);
                   return (
                     <tr key={r.studentId}>
                       <td>{student ? `${student.firstName} ${student.lastName}` : r.studentId}</td>
+                      {form.useComponents ? COMP_KEYS.map((k) => (
+                        <td key={k}>
+                          <input type="number" style={{ width: 50, padding: "4px 5px", border: "1px solid var(--border)", borderRadius: 5, fontSize: 11 }} value={r.components[k]} min={0} max={form.markComponents[k]} onChange={(e) => { const results = [...form.results]; results[idx] = { ...r, components: { ...r.components, [k]: Number(e.target.value) } }; setForm({ ...form, results }); }} />
+                        </td>
+                      )) : (
+                        <td>
+                          <input type="number" className={inputClass} style={{ padding: "7px 9px" }} value={r.marks} onChange={(e) => { const results = [...form.results]; results[idx] = { ...r, marks: Number(e.target.value) }; setForm({ ...form, results }); }} />
+                        </td>
+                      )}
+                      {form.useComponents && <td style={{ fontWeight: 700, textAlign: "right" }}>{compTotal}</td>}
                       <td>
-                        <input
-                          type="number"
-                          className={inputClass}
-                          style={{ padding: "7px 9px" }}
-                          value={r.marks}
-                          onChange={(e) => {
-                            const results = [...form.results];
-                            results[idx] = { ...r, marks: Number(e.target.value) };
-                            setForm({ ...form, results });
-                          }}
-                        />
+                        <input className={inputClass} style={{ padding: "7px 9px" }} placeholder="A+" value={r.grade} onChange={(e) => { const results = [...form.results]; results[idx] = { ...r, grade: e.target.value }; setForm({ ...form, results }); }} />
                       </td>
                       <td>
-                        <input
-                          className={inputClass}
-                          style={{ padding: "7px 9px" }}
-                          placeholder="A+"
-                          value={r.grade}
-                          onChange={(e) => {
-                            const results = [...form.results];
-                            results[idx] = { ...r, grade: e.target.value };
-                            setForm({ ...form, results });
-                          }}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className={inputClass}
-                          style={{ padding: "7px 9px" }}
-                          value={r.remarks}
-                          onChange={(e) => {
-                            const results = [...form.results];
-                            results[idx] = { ...r, remarks: e.target.value };
-                            setForm({ ...form, results });
-                          }}
-                        />
+                        <input className={inputClass} style={{ padding: "7px 9px" }} value={r.remarks} onChange={(e) => { const results = [...form.results]; results[idx] = { ...r, remarks: e.target.value }; setForm({ ...form, results }); }} />
                       </td>
                     </tr>
                   );
                 })}
                 {!form.results.length ? (
-                  <tr>
-                    <td colSpan={4} style={{ color: "var(--text-dim)" }}>
-                      No students enrolled in this class yet.
-                    </td>
-                  </tr>
+                  <tr><td colSpan={8} style={{ color: "var(--text-dim)" }}>No students enrolled in this class yet.</td></tr>
                 ) : null}
               </tbody>
             </table>

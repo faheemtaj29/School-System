@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   EmptyState,
   Hero,
@@ -8,6 +8,7 @@ import {
   Panel,
   PortalAccessButton,
   StatusBadge,
+  inputClass,
 } from "@/components/ui";
 import { TeacherForm } from "@/components/forms/PeopleForms";
 import { ClassItem, SubjectItem, TeacherItem, fullName } from "@/lib/types";
@@ -19,6 +20,7 @@ export default function TeachersPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<TeacherItem | null>(null);
   const [filter, setFilter] = useState<"all" | "active" | "inactive">("all");
+  const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     const [t, s, c] = await Promise.all([
@@ -41,13 +43,18 @@ export default function TeachersPage() {
     load();
   }
 
-  const visible = teachers.filter((t) => filter === "all" || t.status === filter);
+  const visible = useMemo(() =>
+    teachers.filter((t) =>
+      (filter === "all" || t.status === filter) &&
+      (!search || fullName(t).toLowerCase().includes(search.toLowerCase()) ||
+       (t.employeeId && t.employeeId.toLowerCase().includes(search.toLowerCase())))
+    ), [teachers, filter, search]);
 
   return (
     <>
       <Hero
         title="Teachers & Staff"
-        subtitle={`${teachers.length} staff members · Main Campus`}
+        subtitle={`${teachers.length} staff member${teachers.length !== 1 ? "s" : ""} · Teaching faculty`}
         actionLabel="Add Staff"
         onAction={() => {
           setEditing(null);
@@ -56,6 +63,14 @@ export default function TeachersPage() {
       />
 
       <div className="toolbar">
+        <input
+          type="search"
+          className={inputClass}
+          placeholder="Search by name or employee ID…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ maxWidth: 260 }}
+        />
         <div className="chips">
           {(["all", "active", "inactive"] as const).map((f) => (
             <button

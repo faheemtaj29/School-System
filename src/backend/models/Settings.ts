@@ -80,6 +80,16 @@ export interface ISettings {
   feeGenerateDay?: number;
   /** "YYYY-MM" of the last automatic run, so each month runs once. */
   lastAutoFeeMonth?: string;
+  /** Older versions kept the logo here as a data URL; moved to logoData on first read. */
+  logoUrl?: string;
+  motto?: string;
+  website?: string;
+  city?: string;
+  province?: string;
+  country?: string;
+  principalName?: string;
+  boardName?: string;
+  fax?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -170,6 +180,15 @@ const SettingsSchema = new Schema<ISettings>(
     autoMonthlyFees: { type: Boolean, default: false },
     feeGenerateDay: { type: Number, default: 1, min: 1, max: 28 },
     lastAutoFeeMonth: String,
+    logoUrl: String,
+    motto: String,
+    website: String,
+    city: String,
+    province: String,
+    country: { type: String, default: "Pakistan" },
+    principalName: String,
+    boardName: String,
+    fax: String,
   },
   { timestamps: true }
 );

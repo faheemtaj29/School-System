@@ -7,7 +7,7 @@ import { ClassModel } from "@/backend/models/Class";
 import { Settings } from "@/backend/models/Settings";
 import { parseOptionalDate } from "@/backend/lib/http";
 import { ServiceError } from "@/backend/types";
-import type { PromoteInput, StudentInput } from "@/backend/validators/student.validator";
+import type { IssueTcInput, PromoteAllInput, PromoteInput, StudentInput } from "@/backend/validators/student.validator";
 import { reportsService } from "@/backend/services/reports.service";
 import { numberingService } from "@/backend/services/numbering.service";
 
@@ -185,5 +185,58 @@ export const studentService = {
         graduated: graduated.length,
       },
     };
+  },
+
+  /** Move every student in fromClassId to toClassId. Roll numbers unchanged. */
+  async promoteAll(input: PromoteAllInput) {
+    await dbConnect();
+    const [fromClass, toClass] = await Promise.all([
+      ClassModel.findById(input.fromClassId).lean(),
+      ClassModel.findById(input.toClassId).lean(),
+    ]);
+    if (!fromClass) throw new ServiceError("NOT_FOUND", "Source class not found", 404);
+    if (!toClass) throw new ServiceError("NOT_FOUND", "Target class not found", 404);
+
+    const result = await Student.updateMany(
+      { classId: input.fromClassId },
+      { $set: { classId: input.toClassId } }
+    );
+
+    return {
+      from: `${fromClass.name}-${fromClass.section} (${fromClass.academicYear})`,
+      to: `${toClass.name}-${toClass.section} (${toClass.academicYear})`,
+      promoted: result.modifiedCount,
+    };
+  },
+
+  /** Issue a Transfer / Leaving Certificate for one student. */
+  async issueTc(id: string, input: IssueTcInput) {
+    await dbConnect();
+    const student = await Student.findById(id).lean();
+    if (!student) throw new ServiceError("NOT_FOUND", "Student not found", 404);
+    if (student.tcNo) throw new ServiceError("VALIDATION", "TC already issued for this student", 400);
+
+    const year = new Date().getFullYear();
+    const count = await Student.countDocuments({ tcNo: { $exists: true, $ne: null } });
+    const tcNo = `TC-${year}-${String(count + 1).padStart(4, "0")}`;
+
+    const updated = await Student.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          tcNo,
+          tcIssuedDate: new Date(),
+          leavingDate: new Date(input.leavingDate),
+          leavingReason: input.leavingReason || "",
+          conductRemark: input.conductRemark || "Good",
+          status: "inactive",
+        },
+      },
+      { new: true }
+    )
+      .populate("classId", "name section academicYear")
+      .lean();
+
+    return updated;
   },
 };

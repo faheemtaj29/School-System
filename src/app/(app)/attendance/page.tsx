@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState, Field, Hero, NameCell, Panel, inputClass } from "@/components/ui";
 import { CheckCalendarIcon } from "@/components/Icons";
 import {
@@ -92,6 +92,21 @@ export default function AttendancePage() {
   const selectedClass = classes.find((c) => c._id === classId);
   const presentCount = records.filter((r) => r.status === "present").length;
 
+  const summary = useMemo(() => {
+    if (!history.length) return null;
+    const todayStr = toDateInput(new Date());
+    const todaySheets = history.filter((h) => toDateInput(new Date(h.date)) === todayStr);
+    const todayPresent = todaySheets.reduce((a, h) => a + h.records.filter((r) => r.status === "present").length, 0);
+    const todayTotal = todaySheets.reduce((a, h) => a + h.records.length, 0);
+    const recent = history.slice(0, 10);
+    const rates = recent.map((h) => {
+      const p = h.records.filter((r) => r.status === "present").length;
+      return h.records.length ? (p / h.records.length) * 100 : 0;
+    });
+    const avgRate = rates.length ? Math.round(rates.reduce((a, b) => a + b, 0) / rates.length) : 0;
+    return { todaySheets: todaySheets.length, todayPresent, todayTotal, avgRate, totalSheets: history.length };
+  }, [history]);
+
   return (
     <>
       <Hero
@@ -101,6 +116,31 @@ export default function AttendancePage() {
         actionIcon={<CheckCalendarIcon />}
         onAction={() => markAll("present")}
       />
+
+      {summary ? (
+        <div className="stat-row">
+          <div className="stat-tile">
+            <div className="st-val">{summary.todaySheets}</div>
+            <div className="st-lab">Classes marked today</div>
+          </div>
+          {summary.todayTotal > 0 ? (
+            <div className="stat-tile">
+              <div className="st-val">{summary.todayPresent}/{summary.todayTotal}</div>
+              <div className="st-lab">Present today</div>
+            </div>
+          ) : null}
+          <div className="stat-tile">
+            <div className="st-val" style={{ color: summary.avgRate >= 85 ? "var(--success, #16a34a)" : summary.avgRate >= 70 ? "var(--warn, #e97316)" : "var(--danger)" }}>
+              {summary.avgRate}%
+            </div>
+            <div className="st-lab">Avg attendance (recent)</div>
+          </div>
+          <div className="stat-tile">
+            <div className="st-val">{summary.totalSheets}</div>
+            <div className="st-lab">Total sheets recorded</div>
+          </div>
+        </div>
+      ) : null}
 
       <form onSubmit={onSubmit}>
         <Panel title="Daily Roll Call" meta={records.length ? `${presentCount}/${records.length} PRESENT` : undefined}>

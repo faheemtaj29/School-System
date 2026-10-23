@@ -98,6 +98,15 @@ export type StudentItem = {
   discountPercent?: number;
   linkedTeacherId?: TeacherItem | string | null;
   custom?: Record<string, unknown>;
+  cnic?: string;
+  nationality?: string;
+  religion?: string;
+  previousSchool?: string;
+  tcNo?: string;
+  tcIssuedDate?: string;
+  leavingDate?: string;
+  leavingReason?: string;
+  conductRemark?: string;
 };
 
 /** Campus selected in the top bar (shared across admin pages). */
@@ -152,6 +161,8 @@ export type FeeItem = {
   notes?: string;
   receiptNo?: string;
   billingMonth?: string;
+  lateFeeAmount?: number;
+  lateFeeApplied?: boolean;
 };
 
 export function idOf(value: IdRef | null | undefined): string {

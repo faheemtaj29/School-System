@@ -252,6 +252,7 @@ export default function AccountingPage() {
   const [expensePaymentMode, setExpensePaymentMode] = useState<"cash" | "bank">("cash");
   const [expensePaymentAccount, setExpensePaymentAccount] = useState("");
   const [accountForm, setAccountForm] = useState(accountBlank);
+  const [accountSimple, setAccountSimple] = useState(true);
   const [selected, setSelected] = useState<Voucher | null>(null);
   const [err, setErr] = useState("");
   const [bankEntries, setBankEntries] = useState<
@@ -1124,10 +1125,27 @@ export default function AccountingPage() {
   async function saveAccount(e: FormEvent) {
     e.preventDefault();
     setErr("");
+    let form = { ...accountForm };
+    // Simple mode: auto-generate code from parent code + next sequential number
+    if (accountSimple && !form.code && form.parentCode) {
+      const siblings = accounts.filter((a) => a.parentCode === form.parentCode);
+      const parentCode = form.parentCode;
+      let nextNum = siblings.length + 1;
+      let candidate = `${parentCode}0${nextNum}`;
+      while (accounts.some((a) => a.code === candidate)) {
+        nextNum++;
+        candidate = `${parentCode}0${nextNum}`;
+      }
+      form = { ...form, code: candidate };
+    }
+    if (!form.code) {
+      setErr("Account code is required");
+      return;
+    }
     const res = await fetch("/api/accounting", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "account", account: accountForm }),
+      body: JSON.stringify({ kind: "account", account: form }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -1135,6 +1153,22 @@ export default function AccountingPage() {
       return;
     }
     setAccountOpen(false);
+    load();
+  }
+
+  async function seedTemplate() {
+    if (!confirm("This will create a complete Chart of Accounts from the school template. Continue?")) return;
+    setErr("");
+    const res = await fetch("/api/accounting", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "seed" }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setErr(data.error || "Could not setup template");
+      return;
+    }
     load();
   }
 
@@ -1272,6 +1306,7 @@ export default function AccountingPage() {
         onAction={() => {
           if (navNode === "chart-of-accounts") {
             setAccountForm(accountBlank);
+            setAccountSimple(true);
             setErr("");
             setAccountOpen(true);
             return;
@@ -1305,10 +1340,16 @@ export default function AccountingPage() {
         }}
       />
 
-      <div className="chips" style={{ marginBottom: 10 }}>
-        <span className="filter-chip active">Accounting</span>
+      <div className="chips" style={{ marginBottom: 10, alignItems: "center" }}>
+        <span className="filter-chip">Accounting</span>
+        <span style={{ color: "var(--text-dim)", fontSize: 13, userSelect: "none" }}>›</span>
         <span className="filter-chip">{breadcrumb.section}</span>
-        <span className="filter-chip">{breadcrumb.leaf}</span>
+        {breadcrumb.section !== breadcrumb.leaf ? (
+          <>
+            <span style={{ color: "var(--text-dim)", fontSize: 13, userSelect: "none" }}>›</span>
+            <span className="filter-chip active">{breadcrumb.leaf}</span>
+          </>
+        ) : null}
       </div>
 
       {isDashboardNode ? (
@@ -1630,19 +1671,36 @@ export default function AccountingPage() {
 
       {activeTab === "coa" ? (
         <Panel title="5-Level Chart of Accounts" meta={`${accounts.length} ACCOUNTS`}>
-          <div className="form-actions no-print" style={{ marginTop: 0, marginBottom: 14 }}>
-            <button
-              type="button"
-              className="btn-dark"
-              onClick={() => {
-                setAccountForm(accountBlank);
-                setErr("");
-                setAccountOpen(true);
-              }}
-            >
-              Add Account
-            </button>
-          </div>
+          {accounts.length === 0 ? (
+            <div style={{ background: "var(--surface)", border: "1.5px dashed var(--line)", borderRadius: 10, padding: "24px 20px", marginBottom: 16, textAlign: "center" }}>
+              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>No accounts yet</div>
+              <div style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 16 }}>Set up a complete school Chart of Accounts in one click, or add accounts manually.</div>
+              <button type="button" className="btn-dark" onClick={seedTemplate} style={{ marginRight: 10 }}>
+                Setup from School Template
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => { setAccountForm(accountBlank); setAccountSimple(true); setErr(""); setAccountOpen(true); }}>
+                Add Account Manually
+              </button>
+            </div>
+          ) : (
+            <div className="form-actions no-print" style={{ marginTop: 0, marginBottom: 14 }}>
+              <button
+                type="button"
+                className="btn-dark"
+                onClick={() => {
+                  setAccountForm(accountBlank);
+                  setAccountSimple(true);
+                  setErr("");
+                  setAccountOpen(true);
+                }}
+              >
+                Add Account
+              </button>
+              <button type="button" className="btn-ghost" onClick={seedTemplate} style={{ marginLeft: 8 }}>
+                Re-seed Template
+              </button>
+            </div>
+          )}
           <div className="table-scroll">
             <table className="reg">
               <thead>
@@ -2396,46 +2454,106 @@ export default function AccountingPage() {
         </label>
       </ModalForm>
 
-      <ModalForm open={accountOpen} onClose={() => setAccountOpen(false)} onSubmit={saveAccount} title="Add Chart of Account" subtitle="Create a control or posting account at levels 1–5" submitLabel="Create Account" wide>
+      <ModalForm open={accountOpen} onClose={() => setAccountOpen(false)} onSubmit={saveAccount} title="Add Account" subtitle={accountSimple ? "Quick add — just name it and pick a category" : "Advanced: set code, level, and control/posting role"} submitLabel="Create Account" wide>
         {err ? <div className="alert err">{err}</div> : null}
-        <div className="form-grid">
-          <Field label="Account Code" required><input className={inputClass} value={accountForm.code} onChange={(e) => setAccountForm({ ...accountForm, code: e.target.value })} required /></Field>
-          <Field label="Account Name" required><input className={inputClass} value={accountForm.name} onChange={(e) => setAccountForm({ ...accountForm, name: e.target.value })} required /></Field>
-          <Field label="Account Type" required>
-            <select className={inputClass} value={accountForm.type} onChange={(e) => setAccountForm({ ...accountForm, type: e.target.value })}>
-              {["asset", "liability", "equity", "income", "expense"].map((type) => <option key={type} value={type}>{type}</option>)}
-            </select>
-          </Field>
-          <Field label="Level" required>
-            <select className={inputClass} value={accountForm.level} onChange={(e) => setAccountForm({ ...accountForm, level: Number(e.target.value), isControl: Number(e.target.value) < 5, isPosting: Number(e.target.value) === 5 })}>
-              {[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>Level {level}</option>)}
-            </select>
-          </Field>
-          {accountForm.level > 1 ? (
-            <Field label="Parent Account" required>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <button type="button" className="btn-ghost" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setAccountSimple((v) => !v)}>
+            {accountSimple ? "Advanced options ▾" : "Simple mode ▴"}
+          </button>
+        </div>
+        {accountSimple ? (
+          <div className="form-grid">
+            <Field label="Account Name" required>
+              <input className={inputClass} placeholder="e.g. Petty Cash, Lab Fee Income, Internet Bill" value={accountForm.name} onChange={(e) => setAccountForm({ ...accountForm, name: e.target.value })} required />
+            </Field>
+            <Field label="Category" required>
               <select className={inputClass} value={accountForm.parentCode} onChange={(e) => {
                 const parent = accounts.find((a) => a.code === e.target.value);
-                setAccountForm({ ...accountForm, parentCode: e.target.value, type: parent?.type || accountForm.type });
+                const nextLevel = (parent?.level ?? 4) + 1;
+                setAccountForm({ ...accountForm, parentCode: e.target.value, type: parent?.type || "asset", level: Math.min(nextLevel, 5), isPosting: true, isControl: false });
               }} required>
-                <option value="">Select level {accountForm.level - 1} parent</option>
-                {accounts.filter((a) => a.level === accountForm.level - 1).map((a) => <option key={a.code} value={a.code}>{a.code} — {a.name}</option>)}
+                <option value="">— Pick a category —</option>
+                {[
+                  { label: "Cash & Bank Accounts", types: ["asset"], keywords: ["cash", "bank"] },
+                  { label: "Fee Income", types: ["income"], keywords: ["fee", "income", "tuition"] },
+                  { label: "Salary & Payroll Expense", types: ["expense"], keywords: ["salary", "payroll", "wage"] },
+                  { label: "Utility & Operating Expense", types: ["expense"], keywords: ["utility", "utilities", "repair", "supply", "supplies", "general"] },
+                  { label: "Other Income", types: ["income"], keywords: ["income", "donation", "misc"] },
+                  { label: "Receivables (Student Fees Due)", types: ["asset"], keywords: ["receivable"] },
+                  { label: "Payables & Liabilities", types: ["liability"], keywords: ["payable", "liability"] },
+                ].map(({ label }) => {
+                  const parent = accounts.find((a) => a.level === 4 && (() => {
+                    const n = a.name.toLowerCase();
+                    if (label.startsWith("Cash")) return n.includes("cash") || n.includes("bank");
+                    if (label.startsWith("Fee Income")) return n.includes("fee") && a.type === "income";
+                    if (label.startsWith("Salary")) return n.includes("payroll") || n.includes("salary");
+                    if (label.startsWith("Utility")) return n.includes("util") || n.includes("supply") || n.includes("general") || n.includes("repair");
+                    if (label.startsWith("Other Income")) return n.includes("misc") || n.includes("other") || n.includes("donation");
+                    if (label.startsWith("Receivable")) return n.includes("receivable");
+                    if (label.startsWith("Payable")) return n.includes("payable") || n.includes("supplier");
+                    return false;
+                  })());
+                  return parent ? (
+                    <option key={parent.code} value={parent.code}>{label}</option>
+                  ) : null;
+                })}
+                <optgroup label="All Level-4 accounts">
+                  {accounts.filter((a) => a.level === 4).map((a) => (
+                    <option key={a.code} value={a.code}>{a.name} ({a.type})</option>
+                  ))}
+                </optgroup>
               </select>
             </Field>
-          ) : null}
-          <Field label="Role">
-            <select className={inputClass} value={accountForm.isPosting ? "posting" : "control"} onChange={(e) => setAccountForm({ ...accountForm, isPosting: e.target.value === "posting", isControl: e.target.value === "control" })}>
-              <option value="control">Control (no direct posting)</option>
-              <option value="posting">Posting account</option>
-            </select>
-          </Field>
-          <Field label="Opening Balance"><input type="number" min="0" className={inputClass} value={accountForm.openingBalance} onChange={(e) => setAccountForm({ ...accountForm, openingBalance: Number(e.target.value) })} /></Field>
-          <Field label="Opening Side">
-            <select className={inputClass} value={accountForm.openingBalanceSide} onChange={(e) => setAccountForm({ ...accountForm, openingBalanceSide: e.target.value })}><option value="debit">Debit</option><option value="credit">Credit</option></select>
-          </Field>
-          <Field label="Cash / Bank Account">
-            <select className={inputClass} value={accountForm.isCashBank ? "yes" : "no"} onChange={(e) => setAccountForm({ ...accountForm, isCashBank: e.target.value === "yes" })}><option value="no">No</option><option value="yes">Yes</option></select>
-          </Field>
-        </div>
+            <Field label="Opening Balance (optional)">
+              <input type="number" min="0" className={inputClass} placeholder="0" value={accountForm.openingBalance || ""} onChange={(e) => setAccountForm({ ...accountForm, openingBalance: Number(e.target.value) })} />
+            </Field>
+            <Field label="Is this a Cash or Bank Account?">
+              <select className={inputClass} value={accountForm.isCashBank ? "yes" : "no"} onChange={(e) => setAccountForm({ ...accountForm, isCashBank: e.target.value === "yes" })}>
+                <option value="no">No</option>
+                <option value="yes">Yes — include in Cash Book / Bank Book</option>
+              </select>
+            </Field>
+          </div>
+        ) : (
+          <div className="form-grid">
+            <Field label="Account Code" required><input className={inputClass} value={accountForm.code} onChange={(e) => setAccountForm({ ...accountForm, code: e.target.value })} required /></Field>
+            <Field label="Account Name" required><input className={inputClass} value={accountForm.name} onChange={(e) => setAccountForm({ ...accountForm, name: e.target.value })} required /></Field>
+            <Field label="Account Type" required>
+              <select className={inputClass} value={accountForm.type} onChange={(e) => setAccountForm({ ...accountForm, type: e.target.value })}>
+                {["asset", "liability", "equity", "income", "expense"].map((type) => <option key={type} value={type}>{type}</option>)}
+              </select>
+            </Field>
+            <Field label="Level" required>
+              <select className={inputClass} value={accountForm.level} onChange={(e) => setAccountForm({ ...accountForm, level: Number(e.target.value), isControl: Number(e.target.value) < 5, isPosting: Number(e.target.value) === 5 })}>
+                {[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>Level {level}{level === 5 ? " (posting)" : level <= 4 ? " (group)" : ""}</option>)}
+              </select>
+            </Field>
+            {accountForm.level > 1 ? (
+              <Field label="Parent Account" required>
+                <select className={inputClass} value={accountForm.parentCode} onChange={(e) => {
+                  const parent = accounts.find((a) => a.code === e.target.value);
+                  setAccountForm({ ...accountForm, parentCode: e.target.value, type: parent?.type || accountForm.type });
+                }} required>
+                  <option value="">Select level {accountForm.level - 1} parent</option>
+                  {accounts.filter((a) => a.level === accountForm.level - 1).map((a) => <option key={a.code} value={a.code}>{a.code} — {a.name}</option>)}
+                </select>
+              </Field>
+            ) : null}
+            <Field label="Role">
+              <select className={inputClass} value={accountForm.isPosting ? "posting" : "control"} onChange={(e) => setAccountForm({ ...accountForm, isPosting: e.target.value === "posting", isControl: e.target.value === "control" })}>
+                <option value="control">Control (group heading, no direct posting)</option>
+                <option value="posting">Posting account (transactions recorded here)</option>
+              </select>
+            </Field>
+            <Field label="Opening Balance"><input type="number" min="0" className={inputClass} value={accountForm.openingBalance} onChange={(e) => setAccountForm({ ...accountForm, openingBalance: Number(e.target.value) })} /></Field>
+            <Field label="Opening Side">
+              <select className={inputClass} value={accountForm.openingBalanceSide} onChange={(e) => setAccountForm({ ...accountForm, openingBalanceSide: e.target.value })}><option value="debit">Debit</option><option value="credit">Credit</option></select>
+            </Field>
+            <Field label="Cash / Bank Account">
+              <select className={inputClass} value={accountForm.isCashBank ? "yes" : "no"} onChange={(e) => setAccountForm({ ...accountForm, isCashBank: e.target.value === "yes" })}><option value="no">No</option><option value="yes">Yes — include in Cash / Bank book</option></select>
+            </Field>
+          </div>
+        )}
       </ModalForm>
 
       {selected ? <VoucherPrint voucher={selected} branches={branches} /> : null}

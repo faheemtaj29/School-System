@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Field, ModalForm, inputClass } from "@/components/ui";
+import { Field, ModalForm, OptionSelect, inputClass } from "@/components/ui";
 import {
   ClassItem,
   StudentItem,
@@ -19,6 +19,13 @@ type Props = {
   classes: ClassItem[];
 };
 
+function formatCnic(raw: string) {
+  const digits = raw.replace(/\D/g, "").slice(0, 13);
+  if (digits.length <= 5) return digits;
+  if (digits.length <= 12) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+  return `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12)}`;
+}
+
 const empty = {
   admissionNo: "",
   idMode: "auto",
@@ -29,6 +36,10 @@ const empty = {
   gender: "",
   dateOfBirth: "",
   address: "",
+  cnic: "",
+  nationality: "",
+  religion: "",
+  previousSchool: "",
   classId: "",
   rollNumber: "",
   parentName: "",
@@ -55,6 +66,8 @@ function useBranches() {
   return branches;
 }
 
+type FeeLine = { head: string; amount: string };
+
 export function StudentForm({ open, onClose, onSaved, initial, classes }: Props) {
   const [form, setForm] = useState(empty);
   const [error, setError] = useState("");
@@ -63,6 +76,9 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
     { key: string; label: string; fieldType: string; options?: string[]; required?: boolean; helpText?: string }[]
   >([]);
   const branches = useBranches();
+  // Admission fee lines (only for new admissions)
+  const [feeLines, setFeeLines] = useState<FeeLine[]>([]);
+  const [feeDue, setFeeDue] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -89,6 +105,10 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
         gender: initial.gender ?? "",
         dateOfBirth: toDateInput(initial.dateOfBirth),
         address: initial.address ?? "",
+        cnic: initial.cnic ?? "",
+        nationality: initial.nationality ?? "",
+        religion: initial.religion ?? "",
+        previousSchool: initial.previousSchool ?? "",
         classId: idOf(initial.classId),
         rollNumber: initial.rollNumber ?? "",
         parentName: initial.parentName ?? "",
@@ -104,6 +124,8 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
       });
     } else {
       setForm(empty);
+      setFeeLines([]);
+      setFeeDue("");
       fetch("/api/numbers?kind=student")
         .then((r) => r.json())
         .then((d) => {
@@ -142,6 +164,31 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
       setError(data.error || "Failed to save student");
       return;
     }
+    // Generate admission fee voucher if fee lines were specified
+    if (!initial && feeLines.length > 0 && feeDue) {
+      const validLines = feeLines.filter((l) => l.head && Number(l.amount) > 0);
+      if (validLines.length > 0) {
+        const studentId = data.student?._id;
+        if (studentId) {
+          const total = validLines.reduce((s, l) => s + Number(l.amount), 0);
+          await fetch("/api/fees", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              kind: "single",
+              studentId,
+              title: "Admission Fees",
+              dueDate: feeDue,
+              amount: total,
+              lines: validLines.map((l) => ({ head: l.head, amount: Number(l.amount) })),
+              branchCode: form.branchCode || "",
+            }),
+          });
+        }
+      }
+    }
+    setFeeLines([]);
+    setFeeDue("");
     onSaved();
     onClose();
   }
@@ -185,6 +232,24 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
         </Field>
         <Field label="Address">
           <input className={inputClass} value={form.address} onChange={(e) => set("address", e.target.value)} />
+        </Field>
+        <Field label="CNIC / B-Form No.">
+          <input
+            className={inputClass}
+            value={form.cnic}
+            onChange={(e) => set("cnic", formatCnic(e.target.value))}
+            placeholder="12345-1234567-1"
+            maxLength={15}
+          />
+        </Field>
+        <Field label="Nationality">
+          <input className={inputClass} value={form.nationality} onChange={(e) => set("nationality", e.target.value)} placeholder="e.g. Pakistani" />
+        </Field>
+        <Field label="Religion">
+          <input className={inputClass} value={form.religion} onChange={(e) => set("religion", e.target.value)} placeholder="e.g. Islam" />
+        </Field>
+        <Field label="Previous School">
+          <input className={inputClass} value={form.previousSchool} onChange={(e) => set("previousSchool", e.target.value)} placeholder="e.g. City Grammar School" />
         </Field>
       </div>
 
@@ -396,6 +461,64 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
               </Field>
             ))}
           </div>
+        </>
+      ) : null}
+
+      {/* Admission fee generation — new students only */}
+      {!initial ? (
+        <>
+          <div className="form-section-title">Admission Fees (optional)</div>
+          <p style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 12 }}>
+            Optionally generate a fee voucher for this student at the time of admission.
+          </p>
+          <div className="form-grid" style={{ marginBottom: 12 }}>
+            <Field label="Due Date">
+              <input
+                type="date"
+                className={inputClass}
+                value={feeDue}
+                onChange={(e) => setFeeDue(e.target.value)}
+              />
+            </Field>
+          </div>
+          {feeLines.map((line, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 140px 32px", gap: 8, marginBottom: 6, alignItems: "center" }}>
+              <OptionSelect
+                listKey="feeHeads"
+                value={line.head}
+                onChange={(v) => setFeeLines((prev) => prev.map((l, j) => j === i ? { ...l, head: v } : l))}
+                placeholder="Fee head…"
+              />
+              <input
+                type="number"
+                min={0}
+                className={inputClass}
+                placeholder="Amount"
+                value={line.amount}
+                onChange={(e) => setFeeLines((prev) => prev.map((l, j) => j === i ? { ...l, amount: e.target.value } : l))}
+              />
+              <button
+                type="button"
+                style={{ border: "none", background: "none", cursor: "pointer", color: "var(--danger)", fontSize: 18, lineHeight: 1, padding: 0 }}
+                onClick={() => setFeeLines((prev) => prev.filter((_, j) => j !== i))}
+                title="Remove"
+              >×</button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="btn-ghost"
+            style={{ fontSize: 12, marginTop: 4 }}
+            onClick={() => setFeeLines((prev) => [...prev, { head: "", amount: "" }])}
+          >
+            + Add fee head
+          </button>
+          {feeLines.length > 0 ? (
+            <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-dim)" }}>
+              Total: PKR {feeLines.reduce((s, l) => s + (Number(l.amount) || 0), 0).toLocaleString()}
+              {!feeDue ? " · Set a due date above to generate the voucher" : ""}
+            </div>
+          ) : null}
         </>
       ) : null}
     </ModalForm>

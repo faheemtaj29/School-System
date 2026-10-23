@@ -11,7 +11,7 @@ import {
   StatusBadge,
   inputClass,
 } from "@/components/ui";
-import { prettyDate } from "@/lib/types";
+import { ClassItem, prettyDate } from "@/lib/types";
 
 type Block = { title: string; text?: string };
 
@@ -110,16 +110,21 @@ export default function WebsitePage() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [convertId, setConvertId] = useState<string | null>(null);
+  const [convertClass, setConvertClass] = useState("");
 
   const load = useCallback(async () => {
     const qs = statusFilter ? `?status=${statusFilter}` : "";
-    const [site, leads] = await Promise.all([
+    const [site, leads, cls] = await Promise.all([
       fetch("/api/site").then((r) => r.json()),
       fetch(`/api/site/admissions${qs}`).then((r) => r.json()),
+      fetch("/api/classes").then((r) => r.json()),
     ]);
     if (site.content) setForm({ ...empty, ...site.content });
     setApps(leads.applications || []);
     setStats(leads.stats || { new: 0, contacted: 0, enrolled: 0, rejected: 0 });
+    setClasses(cls.classes || []);
   }, [statusFilter]);
 
   useEffect(() => {
@@ -173,6 +178,44 @@ export default function WebsitePage() {
     load();
   }
 
+  async function convertToStudent(appId: string) {
+    if (!convertClass) { setErr("Please select a class first"); return; }
+    const app = apps.find((a) => a._id === appId);
+    if (!app) return;
+    setErr("");
+    const nameParts = app.applicantName.trim().split(/\s+/);
+    const firstName = nameParts[0] || "Unknown";
+    const lastName = nameParts.slice(1).join(" ") || "-";
+    const res = await fetch("/api/students", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        firstName,
+        lastName,
+        classId: convertClass,
+        gender: app.gender || "",
+        dateOfBirth: app.dateOfBirth || "",
+        phone: app.phone || app.guardianPhone || "",
+        address: [app.address, app.city, app.province].filter(Boolean).join(", "),
+        cnic: app.studentCnic || "",
+        nationality: app.nationality || "",
+        religion: app.religion || "",
+        previousSchool: app.previousSchool || "",
+        parentName: app.guardianName || "",
+        parentPhone: app.guardianPhone || "",
+        parentEmail: app.guardianEmail || "",
+        branchCode: app.branchCode || "",
+        status: "active",
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setErr(data.error || "Could not create student"); return; }
+    await setStatus(appId, "enrolled");
+    setConvertId(null);
+    setConvertClass("");
+    setMsg(`Student enrolled — Admission No. ${data.student?.admissionNo || "assigned"}`);
+  }
+
   return (
     <>
       <Hero
@@ -217,6 +260,7 @@ export default function WebsitePage() {
       {tab === "content" ? (
         <Panel title="Public pages">
           <form onSubmit={save}>
+            <div className="form-section-label">Hero Content</div>
             <div className="form-grid">
               <Field label="School / brand name" required>
                 <input className={inputClass} value={form.brandName} onChange={(e) => setForm({ ...form, brandName: e.target.value })} required />
@@ -238,6 +282,7 @@ export default function WebsitePage() {
               </Field>
             </div>
 
+            <div className="form-section-label" style={{ marginTop: 20 }}>About & Admissions</div>
             <div className="form-grid" style={{ marginTop: 14 }}>
               <Field label="About heading" required>
                 <input className={inputClass} value={form.aboutTitle} onChange={(e) => setForm({ ...form, aboutTitle: e.target.value })} required />
@@ -256,6 +301,7 @@ export default function WebsitePage() {
               </Field>
             </div>
 
+            <div className="form-section-label" style={{ marginTop: 20 }}>Contact & Social</div>
             <div className="form-grid" style={{ marginTop: 14 }}>
               <Field label="Contact heading" required>
                 <input className={inputClass} value={form.contactTitle} onChange={(e) => setForm({ ...form, contactTitle: e.target.value })} required />
@@ -457,6 +503,19 @@ export default function WebsitePage() {
                                   Enrolled
                                 </button>
                               ) : null}
+                              {a.status === "offered" || a.status === "enrolled" ? (
+                                <button
+                                  type="button"
+                                  className="link-btn"
+                                  style={{ color: "var(--jade-dark, #16a34a)", fontWeight: 600 }}
+                                  onClick={() => {
+                                    setConvertId(convertId === a._id ? null : a._id);
+                                    setConvertClass("");
+                                  }}
+                                >
+                                  → Enroll as Student
+                                </button>
+                              ) : null}
                               {a.status !== "rejected" ? (
                                 <button
                                   type="button"
@@ -476,6 +535,44 @@ export default function WebsitePage() {
                             </div>
                           </td>
                         </tr>
+                        {convertId === a._id ? (
+                          <tr>
+                            <td colSpan={8} style={{ background: "var(--surface-raised, var(--card))", padding: "12px 16px" }}>
+                              <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+                                <div style={{ flex: "1 1 200px" }}>
+                                <Field label="Select class to enroll into">
+                                  <select
+                                    className={inputClass}
+                                    value={convertClass}
+                                    onChange={(e) => setConvertClass(e.target.value)}
+                                  >
+                                    <option value="">— choose class —</option>
+                                    {classes.map((c) => (
+                                      <option key={c._id} value={c._id}>
+                                        {c.name} - {c.section} ({c.academicYear})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </Field>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn-dark"
+                                  onClick={() => convertToStudent(a._id)}
+                                >
+                                  Create Student Record
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-ghost"
+                                  onClick={() => setConvertId(null)}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : null}
                         {open ? (
                           <tr>
                             <td colSpan={8}>

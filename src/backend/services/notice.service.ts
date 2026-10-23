@@ -27,6 +27,13 @@ export const noticeService = {
     });
   },
 
+  async update(id: string, data: Partial<NoticeInput>) {
+    await dbConnect();
+    const item = await Notice.findByIdAndUpdate(id, { $set: data }, { new: true });
+    if (!item) throw new ServiceError("NOT_FOUND", "Notice not found", 404);
+    return item;
+  },
+
   async remove(id: string) {
     await dbConnect();
     const item = await Notice.findByIdAndDelete(id);

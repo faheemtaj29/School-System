@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import { EmptyState, Field, Hero, ModalForm, NameCell, Panel, StatusBadge, inputClass } from "@/components/ui";
 import { TeacherItem, formatNumber, fullName, prettyDate, toDateInput } from "@/lib/types";
@@ -132,6 +132,13 @@ export default function HrPage() {
     load();
   }
 
+  const leaveStats = useMemo(() => ({
+    pending:  leaves.filter((l) => l.status === "pending").length,
+    approved: leaves.filter((l) => l.status === "approved").length,
+    rejected: leaves.filter((l) => l.status === "rejected").length,
+    totalDays: leaves.filter((l) => l.status === "approved").reduce((s, l) => s + l.days, 0),
+  }), [leaves]);
+
   return (
     <>
       <Hero
@@ -141,11 +148,21 @@ export default function HrPage() {
         onAction={() => (tab === "payroll" ? setPayOpen(true) : setLeaveOpen(true))}
       />
 
-      <div className="pay-stat-row">
-        <div className="pay-stat"><div className="tag">Payroll Total</div><div className="num">{cur} {formatNumber(payroll.total)}</div></div>
-        <div className="pay-stat"><div className="tag">Paid</div><div className="num" style={{ color: "var(--jade-dark)" }}>{cur} {formatNumber(payroll.paid)}</div></div>
-        <div className="pay-stat"><div className="tag">Pending</div><div className="num" style={{ color: "#96650f" }}>{cur} {formatNumber(payroll.pending)}</div></div>
-      </div>
+      {tab === "payroll" ? (
+        <div className="pay-stat-row">
+          <div className="pay-stat"><div className="tag">Payroll Total</div><div className="num">{cur} {formatNumber(payroll.total)}</div></div>
+          <div className="pay-stat"><div className="tag">Paid</div><div className="num" style={{ color: "var(--jade-dark)" }}>{cur} {formatNumber(payroll.paid)}</div></div>
+          <div className="pay-stat"><div className="tag">Pending</div><div className="num" style={{ color: "#96650f" }}>{cur} {formatNumber(payroll.pending)}</div></div>
+          <div className="pay-stat"><div className="tag">Draft</div><div className="num">{payroll.draft}</div></div>
+        </div>
+      ) : (
+        <div className="pay-stat-row">
+          <div className="pay-stat"><div className="tag">Pending</div><div className="num" style={{ color: "#96650f" }}>{leaveStats.pending}</div></div>
+          <div className="pay-stat"><div className="tag">Approved</div><div className="num" style={{ color: "var(--jade-dark)" }}>{leaveStats.approved}</div></div>
+          <div className="pay-stat"><div className="tag">Rejected</div><div className="num">{leaveStats.rejected}</div></div>
+          <div className="pay-stat"><div className="tag">Approved Days</div><div className="num">{leaveStats.totalDays}</div></div>
+        </div>
+      )}
 
       <div className="tabs">
         <button type="button" className={`tab${tab === "payroll" ? " active" : ""}`} onClick={() => setTab("payroll")}>Payroll</button>

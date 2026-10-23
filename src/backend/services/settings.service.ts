@@ -59,6 +59,15 @@ export const settingsService = {
       const created = await Settings.create(defaults);
       doc = created.toObject();
     }
+    // Older versions saved the uploaded logo as a data URL in `logoUrl`; move it to logoData once.
+    if (typeof doc.logoUrl === "string" && doc.logoUrl.startsWith("data:image/") && !doc.logoUpdatedAt) {
+      const logoUpdatedAt = new Date();
+      await Settings.updateOne(
+        { _id: doc._id },
+        { $set: { logoData: doc.logoUrl, logoUpdatedAt }, $unset: { logoUrl: 1 } }
+      );
+      doc = { ...doc, logoUpdatedAt, logoUrl: undefined };
+    }
     if (!doc.branches?.length) {
       doc = {
         ...doc,
@@ -79,6 +88,8 @@ export const settingsService = {
 
   async update(data: SettingsInput) {
     await dbConnect();
+    // The logo is managed by /api/settings/logo; never overwrite it from the profile form.
+    delete (data as { logoUrl?: string }).logoUrl;
     const current = await Settings.findOne().lean();
     const branches = (data.branches || []).map((b) => ({
       ...b,

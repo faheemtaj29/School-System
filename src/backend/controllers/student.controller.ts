@@ -9,7 +9,7 @@ import {
   requireAuth,
 } from "@/backend/lib/http";
 import { studentService } from "@/backend/services/student.service";
-import { promoteSchema, studentSchema } from "@/backend/validators/student.validator";
+import { issueTcSchema, promoteAllSchema, promoteSchema, studentSchema } from "@/backend/validators/student.validator";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -51,6 +51,11 @@ export const studentController = {
         if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
         return jsonOk(await studentService.promotePassed(parsed.data), 201);
       }
+      if (body.kind === "promote-all") {
+        const parsed = promoteAllSchema.safeParse(body);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        return jsonOk(await studentService.promoteAll(parsed.data), 201);
+      }
       const parsed = studentSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
       const student = await studentService.create(parsed.data);
@@ -66,6 +71,11 @@ export const studentController = {
     try {
       const { id } = await ctx.params;
       const body = await req.json();
+      if (body.kind === "issue-tc") {
+        const parsed = issueTcSchema.safeParse(body);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        return jsonOk({ student: await studentService.issueTc(id, parsed.data) });
+      }
       const parsed = studentSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
       const student = await studentService.update(id, parsed.data);

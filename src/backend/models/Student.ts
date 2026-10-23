@@ -28,6 +28,16 @@ export interface IStudent {
     | "custom";
   discountPercent?: number;
   linkedTeacherId?: Types.ObjectId;
+  cnic?: string;
+  nationality?: string;
+  religion?: string;
+  previousSchool?: string;
+  /** Transfer / Leaving Certificate fields */
+  tcNo?: string;
+  tcIssuedDate?: Date;
+  leavingDate?: Date;
+  leavingReason?: string;
+  conductRemark?: string;
   /** Extensible key/value bag for CustomField definitions. */
   custom?: Record<string, unknown>;
   user?: Types.ObjectId;
@@ -64,6 +74,15 @@ const StudentSchema = new Schema<IStudent>(
     },
     discountPercent: { type: Number, default: 0, min: 0, max: 100 },
     linkedTeacherId: { type: Schema.Types.ObjectId, ref: "Teacher" },
+    cnic: { type: String, trim: true },
+    nationality: String,
+    religion: String,
+    previousSchool: String,
+    tcNo: { type: String, sparse: true },
+    tcIssuedDate: Date,
+    leavingDate: Date,
+    leavingReason: String,
+    conductRemark: String,
     custom: { type: Schema.Types.Mixed, default: {} },
     user: { type: Schema.Types.ObjectId, ref: "User" },
   },

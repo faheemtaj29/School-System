@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   EmptyState,
   Hero,
@@ -8,20 +9,35 @@ import {
   Panel,
   PortalAccessButton,
   StatusBadge,
+  inputClass,
+  Field,
 } from "@/components/ui";
 import { StudentForm } from "@/components/forms/PeopleForms";
-import { ClassItem, StudentItem, fullName, labelOfClass } from "@/lib/types";
+import { ClassItem, StudentItem, fullName, labelOfClass, prettyDate, toDateInput } from "@/lib/types";
+
+type DocTab = "admission" | "tc";
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<StudentItem[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [branches, setBranches] = useState<{ code: string; name: string }[]>([]);
+  const [schoolName, setSchoolName] = useState("Sabaq Model School");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<StudentItem | null>(null);
   const [filterClass, setFilterClass] = useState("");
   const [filterBranch, setFilterBranch] = useState("");
+  const [search, setSearch] = useState("");
   const [promoteMsg, setPromoteMsg] = useState("");
   const [promoting, setPromoting] = useState(false);
+  // Documents modal
+  const [docStudent, setDocStudent] = useState<StudentItem | null>(null);
+  const [docTab, setDocTab] = useState<DocTab>("admission");
+  const [tcForm, setTcForm] = useState({
+    leavingDate: toDateInput(new Date()),
+    leavingReason: "",
+    conductRemark: "Good",
+  });
+  const [tcMsg, setTcMsg] = useState("");
 
   const load = useCallback(async () => {
     const qs = new URLSearchParams();
@@ -36,6 +52,7 @@ export default function StudentsPage() {
     setStudents(s.students || []);
     setClasses(c.classes || []);
     setBranches(st.settings?.branches || []);
+    if (st.settings?.schoolName) setSchoolName(st.settings.schoolName);
   }, [filterClass, filterBranch]);
 
   useEffect(() => {
@@ -46,6 +63,43 @@ export default function StudentsPage() {
     if (!confirm("Delete this student record?")) return;
     await fetch(`/api/students/${id}`, { method: "DELETE" });
     load();
+  }
+
+  async function issueTc(e: FormEvent) {
+    e.preventDefault();
+    if (!docStudent) return;
+    setTcMsg("");
+    const res = await fetch(`/api/students/${docStudent._id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "issue-tc", ...tcForm }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setTcMsg(data.error || "Could not issue TC");
+      return;
+    }
+    setTcMsg(`TC issued: ${data.student?.tcNo || ""}`);
+    // Refresh student in state with new TC fields
+    setDocStudent(data.student);
+    load();
+  }
+
+  function openDoc(s: StudentItem) {
+    setDocStudent(s);
+    setDocTab(s.tcNo ? "tc" : "admission");
+    setTcMsg("");
+    setTcForm({
+      leavingDate: toDateInput(new Date()),
+      leavingReason: "",
+      conductRemark: "Good",
+    });
+  }
+
+  function dobInWords(dob?: string) {
+    if (!dob) return "—";
+    const d = new Date(dob);
+    return d.toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
   }
 
   async function promoteClass(dryRun: boolean) {
@@ -85,6 +139,17 @@ export default function StudentsPage() {
   }
 
   const activeClass = classes.find((c) => c._id === filterClass);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return students;
+    const q = search.toLowerCase();
+    return students.filter(
+      (s) =>
+        fullName(s).toLowerCase().includes(q) ||
+        (s.admissionNo || "").toLowerCase().includes(q) ||
+        (s.rollNumber || "").toLowerCase().includes(q)
+    );
+  }, [students, search]);
 
   return (
     <>
@@ -131,6 +196,13 @@ export default function StudentsPage() {
       ) : null}
 
       <div className="toolbar">
+        <input
+          className={inputClass}
+          style={{ maxWidth: 260, marginBottom: 0 }}
+          placeholder="Search by name, admission no. or roll no."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
         <div className="chips">
           <button
             type="button"
@@ -173,15 +245,15 @@ export default function StudentsPage() {
         ) : null}
       </div>
 
-      {!students.length ? (
-        <EmptyState message="No students found. Create a class first, then enroll students." />
+      {!filtered.length ? (
+        <EmptyState message={search ? `No students match "${search}".` : "No students found. Create a class first, then enroll students."} />
       ) : (
         <Panel
           title="Class Register"
           meta={
             activeClass
               ? `GRADE ${activeClass.name} — SECTION ${activeClass.section}`
-              : "ALL CLASSES"
+              : `ALL CLASSES · ${filtered.length} SHOWN`
           }
         >
           <div className="table-scroll">
@@ -199,7 +271,7 @@ export default function StudentsPage() {
                 </tr>
               </thead>
               <tbody>
-                {students.map((s) => (
+                {filtered.map((s) => (
                   <tr key={s._id}>
                     <td className="num">{s.rollNumber || "—"}</td>
                     <td>
@@ -218,6 +290,16 @@ export default function StudentsPage() {
                     </td>
                     <td>
                       <div className="row-actions">
+                        <Link href={`/students/${s._id}`} className="link-btn">
+                          Profile
+                        </Link>
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={() => openDoc(s)}
+                        >
+                          Docs
+                        </button>
                         <button
                           type="button"
                           className="link-btn"
@@ -258,6 +340,310 @@ export default function StudentsPage() {
         initial={editing}
         classes={classes}
       />
+
+      {/* ── Documents Modal ── */}
+      {docStudent ? (
+        <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setDocStudent(null); }}>
+          <div
+            className="modal"
+            style={{ maxWidth: 680, width: "95vw" }}
+          >
+            <div style={{ overflowY: "auto", maxHeight: "calc(90vh - 40px)", padding: "22px 26px 24px" }}>
+            {/* Tab bar */}
+            <div className="chips" style={{ marginBottom: 18 }}>
+              <button
+                type="button"
+                className={`filter-chip${docTab === "admission" ? " active" : ""}`}
+                onClick={() => setDocTab("admission")}
+              >
+                Admission Form
+              </button>
+              <button
+                type="button"
+                className={`filter-chip${docTab === "tc" ? " active" : ""}`}
+                onClick={() => setDocTab("tc")}
+              >
+                Leaving Certificate
+              </button>
+            </div>
+
+            {/* ─── ADMISSION FORM ─── */}
+            {docTab === "admission" ? (
+              <div className="print-doc">
+                <div className="print-header">
+                  <h2 className="print-school">{schoolName}</h2>
+                  <h3 className="print-title">Student Admission Form</h3>
+                </div>
+                <div className="print-section-title">Student Information</div>
+                <div className="print-grid">
+                  <div className="print-field">
+                    <span className="print-label">Admission No.</span>
+                    <span className="print-val">{docStudent.admissionNo}</span>
+                  </div>
+                  <div className="print-field">
+                    <span className="print-label">Roll No.</span>
+                    <span className="print-val">{docStudent.rollNumber || "—"}</span>
+                  </div>
+                  <div className="print-field">
+                    <span className="print-label">Full Name</span>
+                    <span className="print-val">{fullName(docStudent)}</span>
+                  </div>
+                  <div className="print-field">
+                    <span className="print-label">Class / Section</span>
+                    <span className="print-val">{labelOfClass(docStudent.classId as never)}</span>
+                  </div>
+                  <div className="print-field">
+                    <span className="print-label">Date of Birth</span>
+                    <span className="print-val">{dobInWords(docStudent.dateOfBirth)}</span>
+                  </div>
+                  <div className="print-field">
+                    <span className="print-label">Gender</span>
+                    <span className="print-val" style={{ textTransform: "capitalize" }}>
+                      {docStudent.gender || "—"}
+                    </span>
+                  </div>
+                  <div className="print-field">
+                    <span className="print-label">CNIC / B-Form No.</span>
+                    <span className="print-val">{docStudent.cnic || "—"}</span>
+                  </div>
+                  <div className="print-field">
+                    <span className="print-label">Nationality</span>
+                    <span className="print-val">{docStudent.nationality || "Pakistani"}</span>
+                  </div>
+                  <div className="print-field">
+                    <span className="print-label">Religion</span>
+                    <span className="print-val">{docStudent.religion || "—"}</span>
+                  </div>
+                  <div className="print-field full">
+                    <span className="print-label">Address</span>
+                    <span className="print-val">{docStudent.address || "—"}</span>
+                  </div>
+                  <div className="print-field">
+                    <span className="print-label">Phone</span>
+                    <span className="print-val">{docStudent.phone || "—"}</span>
+                  </div>
+                  <div className="print-field">
+                    <span className="print-label">Email</span>
+                    <span className="print-val">{docStudent.email || "—"}</span>
+                  </div>
+                  <div className="print-field">
+                    <span className="print-label">Previous School</span>
+                    <span className="print-val">{docStudent.previousSchool || "—"}</span>
+                  </div>
+                  <div className="print-field">
+                    <span className="print-label">Admission Date</span>
+                    <span className="print-val">
+                      {docStudent.admissionDate ? prettyDate(docStudent.admissionDate) : "—"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="print-section-title" style={{ marginTop: 20 }}>
+                  Parent / Guardian Information
+                </div>
+                <div className="print-grid">
+                  <div className="print-field">
+                    <span className="print-label">Parent / Guardian Name</span>
+                    <span className="print-val">{docStudent.parentName || "—"}</span>
+                  </div>
+                  <div className="print-field">
+                    <span className="print-label">Contact Number</span>
+                    <span className="print-val">{docStudent.parentPhone || "—"}</span>
+                  </div>
+                  <div className="print-field">
+                    <span className="print-label">Parent Email</span>
+                    <span className="print-val">{docStudent.parentEmail || "—"}</span>
+                  </div>
+                </div>
+
+                <div className="print-sig-row">
+                  <div className="print-sig">
+                    <div className="print-sig-line" />
+                    <div className="print-sig-label">Parent / Guardian Signature</div>
+                  </div>
+                  <div className="print-sig">
+                    <div className="print-sig-line" />
+                    <div className="print-sig-label">Principal Signature & Stamp</div>
+                  </div>
+                </div>
+
+                <div className="form-actions no-print" style={{ marginTop: 20 }}>
+                  <button type="button" className="btn-dark" onClick={() => {
+                    document.body.classList.add("printing-modal");
+                    window.print();
+                    setTimeout(() => document.body.classList.remove("printing-modal"), 500);
+                  }}>
+                    Print Admission Form
+                  </button>
+                  <button type="button" className="btn-ghost" onClick={() => setDocStudent(null)}>
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {/* ─── LEAVING CERTIFICATE / TC ─── */}
+            {docTab === "tc" ? (
+              <div>
+                {/* If TC already issued — show it */}
+                {docStudent.tcNo ? (
+                  <div className="print-doc">
+                    <div className="print-header">
+                      <h2 className="print-school">{schoolName}</h2>
+                      <h3 className="print-title">Transfer / Leaving Certificate</h3>
+                      <div style={{ fontSize: 13, color: "var(--text-dim)" }}>
+                        TC No: <strong>{docStudent.tcNo}</strong> &nbsp;·&nbsp; Issued:{" "}
+                        {docStudent.tcIssuedDate ? prettyDate(docStudent.tcIssuedDate) : "—"}
+                      </div>
+                    </div>
+
+                    <div className="print-grid">
+                      <div className="print-field full">
+                        <span className="print-label">This is to certify that</span>
+                        <span className="print-val" style={{ fontWeight: 600 }}>
+                          {fullName(docStudent)}
+                        </span>
+                      </div>
+                      <div className="print-field">
+                        <span className="print-label">Admission No.</span>
+                        <span className="print-val">{docStudent.admissionNo}</span>
+                      </div>
+                      <div className="print-field">
+                        <span className="print-label">Son / Daughter of</span>
+                        <span className="print-val">{docStudent.parentName || "—"}</span>
+                      </div>
+                      <div className="print-field">
+                        <span className="print-label">Date of Birth</span>
+                        <span className="print-val">{dobInWords(docStudent.dateOfBirth)}</span>
+                      </div>
+                      <div className="print-field">
+                        <span className="print-label">Class Last Attended</span>
+                        <span className="print-val">{labelOfClass(docStudent.classId as never)}</span>
+                      </div>
+                      <div className="print-field">
+                        <span className="print-label">Date of Admission</span>
+                        <span className="print-val">
+                          {docStudent.admissionDate ? prettyDate(docStudent.admissionDate) : "—"}
+                        </span>
+                      </div>
+                      <div className="print-field">
+                        <span className="print-label">Date of Leaving</span>
+                        <span className="print-val">
+                          {docStudent.leavingDate ? prettyDate(docStudent.leavingDate) : "—"}
+                        </span>
+                      </div>
+                      <div className="print-field">
+                        <span className="print-label">Reason for Leaving</span>
+                        <span className="print-val">{docStudent.leavingReason || "—"}</span>
+                      </div>
+                      <div className="print-field">
+                        <span className="print-label">Conduct / Character</span>
+                        <span className="print-val">{docStudent.conductRemark || "Good"}</span>
+                      </div>
+                      <div className="print-field">
+                        <span className="print-label">Dues Clearance</span>
+                        <span className="print-val">All dues cleared</span>
+                      </div>
+                    </div>
+
+                    <div className="print-sig-row">
+                      <div className="print-sig">
+                        <div className="print-sig-line" />
+                        <div className="print-sig-label">Class Teacher</div>
+                      </div>
+                      <div className="print-sig">
+                        <div className="print-sig-line" />
+                        <div className="print-sig-label">Principal Signature & Stamp</div>
+                      </div>
+                    </div>
+
+                    <div className="form-actions no-print" style={{ marginTop: 20 }}>
+                      <button type="button" className="btn-dark" onClick={() => {
+                        document.body.classList.add("printing-modal");
+                        window.print();
+                        setTimeout(() => document.body.classList.remove("printing-modal"), 500);
+                      }}>
+                        Print TC
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        onClick={() => setDocStudent(null)}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Issue TC form */
+                  <form onSubmit={issueTc}>
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
+                        Issue Leaving Certificate
+                      </div>
+                      <div style={{ fontSize: 13, color: "var(--text-dim)" }}>
+                        Student: <strong>{fullName(docStudent)}</strong> ·{" "}
+                        {labelOfClass(docStudent.classId as never)}
+                      </div>
+                    </div>
+                    {tcMsg ? <div className="alert" style={{ marginBottom: 12 }}>{tcMsg}</div> : null}
+                    <div className="form-grid">
+                      <Field label="Date of Leaving" required>
+                        <input
+                          type="date"
+                          className={inputClass}
+                          value={tcForm.leavingDate}
+                          onChange={(e) => setTcForm({ ...tcForm, leavingDate: e.target.value })}
+                          required
+                        />
+                      </Field>
+                      <Field label="Reason for Leaving">
+                        <input
+                          type="text"
+                          className={inputClass}
+                          value={tcForm.leavingReason}
+                          onChange={(e) => setTcForm({ ...tcForm, leavingReason: e.target.value })}
+                          placeholder="e.g. Transfer, Fee default, Completion…"
+                        />
+                      </Field>
+                      <Field label="Conduct / Character Remark">
+                        <select
+                          className={inputClass}
+                          value={tcForm.conductRemark}
+                          onChange={(e) => setTcForm({ ...tcForm, conductRemark: e.target.value })}
+                        >
+                          <option>Good</option>
+                          <option>Very Good</option>
+                          <option>Excellent</option>
+                          <option>Satisfactory</option>
+                          <option>Below Average</option>
+                        </select>
+                      </Field>
+                    </div>
+                    <p style={{ fontSize: 12, color: "var(--text-dim)", margin: "12px 0" }}>
+                      Issuing a TC will set this student&apos;s status to Inactive and assign a
+                      unique TC number.
+                    </p>
+                    <div className="form-actions">
+                      <button type="submit" className="btn-dark">
+                        Issue TC
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        onClick={() => setDocStudent(null)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            ) : null}
+            </div>{/* end scrollable wrapper */}
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

@@ -13,6 +13,16 @@ import {
   idOf,
 } from "@/lib/types";
 
+type SessionItem = {
+  _id: string;
+  name: string;
+  code: string;
+  status: "draft" | "active" | "closed";
+  startDate?: string;
+  endDate?: string;
+  classCount?: number;
+};
+
 type CatalogStage = {
   key: string;
   label: string;
@@ -40,14 +50,28 @@ export default function ClassesPage() {
 
   const [yearFilter, setYearFilter] = useState("");
 
+  // Sessions
+  const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [pageTab, setPageTab] = useState<"classes" | "sessions">("classes");
+  const [sessionForm, setSessionForm] = useState({ name: "", startDate: "", endDate: "", activate: false, copyClassesFrom: "" });
+  const [sessionMsg, setSessionMsg] = useState("");
+  const [sessionLoading, setSessionLoading] = useState(false);
+
+  // Promote
+  const [promoteClass, setPromoteClass] = useState<ClassItem | null>(null);
+  const [promoteTarget, setPromoteTarget] = useState("");
+  const [promoteMsg, setPromoteMsg] = useState("");
+  const [promoting, setPromoting] = useState(false);
+
   const load = useCallback(async () => {
-    const [c, t, s, sub, cat, settings] = await Promise.all([
+    const [c, t, s, sub, cat, settings, sess] = await Promise.all([
       fetch("/api/classes").then((r) => r.json()),
       fetch("/api/teachers").then((r) => r.json()),
       fetch("/api/students").then((r) => r.json()),
       fetch("/api/subjects").then((r) => r.json()),
       fetch("/api/classes?view=curriculum").then((r) => r.json()),
       fetch("/api/settings").then((r) => r.json()),
+      fetch("/api/sessions").then((r) => r.json()),
     ]);
     setClasses(c.classes || []);
     setTeachers(t.teachers || []);
@@ -62,7 +86,57 @@ export default function ClassesPage() {
       setYear(activeYear);
       setYearFilter((f) => f || activeYear);
     }
+    setSessions(sess.sessions || []);
   }, []);
+
+  async function addSession() {
+    if (!sessionForm.name.trim()) return;
+    setSessionLoading(true);
+    setSessionMsg("");
+    const res = await fetch("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: sessionForm.name.trim(),
+        startDate: sessionForm.startDate || null,
+        endDate: sessionForm.endDate || null,
+        activate: sessionForm.activate,
+        copyClassesFrom: sessionForm.copyClassesFrom || null,
+      }),
+    });
+    const data = await res.json();
+    setSessionLoading(false);
+    if (!res.ok) { setSessionMsg(data.error || "Could not create session"); return; }
+    setSessionMsg(`Session "${sessionForm.name}" created.`);
+    setSessionForm({ name: "", startDate: "", endDate: "", activate: false, copyClassesFrom: "" });
+    load();
+  }
+
+  async function activateSession(id: string) {
+    const res = await fetch(`/api/sessions/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "activate" }),
+    });
+    if (res.ok) load();
+    else { const d = await res.json(); alert(d.error || "Could not activate"); }
+  }
+
+  async function promoteAll() {
+    if (!promoteClass || !promoteTarget) return;
+    setPromoting(true);
+    setPromoteMsg("");
+    const res = await fetch("/api/students", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "promote-all", fromClassId: promoteClass._id, toClassId: promoteTarget }),
+    });
+    const data = await res.json();
+    setPromoting(false);
+    if (!res.ok) { setPromoteMsg(data.error || "Promotion failed"); return; }
+    setPromoteMsg(`Done: ${data.promoted} student(s) moved from ${data.from} → ${data.to}`);
+    load();
+  }
 
   useEffect(() => {
     load();
@@ -136,6 +210,14 @@ export default function ClassesPage() {
     .filter((s) => picked.includes(s.key))
     .reduce((sum, s) => sum + s.classes, 0);
 
+  // Classes eligible as promote targets (exclude the source class itself)
+  const promoteTargets = useMemo(() => {
+    if (!promoteClass) return [];
+    return classes
+      .filter((c) => c._id !== promoteClass._id)
+      .sort((a, b) => (a.level ?? 0) - (b.level ?? 0) || a.academicYear.localeCompare(b.academicYear) || a.name.localeCompare(b.name));
+  }, [classes, promoteClass]);
+
   return (
     <>
       <Hero
@@ -176,8 +258,18 @@ export default function ClassesPage() {
           ))}
           <option value="unassigned">Unassigned</option>
         </select>
-        <button type="button" className="btn-dark" onClick={() => setLibrary((v) => !v)}>
-          {library ? "Hide Curriculum Library" : "Curriculum Library"}
+        <button type="button" className="btn-ghost" onClick={() => setLibrary((v) => !v)}>
+          {library ? "Hide Library" : "Curriculum Library"}
+        </button>
+      </div>
+
+      <div className="tabs">
+        <button type="button" className={`tab${pageTab === "classes" ? " active" : ""}`} onClick={() => setPageTab("classes")}>
+          Classes &amp; Sections
+        </button>
+        <button type="button" className={`tab${pageTab === "sessions" ? " active" : ""}`} onClick={() => setPageTab("sessions")}>
+          Academic Sessions
+          {sessions.length > 0 ? <span className="chip-badge" style={{ marginLeft: 5 }}>{sessions.length}</span> : null}
         </button>
       </div>
 
@@ -247,11 +339,133 @@ export default function ClassesPage() {
         </Panel>
       ) : null}
 
-      {!classes.length ? (
-        <EmptyState message="No classes yet. Import the curriculum library above or add a class manually." />
-      ) : (
-        grouped.map((group) => (
-          <div key={group.key} style={{ marginBottom: 8 }}>
+      {pageTab === "sessions" ? (
+        <Panel title="Academic Sessions" meta={`${sessions.length} sessions`}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginBottom: 16 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                <th style={{ textAlign: "left", padding: "4px 8px" }}>Session</th>
+                <th style={{ textAlign: "left", padding: "4px 8px" }}>Code</th>
+                <th style={{ textAlign: "left", padding: "4px 8px" }}>Classes</th>
+                <th style={{ textAlign: "left", padding: "4px 8px" }}>Status</th>
+                <th style={{ padding: "4px 8px" }} />
+              </tr>
+            </thead>
+            <tbody>
+              {sessions.map((s) => (
+                <tr key={s._id} style={{ borderBottom: "1px solid var(--border-light, #eee)" }}>
+                  <td style={{ padding: "6px 8px", fontWeight: 600 }}>{s.name}</td>
+                  <td style={{ padding: "6px 8px", color: "var(--text-dim)" }}>{s.code}</td>
+                  <td style={{ padding: "6px 8px" }}>{s.classCount ?? 0}</td>
+                  <td style={{ padding: "6px 8px" }}>
+                    <span style={{
+                      display: "inline-block", padding: "2px 8px", borderRadius: 99, fontSize: 11,
+                      background: s.status === "active" ? "var(--green-bg, #d4f7e7)" : s.status === "closed" ? "var(--red-bg, #fde8e8)" : "var(--bg-soft, #f0f0f0)",
+                      color: s.status === "active" ? "var(--green, #157A5C)" : s.status === "closed" ? "var(--red, #c0392b)" : "var(--text-dim)",
+                    }}>
+                      {s.status}
+                    </span>
+                  </td>
+                  <td style={{ padding: "6px 8px" }}>
+                    {s.status !== "active" && (
+                      <button type="button" className="link-btn" onClick={() => activateSession(s._id)}>
+                        Activate
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {!sessions.length && (
+                <tr><td colSpan={5} style={{ padding: "12px 8px", color: "var(--text-dim)", textAlign: "center" }}>No sessions yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+
+          <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Add New Session</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                Session Name *
+                <input className="inp" style={{ minWidth: 160 }} placeholder="e.g. 2025–26" value={sessionForm.name} onChange={(e) => setSessionForm((f) => ({ ...f, name: e.target.value }))} />
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                Start Date
+                <input className="inp" type="date" value={sessionForm.startDate} onChange={(e) => setSessionForm((f) => ({ ...f, startDate: e.target.value }))} />
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                End Date
+                <input className="inp" type="date" value={sessionForm.endDate} onChange={(e) => setSessionForm((f) => ({ ...f, endDate: e.target.value }))} />
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                Copy classes from
+                <select className="inp" value={sessionForm.copyClassesFrom} onChange={(e) => setSessionForm((f) => ({ ...f, copyClassesFrom: e.target.value }))}>
+                  <option value="">None</option>
+                  {sessions.map((s) => <option key={s._id} value={s.name}>{s.name}</option>)}
+                </select>
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, marginBottom: 2 }}>
+                <input type="checkbox" checked={sessionForm.activate} onChange={(e) => setSessionForm((f) => ({ ...f, activate: e.target.checked }))} />
+                Set as active
+              </label>
+              <button type="button" className="btn-primary" disabled={sessionLoading || !sessionForm.name.trim()} onClick={addSession}>
+                {sessionLoading ? "Adding…" : "Add Session"}
+              </button>
+            </div>
+            {sessionMsg && <div className="alert ok" style={{ marginTop: 10 }}>{sessionMsg}</div>}
+          </div>
+        </Panel>
+      ) : null}
+
+      {/* Promote Students Modal */}
+      {promoteClass && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 1000,
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+        }}>
+          <div style={{
+            background: "var(--surface, #fff)", borderRadius: 12, padding: 28,
+            width: "100%", maxWidth: 480, boxShadow: "0 8px 40px rgba(0,0,0,.2)",
+          }}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Promote Students</div>
+            <div style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 18 }}>
+              Move all students from <b>{promoteClass.name}-{promoteClass.section}</b> ({promoteClass.academicYear}) to a new class.
+              Names, admission numbers, and roll numbers stay unchanged.
+            </div>
+            <div style={{ marginBottom: 4, fontSize: 12, fontWeight: 600 }}>Students in this class</div>
+            <div style={{ fontSize: 13, marginBottom: 16 }}>
+              {students.filter((s) => idOf(s.classId) === promoteClass._id).length} student(s)
+            </div>
+            <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, marginBottom: 16 }}>
+              Target Class (promote to)
+              <select className="inp" value={promoteTarget} onChange={(e) => { setPromoteTarget(e.target.value); setPromoteMsg(""); }}>
+                <option value="">— select target class —</option>
+                {promoteTargets.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.name}-{c.section} · Session: {c.academicYear}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {promoteMsg && (
+              <div className={`alert ${promoteMsg.startsWith("Done") ? "ok" : ""}`} style={{ marginBottom: 12 }}>{promoteMsg}</div>
+            )}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button type="button" className="btn-dark" onClick={() => { setPromoteClass(null); setPromoteTarget(""); setPromoteMsg(""); }}>
+                Cancel
+              </button>
+              <button type="button" className="btn-primary" disabled={!promoteTarget || promoting} onClick={promoteAll}>
+                {promoting ? "Promoting…" : "Promote All Students"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pageTab === "classes" ? (
+        <>
+          {!classes.length ? <EmptyState message="No classes yet. Import the curriculum library above or add a class manually." /> : null}
+          {grouped.map((group) => (
+            <div key={group.key} style={{ marginBottom: 8 }}>
             <div className="stage-title">
               {group.label}
               <span>{group.items.length} classes</span>
@@ -327,6 +541,13 @@ export default function ClassesPage() {
                       </button>
                       <button
                         type="button"
+                        className="link-btn"
+                        onClick={() => { setPromoteClass(c); setPromoteTarget(""); setPromoteMsg(""); }}
+                      >
+                        Promote
+                      </button>
+                      <button
+                        type="button"
                         className="link-btn danger"
                         onClick={() => remove(c._id)}
                       >
@@ -338,8 +559,10 @@ export default function ClassesPage() {
               })}
             </div>
           </div>
-        ))
-      )}
+          ))}
+        </>
+      ) : null}
+
 
       <ClassForm
         open={open}
