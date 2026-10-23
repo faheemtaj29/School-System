@@ -495,14 +495,6 @@ export default function DistanceLearningPage() {
         onAction={canManage ? openCreate : undefined}
       />
 
-      {role === "admin" && tab === "courses" ? (
-        <div className="form-actions no-print" style={{ marginTop: 0, marginBottom: 14 }}>
-          <button type="button" className="btn-ghost" onClick={importProjectLibrary}>
-            Import project course library
-          </button>
-        </div>
-      ) : null}
-
       <div className="pay-stat-row">
         <div className="pay-stat">
           <div className="tag">Courses</div>
@@ -549,6 +541,17 @@ export default function DistanceLearningPage() {
 
       {tab === "courses" ? (
         <Panel title="Online / Distance Courses" meta={`${courses.length} PROGRAMS`}>
+          {role === "admin" ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, padding: "10px 14px", background: "var(--surface)", borderRadius: 8, border: "1px solid var(--line)" }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>Project Course Library</div>
+                <div style={{ fontSize: 12, color: "var(--text-dim)" }}>Seed robotics, IoT, Python, web, design thinking and STEM courses in one click</div>
+              </div>
+              <button type="button" className="btn-ghost" onClick={importProjectLibrary} style={{ whiteSpace: "nowrap" }}>
+                Import library
+              </button>
+            </div>
+          ) : null}
           {!courses.length ? (
             <EmptyState message="No distance courses yet. Create a certificate, diploma or short course." />
           ) : (

@@ -48,6 +48,15 @@ type Settings = {
   lateFeePercent?: number;
   lateFeeGraceDays?: number;
   whtRate?: number;
+  logoUrl?: string;
+  motto?: string;
+  website?: string;
+  city?: string;
+  province?: string;
+  country?: string;
+  principalName?: string;
+  boardName?: string;
+  fax?: string;
 };
 
 type PlatformOverview = {
@@ -121,6 +130,7 @@ const empty: Settings = {
   lateFeePercent: 5,
   lateFeeGraceDays: 7,
   whtRate: 0,
+  country: "Pakistan",
 };
 
 function ColorField({
@@ -416,35 +426,140 @@ export default function SettingsPage() {
         {msg ? <div className="alert ok">{msg}</div> : null}
         <form onSubmit={save}>
           {tab === "profile" ? (
-            <div className="form-grid">
-              <Field label="School Name" required>
-                <input className={inputClass} value={form.schoolName} onChange={(e) => setForm({ ...form, schoolName: e.target.value })} required />
-              </Field>
-              <Field label="Registration No.">
-                <input className={inputClass} value={form.registrationNo || ""} onChange={(e) => setForm({ ...form, registrationNo: e.target.value })} />
-              </Field>
-              <Field label="Active Academic Year">
-                <input className={inputClass} value={form.academicYear} readOnly />
-                <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>
-                  Managed under Year / Sessions — activate a session to change this.
+            <>
+              {/* Logo preview + upload */}
+              <div className="form-section-title">School Logo</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 20 }}>
+                {form.logoUrl ? (
+                  <img
+                    src={form.logoUrl}
+                    alt="School logo"
+                    style={{ height: 80, width: 80, objectFit: "contain", borderRadius: 8, border: "1px solid var(--line)", background: "var(--card)" }}
+                  />
+                ) : (
+                  <div style={{ height: 80, width: 80, borderRadius: 8, border: "2px dashed var(--line)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "var(--text-dim)" }}>
+                    No logo
+                  </div>
+                )}
+                <div style={{ flex: 1 }}>
+                  <Field label="Upload Logo (PNG/JPG, max 200 KB)">
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/svg+xml"
+                      className={inputClass}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 200 * 1024) { setErr("Logo must be under 200 KB"); return; }
+                        const reader = new FileReader();
+                        reader.onload = (ev) => setForm({ ...form, logoUrl: ev.target?.result as string });
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                  </Field>
+                  {form.logoUrl ? (
+                    <button type="button" className="link-btn danger" onClick={() => setForm({ ...form, logoUrl: "" })}>
+                      Remove logo
+                    </button>
+                  ) : null}
                 </div>
-              </Field>
-              <Field label="Fee Due Day">
-                <input type="number" className={inputClass} value={form.feeDueDay} onChange={(e) => setForm({ ...form, feeDueDay: Number(e.target.value) })} />
-              </Field>
-              <Field label="Phone">
-                <input className={inputClass} value={form.phone || ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-              </Field>
-              <Field label="Email">
-                <input type="email" className={inputClass} value={form.email || ""} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-              </Field>
-              <Field label="Currency">
-                <input className={inputClass} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
-              </Field>
-              <Field label="Address">
-                <input className={inputClass} value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-              </Field>
-            </div>
+              </div>
+
+              <div className="form-section-title">Identity</div>
+              <div className="form-grid">
+                <Field label="School / Institution Name" required>
+                  <input className={inputClass} value={form.schoolName} onChange={(e) => setForm({ ...form, schoolName: e.target.value })} required />
+                </Field>
+                <Field label="Motto / Tagline">
+                  <input className={inputClass} value={form.motto || ""} onChange={(e) => setForm({ ...form, motto: e.target.value })} placeholder="e.g. Shaping Futures" />
+                </Field>
+                <Field label="Institution Type">
+                  <select className={inputClass} value={form.institutionType || "school"} onChange={(e) => setForm({ ...form, institutionType: e.target.value as Settings["institutionType"] })}>
+                    <option value="school">School</option>
+                    <option value="college">College</option>
+                    <option value="university">University</option>
+                    <option value="academy">Academy / Institute</option>
+                  </select>
+                </Field>
+                <Field label="Registration / EMIS No.">
+                  <input className={inputClass} value={form.registrationNo || ""} onChange={(e) => setForm({ ...form, registrationNo: e.target.value })} placeholder="e.g. PEMIS-12345" />
+                </Field>
+                <Field label="Board / Affiliation">
+                  <input className={inputClass} value={form.boardName || ""} onChange={(e) => setForm({ ...form, boardName: e.target.value })} placeholder="e.g. BISE Lahore" />
+                </Field>
+                <Field label="Principal / Head Name">
+                  <input className={inputClass} value={form.principalName || ""} onChange={(e) => setForm({ ...form, principalName: e.target.value })} placeholder="e.g. Dr. Abdul Rahman" />
+                </Field>
+              </div>
+
+              <div className="form-section-title" style={{ marginTop: 20 }}>Contact & Location</div>
+              <div className="form-grid">
+                <Field label="Phone">
+                  <input className={inputClass} value={form.phone || ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="e.g. 042-35760001" />
+                </Field>
+                <Field label="Fax">
+                  <input className={inputClass} value={form.fax || ""} onChange={(e) => setForm({ ...form, fax: e.target.value })} placeholder="e.g. 042-35760002" />
+                </Field>
+                <Field label="Email">
+                  <input type="email" className={inputClass} value={form.email || ""} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="school@example.com" />
+                </Field>
+                <Field label="Website">
+                  <input className={inputClass} value={form.website || ""} onChange={(e) => setForm({ ...form, website: e.target.value })} placeholder="https://school.edu.pk" />
+                </Field>
+                <Field label="Address">
+                  <input className={inputClass} value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Street / Area" />
+                </Field>
+                <Field label="City">
+                  <input className={inputClass} value={form.city || ""} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="e.g. Lahore" />
+                </Field>
+                <Field label="Province">
+                  <select className={inputClass} value={form.province || ""} onChange={(e) => setForm({ ...form, province: e.target.value })}>
+                    <option value="">Select province</option>
+                    <option value="Punjab">Punjab</option>
+                    <option value="Sindh">Sindh</option>
+                    <option value="KPK">Khyber Pakhtunkhwa (KPK)</option>
+                    <option value="Balochistan">Balochistan</option>
+                    <option value="AJK">Azad Jammu & Kashmir</option>
+                    <option value="Gilgit-Baltistan">Gilgit-Baltistan</option>
+                    <option value="ICT">Islamabad Capital Territory</option>
+                  </select>
+                </Field>
+                <Field label="Country">
+                  <input className={inputClass} value={form.country || "Pakistan"} onChange={(e) => setForm({ ...form, country: e.target.value })} />
+                </Field>
+              </div>
+
+              <div className="form-section-title" style={{ marginTop: 20 }}>Academic Settings</div>
+              <div className="form-grid">
+                <Field label="Active Academic Year">
+                  <input className={inputClass} value={form.academicYear} readOnly />
+                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>
+                    Managed under Year / Sessions tab.
+                  </div>
+                </Field>
+                <Field label="Fee Due Day (of month)">
+                  <input type="number" min="1" max="28" className={inputClass} value={form.feeDueDay} onChange={(e) => setForm({ ...form, feeDueDay: Number(e.target.value) })} />
+                </Field>
+                <Field label="Currency">
+                  <input className={inputClass} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
+                </Field>
+                <Field label="Pass Percentage">
+                  <input type="number" min="1" max="100" className={inputClass} value={form.passPercent ?? 40} onChange={(e) => setForm({ ...form, passPercent: Number(e.target.value) })} />
+                </Field>
+                <Field label="Student ID Mode">
+                  <select className={inputClass} value={form.studentIdMode || "auto"} onChange={(e) => setForm({ ...form, studentIdMode: e.target.value as "auto" | "manual" })}>
+                    <option value="auto">Auto-generate</option>
+                    <option value="manual">Manual entry</option>
+                  </select>
+                </Field>
+                <Field label="Employee ID Mode">
+                  <select className={inputClass} value={form.employeeIdMode || "auto"} onChange={(e) => setForm({ ...form, employeeIdMode: e.target.value as "auto" | "manual" })}>
+                    <option value="auto">Auto-generate</option>
+                    <option value="manual">Manual entry</option>
+                  </select>
+                </Field>
+              </div>
+            </>
           ) : null}
 
           {tab === "sessions" ? (

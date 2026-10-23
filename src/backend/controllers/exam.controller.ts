@@ -9,7 +9,7 @@ import {
   requireAuth,
 } from "@/backend/lib/http";
 import { examService } from "@/backend/services/exam.service";
-import { examSchema } from "@/backend/validators/exam.validator";
+import { examSchema, marksheetSchema } from "@/backend/validators/exam.validator";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -57,6 +57,31 @@ export const examController = {
     try {
       const { id } = await ctx.params;
       return jsonOk(await examService.remove(id));
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  async getMarksheet(req: Request) {
+    const { error } = await requireAuth(["admin", "teacher"]);
+    if (error) return error;
+    try {
+      const classId = new URL(req.url).searchParams.get("classId");
+      if (!classId) return jsonError("classId is required");
+      return jsonOk(await examService.getMarksheet(classId));
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  async saveMarksheet(req: Request) {
+    const { error } = await requireAuth(["admin", "teacher"]);
+    if (error) return error;
+    try {
+      const body = await req.json();
+      const parsed = marksheetSchema.safeParse(body);
+      if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+      return jsonOk(await examService.saveMarksheet(parsed.data));
     } catch (e) {
       return fromServiceError(e);
     }

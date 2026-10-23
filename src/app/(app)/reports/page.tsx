@@ -5,6 +5,8 @@ import { EmptyState, Hero, Panel, StatusBadge, NameCell, inputClass } from "@/co
 import { PrintIcon } from "@/components/Icons";
 import { formatNumber, fullName, labelOfClass, prettyDate } from "@/lib/types";
 
+type SchoolProfile = { schoolName: string; logoUrl?: string; motto?: string; principalName?: string; address?: string; phone?: string; boardName?: string };
+
 const REPORTS = [
   { id: "overview", label: "Overview" },
   { id: "result-cards", label: "Result Cards" },
@@ -66,9 +68,16 @@ export default function ReportsPage() {
   const [examType, setExamType] = useState("final");
   const [students, setStudents] = useState<{ _id: string; firstName: string; lastName: string; admissionNo: string }[]>([]);
   const [studentId, setStudentId] = useState("");
+  const [school, setSchool] = useState<SchoolProfile>({ schoolName: "School" });
 
   useEffect(() => {
     setGeneratedAt(new Date().toLocaleString("en-GB"));
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.settings) setSchool({ schoolName: d.settings.schoolName, logoUrl: d.settings.logoUrl, motto: d.settings.motto, principalName: d.settings.principalName, address: d.settings.address, phone: d.settings.phone, boardName: d.settings.boardName });
+      })
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -277,7 +286,7 @@ export default function ReportsPage() {
       ) : null}
 
       <div className="print-only" style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 20 }}>Sabaq — {REPORTS.find((r) => r.id === type)?.label}</h2>
+        <h2 style={{ fontSize: 20 }}>{school.schoolName} — {REPORTS.find((r) => r.id === type)?.label}</h2>
         <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
           Generated {generatedAt || "—"}
           {results
@@ -297,7 +306,7 @@ export default function ReportsPage() {
           ) : (
             <div className="result-cards">
               {results.cards.map((card) => (
-                <ResultCardView key={`${card.student._id}-${card.classLabel || ""}`} card={card} meta={results} />
+                <ResultCardView key={`${card.student._id}-${card.classLabel || ""}`} card={card} meta={results} school={school} />
               ))}
             </div>
           )
@@ -354,108 +363,142 @@ export default function ReportsPage() {
 function ResultCardView({
   card,
   meta,
+  school,
 }: {
   card: ResultCard & { classLabel?: string; academicYear?: string };
   meta: ResultData;
+  school: SchoolProfile;
 }) {
   const classLine =
     card.classLabel ||
     `${meta.class.name}${meta.class.section ? `-${meta.class.section}` : ""}`;
   const year = card.academicYear || meta.class.academicYear;
+  const examLabel = meta.examType && meta.examType !== "all"
+    ? meta.examType.charAt(0).toUpperCase() + meta.examType.slice(1)
+    : "Annual";
+
+  const shareText =
+    `${school.schoolName}\n` +
+    `Result Card — ${examLabel} ${year}\n` +
+    `Student: ${card.student.name}  Roll No: ${card.student.rollNumber || "—"}\n` +
+    `Class: ${classLine}\n` +
+    `Total: ${card.totalObtained}/${card.totalMax} (${card.percentage}%) — ${card.result}\n` +
+    (card.position ? `Position: ${card.position}\n` : "");
+
+  const waLink = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
+  const mailLink = `mailto:?subject=${encodeURIComponent(`Result Card – ${card.student.name}`)}&body=${encodeURIComponent(shareText)}`;
 
   return (
-    <article className="result-card doc-sheet">
-      <header className="result-card-head doc-sheet-head">
-        <div>
-          <h3>Sabaq School System</h3>
-          <p>
-            Result Card · {classLine} · {year}
-            {meta.examType && meta.examType !== "all" ? ` · ${meta.examType}` : ""}
-          </p>
-        </div>
-        <div className="result-card-grade">
-          <span>Grade</span>
-          <strong>{card.grade}</strong>
-        </div>
-      </header>
-
-      <div className="result-card-meta">
-        <div>
-          <span>Student</span>
-          <strong>{card.student.name}</strong>
-        </div>
-        <div>
-          <span>Admission No</span>
-          <strong>{card.student.admissionNo}</strong>
-        </div>
-        <div>
-          <span>Roll No</span>
-          <strong>{card.student.rollNumber || "—"}</strong>
-        </div>
-        <div>
-          <span>Father / Guardian</span>
-          <strong>{card.student.parentName || "—"}</strong>
-        </div>
+    <article className="result-card doc-sheet" id={`rca-${card.student._id}`}>
+      {/* Per-card share toolbar — hidden on print */}
+      <div className="result-card-actions no-print">
+        <button type="button" className="link-btn" onClick={() => {
+          const article = document.getElementById(`rca-${card.student._id}`);
+          if (!article) { window.print(); return; }
+          article.classList.add("print-target");
+          document.body.classList.add("printing-one");
+          window.print();
+          document.body.classList.remove("printing-one");
+          article.classList.remove("print-target");
+        }}>Print this card</button>
+        <a href={waLink} target="_blank" rel="noreferrer" className="link-btn" style={{ color: "#22c55e" }}>WhatsApp</a>
+        <a href={mailLink} className="link-btn">Email</a>
       </div>
 
-      {!card.subjects.length ? (
-        <EmptyState message="No graded exam subjects found for this student." />
-      ) : (
-        <table className="reg">
-          <thead>
-            <tr>
-              <th>Subject</th>
-              <th className="right">Max</th>
-              <th className="right">Obtained</th>
-              <th className="right">%</th>
-              <th className="right">Grade</th>
-            </tr>
-          </thead>
-          <tbody>
-            {card.subjects.map((subject) => (
-              <tr key={subject.code + subject.name}>
-                <td>{subject.name}</td>
-                <td className="num">{subject.maxMarks}</td>
-                <td className="num">{subject.obtained ?? "—"}</td>
-                <td className="num">
-                  {subject.obtained == null ? "—" : `${subject.percent}%`}
-                </td>
-                <td className="num">{subject.grade}</td>
-              </tr>
-            ))}
-            <tr className="total-row">
-              <td>
-                <strong>TOTAL</strong>
-              </td>
-              <td className="num">
-                <strong>{card.totalMax}</strong>
-              </td>
-              <td className="num">
-                <strong>{card.totalObtained}</strong>
-              </td>
-              <td className="num">
-                <strong>{card.percentage}%</strong>
-              </td>
-              <td className="num">
-                <strong>{card.grade}</strong>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      )}
+      <div id={`rc-${card.student._id}`}>
+        <header className="result-card-head doc-sheet-head">
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {school.logoUrl ? (
+              <img src={school.logoUrl} alt="Logo" style={{ height: 56, width: 56, objectFit: "contain" }} />
+            ) : null}
+            <div>
+              <h3 style={{ margin: 0 }}>{school.schoolName}</h3>
+              {school.motto ? <div style={{ fontSize: 11, color: "var(--text-dim)" }}>{school.motto}</div> : null}
+              <p style={{ margin: "2px 0 0", fontSize: 12 }}>
+                Result Card · {classLine} · {year}
+                {meta.examType && meta.examType !== "all" ? ` · ${examLabel}` : ""}
+              </p>
+            </div>
+          </div>
+          <div className="result-card-grade">
+            <span>Grade</span>
+            <strong>{card.grade}</strong>
+          </div>
+        </header>
 
-      <div className="result-card-foot">
-        <span>
-          Position: <strong>{card.position || "—"}</strong>
-        </span>
-        <span>
-          GPA: <strong>{card.gpa != null ? card.gpa.toFixed(2) : "—"}</strong>
-        </span>
-        <span>
-          Result: <strong>{card.result}</strong>
-        </span>
-        <span>Class Teacher</span>
-        <span>Principal</span>
+        <div className="result-card-meta">
+          <div>
+            <span>Student Name</span>
+            <strong>{card.student.name}</strong>
+          </div>
+          <div>
+            <span>Roll No.</span>
+            <strong>{card.student.rollNumber || "—"}</strong>
+          </div>
+          <div>
+            <span>Admission No.</span>
+            <strong>{card.student.admissionNo}</strong>
+          </div>
+          <div>
+            <span>Father / Guardian</span>
+            <strong>{card.student.parentName || "—"}</strong>
+          </div>
+        </div>
+
+        {!card.subjects.length ? (
+          <EmptyState message="No graded exam subjects found for this student." />
+        ) : (
+          <table className="reg">
+            <thead>
+              <tr>
+                <th>Subject</th>
+                <th className="right">Max</th>
+                <th className="right">Obtained</th>
+                <th className="right">%</th>
+                <th className="right">Grade</th>
+              </tr>
+            </thead>
+            <tbody>
+              {card.subjects.map((subject) => (
+                <tr key={subject.code + subject.name}>
+                  <td>
+                    {subject.name}
+                    <div style={{ fontSize: 10.5, color: "var(--text-dim)" }}>{subject.code}</div>
+                  </td>
+                  <td className="num">{subject.maxMarks}</td>
+                  <td className="num">{subject.obtained ?? "—"}</td>
+                  <td className="num">
+                    {subject.obtained == null ? "—" : `${subject.percent}%`}
+                  </td>
+                  <td className="num">{subject.grade}</td>
+                </tr>
+              ))}
+              <tr className="total-row">
+                <td><strong>TOTAL</strong></td>
+                <td className="num"><strong>{card.totalMax}</strong></td>
+                <td className="num"><strong>{card.totalObtained}</strong></td>
+                <td className="num"><strong>{card.percentage}%</strong></td>
+                <td className="num"><strong>{card.grade}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        )}
+
+        <div className="result-card-foot">
+          <span>Position: <strong>{card.position || "—"}</strong></span>
+          <span>GPA: <strong>{card.gpa != null ? card.gpa.toFixed(2) : "—"}</strong></span>
+          <span>Result: <strong>{card.result}</strong></span>
+          <span style={{ borderTop: "1px solid var(--line)", paddingTop: 8, marginTop: 8 }}>Class Teacher</span>
+          <span style={{ borderTop: "1px solid var(--line)", paddingTop: 8, marginTop: 8 }}>
+            {school.principalName || "Principal"}
+          </span>
+        </div>
+
+        {school.address || school.phone ? (
+          <div style={{ fontSize: 10, color: "var(--text-dim)", textAlign: "center", marginTop: 6, borderTop: "1px dashed var(--line)", paddingTop: 6 }}>
+            {[school.address, school.phone].filter(Boolean).join(" · ")}
+          </div>
+        ) : null}
       </div>
     </article>
   );

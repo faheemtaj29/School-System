@@ -7,6 +7,7 @@ import {
   AccountingIcon,
   AttendanceIcon,
   BellIcon,
+  CampusIcon,
   ChevronDownIcon,
   ClassesIcon,
   DashboardIcon,
@@ -19,6 +20,7 @@ import {
   LogoutIcon,
   MenuIcon,
   NoticeIcon,
+  PersonIcon,
   ReportsIcon,
   SearchIcon,
   SettingsIcon,
@@ -68,7 +70,7 @@ const navGroups: NavGroup[] = [
     label: "People & HR",
     items: [
       { href: "/teachers", label: "Teachers", Icon: TeachersIcon, roles: ["admin"] },
-      { href: "/staff", label: "Campus Staff", Icon: HrIcon, roles: ["admin"] },
+      { href: "/staff", label: "Campus Staff", Icon: PersonIcon, roles: ["admin"] },
       { href: "/hr", label: "HR & Payroll", Icon: HrIcon, roles: ["admin", "teacher"] },
     ],
   },
@@ -164,7 +166,7 @@ const navGroups: NavGroup[] = [
           ],
         },
       },
-      { href: "/campus", label: "Campus Ops", Icon: InventoryIcon, roles: ["admin", "staff", "teacher"] },
+      { href: "/campus", label: "Campus Ops", Icon: CampusIcon, roles: ["admin", "staff", "teacher"] },
     ],
   },
   {

@@ -65,11 +65,11 @@ function TrendChart({ data }: { data: Charts["attendanceTrend"] }) {
       <svg viewBox={`0 0 ${w} ${h}`} width="100%" height="160" preserveAspectRatio="none">
         <defs>
           <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#157A5C" stopOpacity="0.32" />
-            <stop offset="100%" stopColor="#157A5C" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
           </linearGradient>
         </defs>
-        <g stroke="#EEF1EA" strokeWidth="1">
+        <g stroke="var(--line)" strokeWidth="1">
           <line x1="0" y1="20" x2={w} y2="20" />
           <line x1="0" y1="60" x2={w} y2="60" />
           <line x1="0" y1="100" x2={w} y2="100" />
@@ -77,10 +77,10 @@ function TrendChart({ data }: { data: Charts["attendanceTrend"] }) {
         </g>
         {area ? <path d={area} fill="url(#areaFill)" /> : null}
         {line ? (
-          <path d={line} fill="none" stroke="#157A5C" strokeWidth="3" strokeLinecap="round" />
+          <path d={line} fill="none" stroke="var(--primary)" strokeWidth="3" strokeLinecap="round" />
         ) : null}
         {points.map((p) => (
-          <circle key={p.date} cx={p.x} cy={p.y} r="4" fill="#157A5C" stroke="#fff" strokeWidth="2" />
+          <circle key={p.date} cx={p.x} cy={p.y} r="4" fill="var(--primary)" stroke="var(--card)" strokeWidth="2" />
         ))}
       </svg>
       <div className="chart-labels">

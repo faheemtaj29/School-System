@@ -672,69 +672,73 @@ export default function CampusOpsPage() {
     <>
       <Hero
         title="Campus Operations"
-        subtitle="Facilities, services and support modules across the institution"
-        live={config.label}
-        actionLabel={config.primary.label}
-        onAction={() => openModal(config.primary.modal)}
+        subtitle="Facilities, services and support modules — timetable, library, transport, hostel and more"
       />
 
-      <div className="pay-stat-row">
-        {stats.map((s) => (
-          <div className="pay-stat" key={s.tag}>
-            <div className="tag">{s.tag}</div>
-            <div className="num">{s.value}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="voucher-launch-grid no-print">
-        {MODULES.map((m) => (
-          <button
-            type="button"
-            key={m.key}
-            className={`voucher-launch${active === m.key ? " active" : ""}`}
-            onClick={() => {
-              setActive(m.key);
-              setMsg("");
-            }}
-          >
-            <span>{m.code}</span>
-            <strong>{m.label}</strong>
-            <small>{m.hint}</small>
-            <div className="count">{counts[m.key] ?? 0} records</div>
-          </button>
-        ))}
-      </div>
-
-      {err ? <div className="alert err">{err}</div> : null}
-      {msg ? <div className="alert ok">{msg}</div> : null}
-
-      <div className="accounting-toolbar no-print">
-        <div className="chips">
-          <button
-            type="button"
-            className="btn-dark"
-            onClick={() => openModal(config.primary.modal)}
-          >
-            {config.primary.label}
-          </button>
-          {config.secondary ? (
+      <div className="campus-layout">
+        {/* ── Sidebar navigation ── */}
+        <aside className="campus-sidebar">
+          <div className="campus-sidebar-title">Modules</div>
+          {MODULES.map((m) => (
             <button
               type="button"
-              className="btn-ghost"
-              onClick={() => openModal(config.secondary!.modal)}
+              key={m.key}
+              className={`campus-nav-item${active === m.key ? " active" : ""}`}
+              onClick={() => { setActive(m.key); setMsg(""); setErr(""); }}
             >
-              {config.secondary.label}
+              <span className="campus-nav-code">{m.code}</span>
+              <span className="campus-nav-body">
+                <strong>{m.label}</strong>
+                <small>{m.hint}</small>
+              </span>
+              <span className="campus-nav-badge">{counts[m.key] ?? 0}</span>
             </button>
-          ) : null}
-        </div>
-        <input
-          className={inputClass}
-          placeholder={`Search ${config.label.toLowerCase()}…`}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
+          ))}
+        </aside>
+
+        {/* ── Main content area ── */}
+        <div className="campus-main">
+          {/* Module header with title, stats and action buttons */}
+          <div className="campus-module-head">
+            <div>
+              <div className="campus-module-title">{config.label}</div>
+              <div className="campus-module-hint">{config.hint}</div>
+            </div>
+            <div className="chips">
+              <button type="button" className="btn-dark" onClick={() => openModal(config.primary.modal)}>
+                + {config.primary.label}
+              </button>
+              {config.secondary ? (
+                <button type="button" className="btn-ghost" onClick={() => openModal(config.secondary!.modal)}>
+                  {config.secondary.label}
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Stat tiles for active module */}
+          <div className="pay-stat-row" style={{ marginBottom: 16 }}>
+            {stats.map((s) => (
+              <div className="pay-stat" key={s.tag}>
+                <div className="tag">{s.tag}</div>
+                <div className="num">{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {err ? <div className="alert err">{err}</div> : null}
+          {msg ? <div className="alert ok">{msg}</div> : null}
+
+          {/* Search bar */}
+          <div style={{ marginBottom: 14 }}>
+            <input
+              className={inputClass}
+              placeholder={`Search ${config.label.toLowerCase()}…`}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ maxWidth: 340 }}
+            />
+          </div>
 
       {active === "timetable" ? (
         <Panel title={config.register} meta={`${shownSlots.length} PERIODS`}>
@@ -1443,6 +1447,9 @@ export default function CampusOpsPage() {
           )}
         </Panel>
       ) : null}
+
+        </div>{/* /campus-main */}
+      </div>{/* /campus-layout */}
 
       <ModalForm
         open={open}

@@ -48,6 +48,15 @@ export const settingsSchema = z.object({
   lateFeePercent: z.coerce.number().min(0).max(100).optional(),
   lateFeeGraceDays: z.coerce.number().min(0).max(90).optional(),
   whtRate: z.coerce.number().min(0).max(100).optional(),
+  logoUrl: z.string().optional(),
+  motto: z.string().optional(),
+  website: z.string().optional(),
+  city: z.string().optional(),
+  province: z.string().optional(),
+  country: z.string().optional(),
+  principalName: z.string().optional(),
+  boardName: z.string().optional(),
+  fax: z.string().optional(),
   optionLists: z
     .object({
       ledgerCategories: z.array(z.string()).default([]),

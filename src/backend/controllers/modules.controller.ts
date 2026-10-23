@@ -534,6 +534,20 @@ export const noticeController = {
       return fromServiceError(e);
     }
   },
+  async update(req: Request, ctx: Ctx) {
+    const { error } = await requireAuth(["admin"]);
+    if (error) return error;
+    try {
+      const { id } = await ctx.params;
+      const body = await req.json();
+      const parsed = noticeSchema.partial().safeParse(body);
+      if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+      return jsonOk({ notice: await noticeService.update(id, parsed.data) });
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
   async remove(_: Request, ctx: Ctx) {
     const { error } = await requireAuth(["admin"]);
     if (error) return error;

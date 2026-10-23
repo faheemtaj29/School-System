@@ -23,6 +23,17 @@ export const studentSchema = z.object({
   discountPercent: z.coerce.number().min(0).max(100).optional(),
   linkedTeacherId: z.string().optional().nullable(),
   custom: z.record(z.string(), z.unknown()).optional(),
+  cnic: z.string().optional(),
+  nationality: z.string().optional(),
+  religion: z.string().optional(),
+  previousSchool: z.string().optional(),
+});
+
+export const issueTcSchema = z.object({
+  kind: z.literal("issue-tc"),
+  leavingDate: z.string().min(1),
+  leavingReason: z.string().optional(),
+  conductRemark: z.string().optional(),
 });
 
 export const promoteSchema = z.object({
@@ -33,5 +44,14 @@ export const promoteSchema = z.object({
   passMark: z.coerce.number().min(1).max(100).default(40),
 });
 
+/** Bulk-promote ALL students in a class to a target class, no exam filter. */
+export const promoteAllSchema = z.object({
+  kind: z.literal("promote-all"),
+  fromClassId: z.string().min(1),
+  toClassId: z.string().min(1),
+});
+
 export type StudentInput = z.infer<typeof studentSchema>;
 export type PromoteInput = z.infer<typeof promoteSchema>;
+export type PromoteAllInput = z.infer<typeof promoteAllSchema>;
+export type IssueTcInput = z.infer<typeof issueTcSchema>;

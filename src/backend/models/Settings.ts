@@ -66,6 +66,16 @@ export interface ISettings {
   lateFeeGraceDays?: number;
   /** Withholding tax % for vendor payments (FBR-style). */
   whtRate?: number;
+  /** School profile — logo and identity */
+  logoUrl?: string;
+  motto?: string;
+  website?: string;
+  city?: string;
+  province?: string;
+  country?: string;
+  principalName?: string;
+  boardName?: string;
+  fax?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -148,6 +158,15 @@ const SettingsSchema = new Schema<ISettings>(
     lateFeePercent: { type: Number, default: 5, min: 0, max: 100 },
     lateFeeGraceDays: { type: Number, default: 7, min: 0, max: 90 },
     whtRate: { type: Number, default: 0, min: 0, max: 100 },
+    logoUrl: String,
+    motto: String,
+    website: String,
+    city: String,
+    province: String,
+    country: { type: String, default: "Pakistan" },
+    principalName: String,
+    boardName: String,
+    fax: String,
   },
   { timestamps: true }
 );

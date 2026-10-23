@@ -19,6 +19,13 @@ type Props = {
   classes: ClassItem[];
 };
 
+function formatCnic(raw: string) {
+  const digits = raw.replace(/\D/g, "").slice(0, 13);
+  if (digits.length <= 5) return digits;
+  if (digits.length <= 12) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+  return `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12)}`;
+}
+
 const empty = {
   admissionNo: "",
   idMode: "auto",
@@ -29,6 +36,10 @@ const empty = {
   gender: "",
   dateOfBirth: "",
   address: "",
+  cnic: "",
+  nationality: "",
+  religion: "",
+  previousSchool: "",
   classId: "",
   rollNumber: "",
   parentName: "",
@@ -89,6 +100,10 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
         gender: initial.gender ?? "",
         dateOfBirth: toDateInput(initial.dateOfBirth),
         address: initial.address ?? "",
+        cnic: initial.cnic ?? "",
+        nationality: initial.nationality ?? "",
+        religion: initial.religion ?? "",
+        previousSchool: initial.previousSchool ?? "",
         classId: idOf(initial.classId),
         rollNumber: initial.rollNumber ?? "",
         parentName: initial.parentName ?? "",
@@ -185,6 +200,24 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
         </Field>
         <Field label="Address">
           <input className={inputClass} value={form.address} onChange={(e) => set("address", e.target.value)} />
+        </Field>
+        <Field label="CNIC / B-Form No.">
+          <input
+            className={inputClass}
+            value={form.cnic}
+            onChange={(e) => set("cnic", formatCnic(e.target.value))}
+            placeholder="12345-1234567-1"
+            maxLength={15}
+          />
+        </Field>
+        <Field label="Nationality">
+          <input className={inputClass} value={form.nationality} onChange={(e) => set("nationality", e.target.value)} placeholder="e.g. Pakistani" />
+        </Field>
+        <Field label="Religion">
+          <input className={inputClass} value={form.religion} onChange={(e) => set("religion", e.target.value)} placeholder="e.g. Islam" />
+        </Field>
+        <Field label="Previous School">
+          <input className={inputClass} value={form.previousSchool} onChange={(e) => set("previousSchool", e.target.value)} placeholder="e.g. City Grammar School" />
         </Field>
       </div>
 

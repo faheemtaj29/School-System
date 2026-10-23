@@ -828,8 +828,39 @@ table.reg td.num {
   color: #f4f0e4;
   border-color: var(--ink);
 }
+.chip-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 99px;
+  background: var(--surface);
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  vertical-align: middle;
+}
+.filter-chip.active .chip-badge {
+  background: rgba(255,255,255,.2);
+  color: #f4f0e4;
+  border-color: transparent;
+}
 
 /* ---- Forms ---- */
+.form-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+  margin: 18px 0 4px;
+}
 .form-section-title {
   font-family: var(--font-mono), monospace;
   font-size: 10px;
@@ -2258,4 +2289,149 @@ textarea.inp {
   .site-section { padding: 44px 20px; }
   .site-nav { padding: 14px 20px; gap: 14px; }
   .site-links { order: 3; width: 100%; margin-left: 0; }
+}
+
+/* ── Print Documents: Admission Form & TC ─────────────────────────────── */
+.print-doc {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 28px 24px;
+  border: 1px solid var(--line);
+}
+.print-header { text-align: center; margin-bottom: 20px; }
+.print-school { font-size: 19px; font-weight: 700; margin: 0 0 2px; }
+.print-title  { font-size: 14px; font-weight: 500; color: var(--text-dim); margin: 0 0 4px; letter-spacing: 0.5px; text-transform: uppercase; }
+
+.print-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 5px;
+  margin-bottom: 12px;
+}
+.print-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 20px;
+  margin-bottom: 16px;
+}
+.print-field { display: flex; flex-direction: column; gap: 2px; }
+.print-field.full { grid-column: 1 / -1; }
+.print-label { font-size: 10.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; }
+.print-val   { font-size: 13.5px; font-weight: 500; border-bottom: 1px dashed var(--line); padding-bottom: 3px; min-height: 22px; }
+
+.print-sig-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 32px;
+}
+.print-sig { display: flex; flex-direction: column; gap: 6px; }
+.print-sig-line  { border-top: 1px solid var(--text-2); margin-top: 32px; }
+.print-sig-label { font-size: 11px; color: var(--text-dim); text-align: center; }
+
+/* ── Campus Ops layout ── */
+.campus-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 700px) {
+  .campus-layout { grid-template-columns: 1fr; }
+  .campus-sidebar { display: flex; flex-wrap: wrap; gap: 6px; }
+  .campus-nav-item { flex: 1 1 140px; flex-direction: row; padding: 8px 10px; }
+}
+.campus-sidebar {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px 0;
+  position: sticky;
+  top: 72px;
+}
+.campus-sidebar-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-dim);
+  padding: 6px 14px 4px;
+}
+.campus-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 14px;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text);
+  transition: background .12s;
+}
+.campus-nav-item:hover { background: var(--hover); }
+.campus-nav-item.active { background: var(--primary-10, color-mix(in srgb, var(--primary) 12%, transparent)); color: var(--primary); }
+.campus-nav-code {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 5px;
+  min-width: 30px;
+  text-align: center;
+  color: var(--text-dim);
+}
+.campus-nav-item.active .campus-nav-code { border-color: var(--primary); color: var(--primary); background: var(--primary-10, color-mix(in srgb, var(--primary) 10%, transparent)); }
+.campus-nav-body { flex: 1; min-width: 0; }
+.campus-nav-body strong { display: block; font-size: 13px; }
+.campus-nav-body small  { display: block; font-size: 10.5px; color: var(--text-dim); line-height: 1.3; }
+.campus-nav-badge {
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1px 7px;
+  color: var(--text-dim);
+  min-width: 22px;
+  text-align: center;
+}
+.campus-main { min-width: 0; }
+.campus-module-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.campus-module-title { font-size: 17px; font-weight: 700; }
+.campus-module-hint  { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+
+/* ── Result card per-card actions ── */
+.result-card-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 0 10px;
+  border-bottom: 1px dashed var(--line);
+  margin-bottom: 10px;
+  font-size: 12.5px;
+}
+
+@media print {
+  .modal-backdrop { position: static !important; background: none !important; }
+  .modal          { box-shadow: none !important; padding: 0 !important; max-width: 100% !important; width: 100% !important; }
+  .print-doc      { border: none !important; border-radius: 0 !important; padding: 0 !important; }
+  .no-print       { display: none !important; }
+  /* Single-card print: body gets .printing-one, non-target cards hidden */
+  body.printing-one .result-card:not(.print-target) { display: none !important; }
+  body.printing-one .result-card-actions { display: none !important; }
 }

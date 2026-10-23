@@ -203,3 +203,13 @@ export const PrintIcon = (p: IconProps) => (
     <path d="M6 17h12v4H6z" />
   </Svg>
 );
+
+export const CampusIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 21h18" />
+    <path d="M9 21V7l3-4 3 4v14" />
+    <path d="M3 21V11l6-4" />
+    <path d="M21 21V11l-6-4" />
+    <rect x="10" y="13" width="4" height="8" />
+  </Svg>
+);

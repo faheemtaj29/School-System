@@ -1287,10 +1287,16 @@ export default function AccountingPage() {
         }}
       />
 
-      <div className="chips" style={{ marginBottom: 10 }}>
-        <span className="filter-chip active">Accounting</span>
+      <div className="chips" style={{ marginBottom: 10, alignItems: "center" }}>
+        <span className="filter-chip">Accounting</span>
+        <span style={{ color: "var(--text-dim)", fontSize: 13, userSelect: "none" }}>›</span>
         <span className="filter-chip">{breadcrumb.section}</span>
-        <span className="filter-chip">{breadcrumb.leaf}</span>
+        {breadcrumb.section !== breadcrumb.leaf ? (
+          <>
+            <span style={{ color: "var(--text-dim)", fontSize: 13, userSelect: "none" }}>›</span>
+            <span className="filter-chip active">{breadcrumb.leaf}</span>
+          </>
+        ) : null}
       </div>
 
       {isDashboardNode ? (
