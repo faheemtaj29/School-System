@@ -74,6 +74,21 @@ export const settingsSchema = z.object({
       suppliers: [],
       feeHeads: [],
     }),
+  admissionPrefix: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9]{1,8}$/, "Admission prefix: 1–8 letters or digits")
+    .optional(),
+  receiptPrefix: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9]{1,8}$/, "Receipt prefix: 1–8 letters or digits")
+    .optional(),
+  udiseCode: z
+    .string()
+    .trim()
+    .regex(/^(\d{11})?$/, "UDISE code must be 11 digits")
+    .optional(),
 });
 
 export const optionListSchema = z.object({

@@ -116,6 +116,7 @@ export function OptionSelect({
 }
 
 export function Hero({
+  kicker,
   title,
   subtitle,
   live,
@@ -123,6 +124,7 @@ export function Hero({
   onAction,
   actionIcon,
 }: {
+  kicker?: string;
   title: string;
   subtitle?: string;
   live?: string;
@@ -133,6 +135,7 @@ export function Hero({
   return (
     <div className="hero">
       <div className="hero-text">
+        {kicker ? <div className="hero-kicker">{kicker}</div> : null}
         <h1>{title}</h1>
         {subtitle || live ? (
           <div className="sub">

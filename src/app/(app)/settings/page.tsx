@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Field, Hero, Panel, StatusBadge, inputClass } from "@/components/ui";
 import { DEFAULT_THEME, THEME_PRESETS, themeVars, type Theme } from "@/lib/theme";
 import { prettyDate } from "@/lib/types";
+import { Download } from "lucide-react";
 
 type Branch = { code: string; name: string; address?: string; phone?: string };
 
@@ -48,7 +49,10 @@ type Settings = {
   lateFeePercent?: number;
   lateFeeGraceDays?: number;
   whtRate?: number;
-  logoUrl?: string;
+  admissionPrefix?: string;
+  receiptPrefix?: string;
+  udiseCode?: string;
+  logoUrl?: string | null;
   motto?: string;
   website?: string;
   city?: string;
@@ -130,8 +134,22 @@ const empty: Settings = {
   lateFeePercent: 5,
   lateFeeGraceDays: 7,
   whtRate: 0,
+  admissionPrefix: "STD",
+  receiptPrefix: "RCP",
   country: "Pakistan",
 };
+
+const hintStyle = { fontSize: 11, color: "var(--text-dim)", marginTop: 4 } as const;
+
+/** Read a picked file as a data URL for upload. */
+function readAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
 
 function ColorField({
   label,
@@ -169,6 +187,8 @@ export default function SettingsPage() {
   >("profile");
   const [newBranch, setNewBranch] = useState({ code: "", name: "", address: "", phone: "" });
   const [busy, setBusy] = useState(false);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [lanAddresses, setLanAddresses] = useState<string[] | null>(null);
   const [platform, setPlatform] = useState<PlatformOverview | null>(null);
   const [fields, setFields] = useState<CustomFieldRow[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowRow[]>([]);
@@ -217,7 +237,44 @@ export default function SettingsPage() {
 
   useEffect(() => {
     load();
+    fetch("/api/settings/network")
+      .then((r) => (r.ok ? r.json() : { addresses: [] }))
+      .then((d) => setLanAddresses(d.addresses || []))
+      .catch(() => setLanAddresses([]));
   }, [load]);
+
+  async function uploadLogo(file: File | undefined) {
+    if (!file) return;
+    setMsg("");
+    setErr("");
+    if (file.size > 2 * 1024 * 1024) {
+      setErr("Logo must be 2 MB or smaller.");
+      return;
+    }
+    setLogoBusy(true);
+    try {
+      const res = await fetch("/api/settings/logo", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataUrl: await readAsDataUrl(file) }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setErr(data.error || "Logo upload failed");
+        return;
+      }
+      setForm((f) => ({ ...f, logoUrl: data.logoUrl }));
+      setMsg("Logo updated — it now appears in the sidebar, receipts and reports.");
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
+  async function removeLogo() {
+    if (!confirm("Remove the school logo?")) return;
+    const res = await fetch("/api/settings/logo", { method: "DELETE" });
+    if (res.ok) setForm((f) => ({ ...f, logoUrl: null }));
+  }
 
   useEffect(() => {
     if (tab === "platform") loadPlatform();
@@ -234,10 +291,13 @@ export default function SettingsPage() {
     if (tab === "sessions") return;
     setMsg("");
     setErr("");
+    // The logo is uploaded separately; don't send its URL back as a setting.
+    const { logoUrl: _logoUrl, ...settings } = form;
+    void _logoUrl;
     const res = await fetch("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(settings),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -398,6 +458,14 @@ export default function SettingsPage() {
             ? `Active session ${active.name} · school profile, tax & branches`
             : "School profile, sessions, tax, branches & integrations"
         }
+        actionLabel="Backup & Download"
+        actionIcon={<Download size={16} />}
+        onAction={() => {
+          // The server sends it as an attachment, so this downloads without leaving the page.
+          const link = document.createElement("a");
+          link.href = "/api/settings/backup";
+          link.click();
+        }}
       />
       <Panel>
         <div className="tabs">
@@ -427,41 +495,40 @@ export default function SettingsPage() {
         <form onSubmit={save}>
           {tab === "profile" ? (
             <>
-              {/* Logo preview + upload */}
-              <div className="form-section-title">School Logo</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 20 }}>
-                {form.logoUrl ? (
-                  <img
-                    src={form.logoUrl}
-                    alt="School logo"
-                    style={{ height: 80, width: 80, objectFit: "contain", borderRadius: 8, border: "1px solid var(--line)", background: "var(--card)" }}
-                  />
-                ) : (
-                  <div style={{ height: 80, width: 80, borderRadius: 8, border: "2px dashed var(--line)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "var(--text-dim)" }}>
-                    No logo
-                  </div>
-                )}
-                <div style={{ flex: 1 }}>
-                  <Field label="Upload Logo (PNG/JPG, max 200 KB)">
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/svg+xml"
-                      className={inputClass}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        if (file.size > 200 * 1024) { setErr("Logo must be under 200 KB"); return; }
-                        const reader = new FileReader();
-                        reader.onload = (ev) => setForm({ ...form, logoUrl: ev.target?.result as string });
-                        reader.readAsDataURL(file);
-                      }}
-                    />
-                  </Field>
+              <div className="logo-uploader">
+                <div className="logo-preview">
                   {form.logoUrl ? (
-                    <button type="button" className="link-btn danger" onClick={() => setForm({ ...form, logoUrl: "" })}>
-                      Remove logo
-                    </button>
-                  ) : null}
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={form.logoUrl} alt="School logo" />
+                  ) : (
+                    <span>{form.schoolName.slice(0, 1).toUpperCase() || "S"}</span>
+                  )}
+                </div>
+                <div>
+                  <div className="form-actions" style={{ marginTop: 0 }}>
+                    <label className="btn-ghost" style={{ cursor: logoBusy ? "wait" : "pointer" }}>
+                      {logoBusy ? "Uploading…" : form.logoUrl ? "Change logo" : "Upload logo"}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                        hidden
+                        disabled={logoBusy}
+                        onChange={(e) => {
+                          uploadLogo(e.target.files?.[0]);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                    {form.logoUrl ? (
+                      <button type="button" className="btn-ghost" onClick={removeLogo}>
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                  <div style={hintStyle}>
+                    PNG, JPG, SVG or WebP — max 2 MB. Appears in the sidebar, on fee receipts and
+                    printed reports.
+                  </div>
                 </div>
               </div>
 
@@ -540,8 +607,8 @@ export default function SettingsPage() {
                 <Field label="Fee Due Day (of month)">
                   <input type="number" min="1" max="28" className={inputClass} value={form.feeDueDay} onChange={(e) => setForm({ ...form, feeDueDay: Number(e.target.value) })} />
                 </Field>
-                <Field label="Currency">
-                  <input className={inputClass} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
+                <Field label="Currency Symbol">
+                  <input className={inputClass} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} placeholder="e.g. Rs, PKR, ₹" />
                 </Field>
                 <Field label="Pass Percentage">
                   <input type="number" min="1" max="100" className={inputClass} value={form.passPercent ?? 40} onChange={(e) => setForm({ ...form, passPercent: Number(e.target.value) })} />
@@ -558,6 +625,73 @@ export default function SettingsPage() {
                     <option value="manual">Manual entry</option>
                   </select>
                 </Field>
+                <Field label="Admission Number Prefix">
+                  <input
+                    className={inputClass}
+                    value={form.admissionPrefix || ""}
+                    maxLength={8}
+                    onChange={(e) => setForm({ ...form, admissionPrefix: e.target.value.toUpperCase() })}
+                    placeholder="STD"
+                  />
+                  <div style={hintStyle}>
+                    New students get {(form.admissionPrefix || "STD").toUpperCase()}-{form.defaultBranchCode}-{new Date().getFullYear()}-00001
+                  </div>
+                </Field>
+                <Field label="Receipt Number Prefix">
+                  <input
+                    className={inputClass}
+                    value={form.receiptPrefix || ""}
+                    maxLength={8}
+                    onChange={(e) => setForm({ ...form, receiptPrefix: e.target.value.toUpperCase() })}
+                    placeholder="RCP"
+                  />
+                  <div style={hintStyle}>
+                    Fee receipts get {(form.receiptPrefix || "RCP").toUpperCase()}-{form.defaultBranchCode}-{new Date().getFullYear()}-00001
+                  </div>
+                </Field>
+                <Field label="UDISE Code">
+                  <input
+                    className={`${inputClass} mono`}
+                    value={form.udiseCode || ""}
+                    inputMode="numeric"
+                    maxLength={11}
+                    onChange={(e) => setForm({ ...form, udiseCode: e.target.value.replace(/\D/g, "") })}
+                    placeholder="e.g. 09150601601"
+                  />
+                  <div style={hintStyle}>11-digit Unified District Information System for Education code. Leave blank if not applicable.</div>
+                </Field>
+              </div>
+
+              <div className="lan-box">
+                <div className="form-section-title" style={{ marginTop: 0 }}>Network sharing (LAN)</div>
+                <p style={{ margin: "0 0 10px", fontSize: 12.5, color: "var(--text-dim)" }}>
+                  Other computers on the school WiFi/network can use this software from their own
+                  browser (Chrome / Edge) — nothing to install on them. Give them this address:
+                </p>
+                {lanAddresses === null ? (
+                  <div style={hintStyle}>Detecting network address…</div>
+                ) : lanAddresses.length ? (
+                  lanAddresses.map((addr) => (
+                    <div key={addr} className="lan-address">
+                      <code>{addr}</code>
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        onClick={() => navigator.clipboard?.writeText(addr)}
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div style={hintStyle}>
+                    This computer isn&apos;t connected to a local network right now.
+                  </div>
+                )}
+                <div style={hintStyle}>
+                  If another computer can&apos;t open it, allow the app through Windows Firewall
+                  (Private networks) on this computer.
+                </div>
               </div>
             </>
           ) : null}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState, Hero, NameCell, Panel, StatusBadge, inputClass } from "@/components/ui";
 import { ExamForm } from "@/components/forms/SchoolForms";
+import { ExamCenter, type ExamStep } from "@/components/exams/ExamCenter";
 import {
   ClassItem,
   ExamItem,
@@ -17,7 +18,10 @@ import {
 } from "@/lib/types";
 
 /* ─── local types ─────────────────────────────────────────────── */
-type WorkflowTab = "results" | "marksheet" | "schedules" | "types" | "terms";
+type WorkflowTab = "center" | "results" | "marksheet" | "schedules" | "types" | "terms";
+
+const CENTER_STEPS: ExamStep[] = ["datesheet", "slips", "marks", "results"];
+const OTHER_TABS: WorkflowTab[] = ["results", "marksheet", "schedules", "types", "terms"];
 
 type MarkComponents = {
   theory: number;
@@ -134,7 +138,23 @@ const emptyTermForm = {
 
 /* ─── component ──────────────────────────────────────────────── */
 export default function ExamsPage() {
-  const [tab, setTab] = useState<WorkflowTab>("marksheet");
+  const [tab, setTab] = useState<WorkflowTab>("center");
+  const [step, setStep] = useState<ExamStep>("datesheet");
+  const [role, setRole] = useState("");
+  // ?tab=marks (an Exam Center step) or ?tab=marksheet (another tab) opens that view directly.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("tab") || "";
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => {
+        const myRole = d.user?.role || "";
+        setRole(myRole);
+        if (CENTER_STEPS.includes(wanted as ExamStep)) setStep(wanted as ExamStep);
+        else if (OTHER_TABS.includes(wanted as WorkflowTab)) setTab(wanted as WorkflowTab);
+        else if (myRole !== "admin") setStep("marks");
+      })
+      .catch(() => {});
+  }, []);
 
   // basic data
   const [exams, setExams] = useState<ExamItem[]>([]);
@@ -467,12 +487,13 @@ export default function ExamsPage() {
     <>
       <Hero
         title="Exams & Results"
-        subtitle="Schedule exams · Enter marks by component · View result sheets"
+        subtitle="Exam Center: date sheet → roll number slips → marks → result cards for many classes at once · Mark sheet · Results register"
         actionLabel={tab === "results" ? "Quick Exam" : undefined}
         onAction={tab === "results" ? () => { setEditing(null); setOpen(true); } : undefined}
       />
 
       <div className="tabs">
+        <button type="button" className={`tab${tab === "center" ? " active" : ""}`} onClick={() => setTab("center")}>Exam Center</button>
         <button type="button" className={`tab${tab === "marksheet" ? " active" : ""}`} onClick={() => setTab("marksheet")}>Mark Sheet</button>
         <button type="button" className={`tab${tab === "schedules" ? " active" : ""}`} onClick={() => setTab("schedules")}>Exam Schedule</button>
         <button type="button" className={`tab${tab === "results" ? " active" : ""}`} onClick={() => setTab("results")}>Results Register</button>
@@ -482,6 +503,8 @@ export default function ExamsPage() {
 
       {workflowErr ? <div className="alert err">{workflowErr}</div> : null}
       {workflowMsg ? <div className="alert ok">{workflowMsg}</div> : null}
+
+      {tab === "center" && role ? <ExamCenter step={step} onStep={setStep} role={role} /> : null}
 
       {/* ── MARK SHEET TAB ─────────────────────────────────────── */}
       {tab === "marksheet" ? (

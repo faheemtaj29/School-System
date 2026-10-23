@@ -159,6 +159,8 @@ export type FeeItem = {
   paymentDate?: string;
   method?: "cash" | "card" | "bank" | "online";
   notes?: string;
+  receiptNo?: string;
+  billingMonth?: string;
   lateFeeAmount?: number;
   lateFeeApplied?: boolean;
 };

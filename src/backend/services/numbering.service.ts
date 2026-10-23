@@ -15,7 +15,8 @@ export type NumberKind =
   | "vehicle"
   | "asset"
   | "book"
-  | "document";
+  | "document"
+  | "receipt";
 
 const PREFIX: Record<NumberKind, string> = {
   student: "STD",
@@ -25,7 +26,16 @@ const PREFIX: Record<NumberKind, string> = {
   asset: "AST",
   book: "LIB",
   document: "DOC",
+  receipt: "RCP",
 };
+
+/** Student and receipt prefixes are configurable in Settings → School Profile. */
+async function prefixFor(kind: NumberKind) {
+  if (kind !== "student" && kind !== "receipt") return PREFIX[kind];
+  const settings = await Settings.findOne().select("admissionPrefix receiptPrefix").lean();
+  const custom = kind === "student" ? settings?.admissionPrefix : settings?.receiptPrefix;
+  return (custom || PREFIX[kind]).toString().toUpperCase().trim();
+}
 
 async function campusCode(branch?: string | null) {
   await dbConnect();
@@ -51,25 +61,27 @@ function yearToken() {
 export async function peekCode(kind: NumberKind, branch?: string | null) {
   await dbConnect();
   const campus = await campusCode(branch);
+  const prefix = await prefixFor(kind);
   const year = yearToken();
-  const id = `${PREFIX[kind]}:${campus}:${year}`;
+  const id = `${prefix}:${campus}:${year}`;
   const counter = await AccountingCounter.findById(id).lean();
   const next = (counter?.seq || 0) + 1;
-  return `${PREFIX[kind]}-${campus}-${year}-${String(next).padStart(5, "0")}`;
+  return `${prefix}-${campus}-${year}-${String(next).padStart(5, "0")}`;
 }
 
 /** Allocate the next code (increments counter). */
 export async function allocateCode(kind: NumberKind, branch?: string | null) {
   await dbConnect();
   const campus = await campusCode(branch);
+  const prefix = await prefixFor(kind);
   const year = yearToken();
-  const id = `${PREFIX[kind]}:${campus}:${year}`;
+  const id = `${prefix}:${campus}:${year}`;
   const counter = await AccountingCounter.findByIdAndUpdate(
     id,
     { $inc: { seq: 1 } },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
-  return `${PREFIX[kind]}-${campus}-${year}-${String(counter.seq).padStart(5, "0")}`;
+  return `${prefix}-${campus}-${year}-${String(counter.seq).padStart(5, "0")}`;
 }
 
 export type IdMode = "auto" | "manual";

@@ -30,6 +30,8 @@ export interface IExam {
   /** Max marks per component (defines which components are used). */
   markComponents?: IMarkComponents;
   results: IExamResult[];
+  /** Set when generated from term marks entry ("term:class:subject"), so it stays in sync. */
+  sourceKey?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -65,6 +67,7 @@ const ExamSchema = new Schema<IExam>(
         remarks: String,
       },
     ],
+    sourceKey: { type: String, index: true, sparse: true },
   },
   { timestamps: true }
 );

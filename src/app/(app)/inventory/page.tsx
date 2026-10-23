@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import { useSearchParams } from "next/navigation";
 import {
   EmptyState,
@@ -192,6 +193,7 @@ const voucherBlank = {
 };
 
 export default function InventoryPage() {
+  const { currency: cur, name: schoolName } = useSchoolProfile();
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
   const [tab, setTab] = useState<"vouchers" | "products">("vouchers");
@@ -513,7 +515,7 @@ export default function InventoryPage() {
   }
 
   async function deleteVoucher(voucher: StockVoucher) {
-    const details = `${voucher.number} · ${prettyDate(voucher.date)} · ${voucher.partyName || voucher.branchCode} · PKR ${formatNumber(voucher.grandTotal)}`;
+    const details = `${voucher.number} · ${prettyDate(voucher.date)} · ${voucher.partyName || voucher.branchCode} · ${cur} ${formatNumber(voucher.grandTotal)}`;
     if (voucher.status === "void") {
       alert("This voucher is already cancelled/voided.");
       return;
@@ -573,7 +575,7 @@ export default function InventoryPage() {
       .join("");
     popup.document.write(`<!doctype html><html><head><title>${escapeHtml(voucher.number)} - Print</title><style>
       @page { size: A4; margin: 14mm; } * { box-sizing:border-box; } body { margin:0; color:#17241d; font:12px Arial,sans-serif; } .document { max-width:190mm; margin:0 auto; } .header { display:flex; justify-content:space-between; gap:20px; padding-bottom:16px; border-bottom:3px solid #157a5c; } h1 { margin:0; font:700 25px Georgia,serif; } h2 { margin:0; font:700 17px Georgia,serif; text-align:right; } h3 { margin:23px 0 8px; color:#157a5c; font-size:11px; letter-spacing:.08em; text-transform:uppercase; } .muted { color:#627369; margin-top:5px; } .number { font:700 13px 'Courier New',monospace; margin-top:6px; } .meta { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:18px 0; padding:12px; background:#f3f7f3; border:1px solid #dce7dd; } .meta span { display:block; color:#64746b; font-size:9px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:3px; } .meta b { font-size:12px; } .narration { padding:10px 12px; border-left:3px solid #e8992e; background:#fffaf1; line-height:1.5; } table { width:100%; border-collapse:collapse; margin-top:8px; } th { background:#15332a; color:#fff; padding:9px 8px; font-size:9px; text-align:left; letter-spacing:.06em; text-transform:uppercase; } td { padding:9px 8px; border-bottom:1px solid #dfe7df; vertical-align:top; } td span { color:#64746b; font-size:10px; } .amount { text-align:right; font-family:'Courier New',monospace; } .summary { margin-left:auto; width:310px; margin-top:16px; border:1px solid #dce7dd; } .summary div { display:flex; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #e5ece5; } .summary div:last-child { border:0; background:#e3f2ec; font-weight:700; font-size:13px; } .signatures { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-top:70px; } .signatures div { border-top:1px solid #44534a; padding-top:7px; text-align:center; font-size:10px; color:#4e5e55; }
-      </style></head><body><main class="document"><header class="header"><div><h1>Sabaq School System</h1><p class="muted">${escapeHtml(branchName)}</p></div><div><h2>${escapeHtml(config.label)}</h2><div class="number">${escapeHtml(voucher.number)}</div></div></header><section class="meta"><div><span>Date</span><b>${escapeHtml(prettyDate(voucher.date))}</b></div><div><span>Party</span><b>${escapeHtml(voucher.partyName || "-")}</b></div><div><span>Status</span><b>${escapeHtml(voucher.status.toUpperCase())}</b></div><div><span>Movement</span><b>${escapeHtml(config.effect)}</b></div><div><span>Campus</span><b>${escapeHtml(voucher.toBranchCode ? `${voucher.branchCode} to ${voucher.toBranchCode}` : voucher.branchCode)}</b></div><div><span>Reference</span><b>${escapeHtml(voucher.reference || "-")}</b></div></section><div class="narration"><strong>Narration:</strong> ${escapeHtml(voucher.narration)}</div><h3>Stock Items</h3><table><thead><tr><th>Item</th><th>Unit</th><th class="amount">Quantity</th><th class="amount">Rate</th><th class="amount">Amount</th></tr></thead><tbody>${items}</tbody></table><section class="summary"><div><span>Subtotal</span><strong>${formatNumber(voucher.subtotal)}</strong></div><div><span>Discount</span><strong>${formatNumber(voucher.discountAmount)}</strong></div><div><span>Tax</span><strong>${formatNumber(voucher.taxAmount)}</strong></div><div><span>Grand Total</span><strong>PKR ${formatNumber(voucher.grandTotal)}</strong></div></section><footer class="signatures"><div>Prepared by</div><div>Checked by</div><div>Approved by</div><div>Received by</div></footer></main><script>window.onload=()=>window.print();</script></body></html>`);
+      </style></head><body><main class="document"><header class="header"><div><h1>${escapeHtml(schoolName || "School")}</h1><p class="muted">${escapeHtml(branchName)}</p></div><div><h2>${escapeHtml(config.label)}</h2><div class="number">${escapeHtml(voucher.number)}</div></div></header><section class="meta"><div><span>Date</span><b>${escapeHtml(prettyDate(voucher.date))}</b></div><div><span>Party</span><b>${escapeHtml(voucher.partyName || "-")}</b></div><div><span>Status</span><b>${escapeHtml(voucher.status.toUpperCase())}</b></div><div><span>Movement</span><b>${escapeHtml(config.effect)}</b></div><div><span>Campus</span><b>${escapeHtml(voucher.toBranchCode ? `${voucher.branchCode} to ${voucher.toBranchCode}` : voucher.branchCode)}</b></div><div><span>Reference</span><b>${escapeHtml(voucher.reference || "-")}</b></div></section><div class="narration"><strong>Narration:</strong> ${escapeHtml(voucher.narration)}</div><h3>Stock Items</h3><table><thead><tr><th>Item</th><th>Unit</th><th class="amount">Quantity</th><th class="amount">Rate</th><th class="amount">Amount</th></tr></thead><tbody>${items}</tbody></table><section class="summary"><div><span>Subtotal</span><strong>${formatNumber(voucher.subtotal)}</strong></div><div><span>Discount</span><strong>${formatNumber(voucher.discountAmount)}</strong></div><div><span>Tax</span><strong>${formatNumber(voucher.taxAmount)}</strong></div><div><span>Grand Total</span><strong>${escapeHtml(cur)} ${formatNumber(voucher.grandTotal)}</strong></div></section><footer class="signatures"><div>Prepared by</div><div>Checked by</div><div>Approved by</div><div>Received by</div></footer></main><script>window.onload=()=>window.print();</script></body></html>`);
     popup.document.close();
   }
 
@@ -683,7 +685,7 @@ export default function InventoryPage() {
         <div className="pay-stat"><div className="tag">Products</div><div className="num">{stats.total}</div></div>
         <div className="pay-stat"><div className="tag">Low Stock</div><div className="num" style={{ color: "#96650f" }}>{stats.low}</div></div>
         <div className="pay-stat"><div className="tag">Out of Stock</div><div className="num" style={{ color: "var(--red)" }}>{stats.out}</div></div>
-        <div className="pay-stat"><div className="tag">Stock Value</div><div className="num">PKR {formatNumber(stats.stockValue)}</div></div>
+        <div className="pay-stat"><div className="tag">Stock Value</div><div className="num">{cur} {formatNumber(stats.stockValue)}</div></div>
         <div className="pay-stat"><div className="tag">Vouchers</div><div className="num">{vouchers.length}</div></div>
       </div>
       ) : null}
@@ -1142,7 +1144,7 @@ export default function InventoryPage() {
             <div className="pay-stat"><div className="tag">Products</div><div className="num">{stats.total}</div></div>
             <div className="pay-stat"><div className="tag">Low Stock</div><div className="num" style={{ color: "#96650f" }}>{stats.low}</div></div>
             <div className="pay-stat"><div className="tag">Out of Stock</div><div className="num" style={{ color: "var(--red)" }}>{stats.out}</div></div>
-            <div className="pay-stat"><div className="tag">Stock Value</div><div className="num">PKR {formatNumber(stats.stockValue)}</div></div>
+            <div className="pay-stat"><div className="tag">Stock Value</div><div className="num">{cur} {formatNumber(stats.stockValue)}</div></div>
             <div className="pay-stat"><div className="tag">Vouchers</div><div className="num">{vouchers.length}</div></div>
           </div>
         </Panel>
@@ -1472,11 +1474,12 @@ function StockItemsTable({ voucher }: { voucher: StockVoucher }) {
 }
 
 function StockVoucherPrint({ voucher, branches }: { voucher: StockVoucher; branches: Branch[] }) {
+  const { name: schoolName } = useSchoolProfile();
   return (
     <div className="print-only voucher-print">
       <div className="voucher-print-head">
         <div>
-          <h1>Sabaq School System</h1>
+          <h1>{schoolName || "School"}</h1>
           <p>{branches.find((b) => b.code === voucher.branchCode)?.name || voucher.branchCode}</p>
         </div>
         <div>

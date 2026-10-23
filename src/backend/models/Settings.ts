@@ -66,7 +66,21 @@ export interface ISettings {
   lateFeeGraceDays?: number;
   /** Withholding tax % for vendor payments (FBR-style). */
   whtRate?: number;
-  /** School profile — logo and identity */
+  /** Prefix for auto-generated admission numbers, e.g. ADM → ADM-MAIN-2026-00001. */
+  admissionPrefix?: string;
+  /** Prefix for fee receipt numbers, e.g. RCP → RCP-MAIN-2026-00001. */
+  receiptPrefix?: string;
+  /** UDISE+ school code (India) — printed on transfer certificates. */
+  udiseCode?: string;
+  /** School logo as a data URL; excluded from normal reads, served by /api/settings/logo. */
+  logoData?: string;
+  logoUpdatedAt?: Date;
+  /** Raise every class's monthly challans automatically on `feeGenerateDay`. */
+  autoMonthlyFees?: boolean;
+  feeGenerateDay?: number;
+  /** "YYYY-MM" of the last automatic run, so each month runs once. */
+  lastAutoFeeMonth?: string;
+  /** Older versions kept the logo here as a data URL; moved to logoData on first read. */
   logoUrl?: string;
   motto?: string;
   website?: string;
@@ -158,6 +172,14 @@ const SettingsSchema = new Schema<ISettings>(
     lateFeePercent: { type: Number, default: 5, min: 0, max: 100 },
     lateFeeGraceDays: { type: Number, default: 7, min: 0, max: 90 },
     whtRate: { type: Number, default: 0, min: 0, max: 100 },
+    admissionPrefix: { type: String, uppercase: true, trim: true, default: "STD" },
+    receiptPrefix: { type: String, uppercase: true, trim: true, default: "RCP" },
+    udiseCode: { type: String, trim: true },
+    logoData: { type: String, select: false },
+    logoUpdatedAt: Date,
+    autoMonthlyFees: { type: Boolean, default: false },
+    feeGenerateDay: { type: Number, default: 1, min: 1, max: 28 },
+    lastAutoFeeMonth: String,
     logoUrl: String,
     motto: String,
     website: String,

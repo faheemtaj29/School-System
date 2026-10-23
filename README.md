@@ -6,13 +6,21 @@ Full school management app built with **Next.js (App Router)**, **React**, **Mon
 
 - **Dashboard** with colorful KPIs, attendance trend chart, class-strength bars, fee ring
 - Auth: login + first-time admin setup (JWT cookie)
-- Academics: Students, Teachers, Classes, Subjects, Attendance, Exams
-- Finance: Fee vouchers + Accounting ledger (income/expense)
+- Academics: Students, Teachers, Classes, Subjects, Attendance
+- **Exams** (bulk, many classes at once): date sheet from class subjects → roll number
+  slips with paper times → component-wise marks (theory / practical / viva / assignments)
+  → result cards with grade, GPA and position, plus a class result sheet
+- **Fees**: class fee structure, automatic monthly challans on a chosen day, bulk challan
+  printing with arrears, counter collection with 2-copy receipts (parent + office)
+- **Accounting**: double-entry vouchers, trial balance, income statement, balance sheet
+  (statement of financial position), cash flow statement, day/cash/bank books
 - Ops: Inventory / store stock
 - HR: Leave requests + Payroll / payslips
 - Notices & Events
 - Reports & Print (students, fees, attendance, exams, staff, finance, inventory)
-- Settings (school profile + notification toggles)
+- Settings: school profile with logo upload, currency symbol, admission & receipt number
+  prefixes, UDISE code, network (LAN) address for other computers, and one-click
+  **Backup & Download** of the whole database
 - Related/nested forms throughout
 
 ## Stack
@@ -35,10 +43,11 @@ cp .env.local.example .env.local
 
 3. Set `MONGODB_URI` and `JWT_SECRET` in `.env.local`.
 
-4. Install & run:
+4. Install, apply database migrations & run:
 
 ```bash
 npm install
+npm run db:migrate
 npm run dev
 ```
 

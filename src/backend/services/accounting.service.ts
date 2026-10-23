@@ -1018,6 +1018,98 @@ export const accountingService = {
     };
   },
 
+  /**
+   * Statement of cash flows (direct method). Every posted voucher that touches a
+   * cash/bank account is split by its other lines: income, expenses and working
+   * capital are operating; non-current assets (12…) investing; equity (3…) and
+   * long-term liabilities (22…) financing. Cash ↔ bank transfers net to zero.
+   */
+  async cashFlow(range: ReportRange = {}) {
+    await ensureSeeded();
+    const { from, to } = rangeDates(range);
+    const base = baseMatch(range.branchCode);
+    const accounts = await Account.find().select("code name level parentCode type isCashBank openingBalance openingBalanceSide").lean();
+    const byCode = new Map(accounts.map((a) => [a.code, a]));
+    const cashCodes = accounts.filter((a) => a.isCashBank).map((a) => a.code);
+
+    const activityOf = (code: string, type: string) => {
+      if (type === "equity" || code.startsWith("22")) return "financing" as const;
+      if (type === "asset" && code.startsWith("12")) return "investing" as const;
+      return "operating" as const;
+    };
+    const headOf = (code: string) => {
+      let current = byCode.get(code);
+      while (current && current.level > 3 && current.parentCode) {
+        const parent = byCode.get(current.parentCode);
+        if (!parent) break;
+        current = parent;
+      }
+      return current ? { code: current.code, name: current.name } : { code, name: code };
+    };
+
+    // Cash & bank balance up to a date; with no opening date only the opening balances count.
+    const cashBalance = async (before: Date | null, inclusive: boolean) => {
+      const match: Record<string, unknown> = { ...base };
+      if (before) match.date = inclusive ? { $lte: before } : { $lt: before };
+      const moved = before || inclusive ? await movementsByAccount(match) : emptyMovements();
+      let total = 0;
+      for (const code of cashCodes) {
+        const acc = byCode.get(code)!;
+        const m = moved.get(code) || { debit: 0, credit: 0 };
+        total += m.debit - m.credit;
+        if (acc.openingBalance) total += acc.openingBalanceSide === "debit" ? acc.openingBalance : -acc.openingBalance;
+      }
+      return round(total);
+    };
+
+    const periodMatch: Record<string, unknown> = { ...base, "lines.accountCode": { $in: cashCodes } };
+    if (from || to) periodMatch.date = { ...(from ? { $gte: from } : {}), ...(to ? { $lte: to } : {}) };
+    const vouchers = await Voucher.find(periodMatch).select("lines").lean();
+
+    type Section = { groups: ReportGroup[]; total: number };
+    const sections: Record<"operating" | "investing" | "financing", Map<string, ReportGroup>> = {
+      operating: new Map(),
+      investing: new Map(),
+      financing: new Map(),
+    };
+    for (const v of vouchers) {
+      for (const line of v.lines as { accountCode: string; debit: number; credit: number }[]) {
+        if (cashCodes.includes(line.accountCode)) continue;
+        // In a balanced voucher, the other lines' (credit − debit) add up to the cash movement.
+        const effect = round((line.credit || 0) - (line.debit || 0));
+        if (!effect) continue;
+        const acc = byCode.get(line.accountCode);
+        const section = sections[activityOf(line.accountCode, acc?.type || "expense")];
+        const head = headOf(line.accountCode);
+        const group: ReportGroup = section.get(head.code) || { code: head.code, name: head.name, total: 0, accounts: [] };
+        const row = group.accounts.find((a) => a.code === line.accountCode);
+        if (row) row.amount = round(row.amount + effect);
+        else group.accounts.push({ code: line.accountCode, name: acc?.name || line.accountCode, amount: effect });
+        group.total = round(group.total + effect);
+        section.set(head.code, group);
+      }
+    }
+    const finish = (m: Map<string, ReportGroup>): Section => {
+      const groups = [...m.values()].filter((g) => g.total || g.accounts.some((a) => a.amount)).sort((a, b) => a.code.localeCompare(b.code));
+      return { groups, total: round(groups.reduce((s, g) => s + g.total, 0)) };
+    };
+    const operating = finish(sections.operating);
+    const investing = finish(sections.investing);
+    const financing = finish(sections.financing);
+    const netChange = round(operating.total + investing.total + financing.total);
+    const opening = await cashBalance(from, false);
+    const closing = await cashBalance(to, true);
+    return {
+      operating,
+      investing,
+      financing,
+      netChange,
+      openingCash: opening,
+      closingCash: closing,
+      reconciled: Math.abs(opening + netChange - closing) < 0.01,
+    };
+  },
+
   /** Account ledger with brought-forward balance and running balance. */
   async generalLedger(range: ReportRange & { accountCode: string }) {
     await ensureSeeded();
@@ -1323,6 +1415,21 @@ export const accountingService = {
       payload,
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
+  },
+
+  /** Remove the source's own entry and any per-payment entries ("<id>:<receipt>"). */
+  async removeBySourcePrefix(sourceType: LedgerSource, sourceId: string) {
+    await this.removeBySource(sourceType, sourceId);
+    const ids = await LedgerEntry.distinct("sourceId", {
+      sourceType,
+      sourceId: { $regex: `^${sourceId.replace(/[^a-zA-Z0-9]/g, "")}:` },
+    });
+    const voucherIds = await Voucher.distinct("sourceId", {
+      sourceType,
+      sourceId: { $regex: `^${sourceId.replace(/[^a-zA-Z0-9]/g, "")}:` },
+    });
+    for (const sid of new Set([...ids, ...voucherIds])) await this.removeBySource(sourceType, String(sid));
+    return { ok: true };
   },
 
   async removeBySource(sourceType: LedgerSource, sourceId: string) {

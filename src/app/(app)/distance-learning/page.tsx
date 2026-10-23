@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import {
   EmptyState,
   Field,
@@ -153,6 +154,7 @@ function courseLabel(v: RefCourse | string | null | undefined) {
 }
 
 export default function DistanceLearningPage() {
+  const { currency: cur } = useSchoolProfile();
   const [tab, setTab] = useState<Tab>("courses");
   const [stats, setStats] = useState({ courses: 0, lectures: 0, enrollments: 0, diplomas: 0, liveNow: 0 });
   const [courses, setCourses] = useState<Course[]>([]);
@@ -1379,7 +1381,7 @@ export default function DistanceLearningPage() {
                 <option value="">Select course</option>
                 {courses.map((c) => (
                   <option key={c._id} value={c._id}>
-                    {c.code} — {c.title} (PKR {formatNumber(c.fee)})
+                    {c.code} — {c.title} ({cur} {formatNumber(c.fee)})
                   </option>
                 ))}
               </select>

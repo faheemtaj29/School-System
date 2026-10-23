@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import { useSearchParams } from "next/navigation";
 import {
   EmptyState,
@@ -92,6 +93,7 @@ type Tab =
   | "trial"
   | "pnl"
   | "balance"
+  | "cashflow"
   | "bank";
 
 type ReportGroup = {
@@ -172,6 +174,7 @@ const voucherLabels: Record<string, string> = {
 };
 
 export default function AccountingPage() {
+  const { name: schoolName } = useSchoolProfile();
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
   const [tab, setTab] = useState<Tab>("overview");
@@ -218,6 +221,15 @@ export default function AccountingPage() {
   const [pnl, setPnl] = useState<{ income: Section; expense: Section; surplus: number } | null>(
     null
   );
+  const [cashFlow, setCashFlow] = useState<{
+    operating: Section;
+    investing: Section;
+    financing: Section;
+    netChange: number;
+    openingCash: number;
+    closingCash: number;
+    reconciled: boolean;
+  } | null>(null);
   const [balanceSheet, setBalanceSheet] = useState<{
     assets: Section;
     liabilities: Section;
@@ -278,6 +290,7 @@ export default function AccountingPage() {
       "trial-balance": { section: "Reports", leaf: "Trial Balance" },
       "income-statement": { section: "Reports", leaf: "Income Statement" },
       "balance-sheet": { section: "Reports", leaf: "Balance Sheet" },
+      "cash-flow": { section: "Reports", leaf: "Cash Flow Statement" },
       "bank-reconciliation": { section: "Reports", leaf: "Bank Reconciliation" },
       "accounting-reports": { section: "Reports", leaf: "Accounting Reports" },
     };
@@ -301,6 +314,7 @@ export default function AccountingPage() {
     if (navNode === "trial-balance") return "Trial Balance";
     if (navNode === "income-statement") return "Income Statement";
     if (navNode === "balance-sheet") return "Balance Sheet";
+    if (navNode === "cash-flow") return "Cash Flow Statement";
     if (navNode === "bank-reconciliation") return "Bank Reconciliation";
     if (navNode === "accounting-reports") return "Accounting Reports";
     return "Accounting & Finance";
@@ -325,6 +339,7 @@ export default function AccountingPage() {
     if (navNode === "trial-balance") return "Debit and credit position across all posting accounts.";
     if (navNode === "income-statement") return "Income and expense statement for selected period.";
     if (navNode === "balance-sheet") return "Assets, liabilities and equity position for selected period.";
+    if (navNode === "cash-flow") return "Cash received and paid, split into operating, investing and financing activities.";
     if (navNode === "bank-reconciliation") return "Unreconciled bank entries and WHT monitoring.";
     if (navNode === "accounting-reports") return "Summary reporting view across core accounting books.";
     return "5-level chart of accounts · double-entry vouchers · invoices · branch books";
@@ -362,6 +377,7 @@ export default function AccountingPage() {
       "trial-balance": "trial",
       "income-statement": "pnl",
       "balance-sheet": "balance",
+      "cash-flow": "cashflow",
       "bank-reconciliation": "bank",
     };
     return byNode[navNode] || tab;
@@ -370,7 +386,7 @@ export default function AccountingPage() {
   const isDashboardNode = navNode === "accounting-dashboard";
 
   const needsPeriodControls = useMemo(
-    () => ["party-ledger", "general-ledger", "cash-book", "bank-book", "trial-balance", "income-statement", "balance-sheet", "bank-reconciliation", "accounting-reports"].includes(navNode),
+    () => ["party-ledger", "general-ledger", "cash-book", "bank-book", "trial-balance", "income-statement", "balance-sheet", "cash-flow", "bank-reconciliation", "accounting-reports"].includes(navNode),
     [navNode]
   );
 
@@ -476,7 +492,7 @@ export default function AccountingPage() {
     if (effectiveVoucherTypeFilter) voucherQuery.set("type", effectiveVoucherTypeFilter);
     if (statusFilter) voucherQuery.set("status", statusFilter);
 
-    const [a, v, t, s, cash, settings, day, profit, bs] = await Promise.all([
+    const [a, v, t, s, cash, settings, day, profit, bs, cf] = await Promise.all([
       fetch("/api/accounting?view=accounts").then((r) => r.json()),
       fetch(`/api/accounting?${voucherQuery}`).then((r) => r.json()),
       fetch(withView("trial-balance")).then((r) => r.json()),
@@ -488,7 +504,9 @@ export default function AccountingPage() {
       fetch(withView("day-book")).then((r) => r.json()),
       fetch(withView("profit-loss")).then((r) => r.json()),
       fetch(withView("balance-sheet")).then((r) => r.json()),
+      fetch(withView("cash-flow")).then((r) => r.json()),
     ]);
+    setCashFlow(cf.operating ? cf : null);
     setDayBook(day.vouchers || []);
     setPnl(profit.income ? profit : null);
     setBalanceSheet(bs.assets ? bs : null);
@@ -1269,7 +1287,7 @@ export default function AccountingPage() {
         .summary { margin-left:auto; width:310px; margin-top:16px; border:1px solid #dce7dd; }.summary div { display:flex; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #e5ece5; }.summary div:last-child { border:0; background:#e3f2ec; font-weight:700; font-size:13px; }
         .signatures { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-top:70px; }.signatures div { border-top:1px solid #44534a; padding-top:7px; text-align:center; font-size:10px; color:#4e5e55; }
       </style></head><body><main class="document">
-        <header class="header"><div><h1>Sabaq School System</h1><p class="muted">${escapeHtml(branchName)}</p></div><div><h2>${escapeHtml(voucherLabels[voucher.voucherType] || voucher.voucherType)}</h2><div class="number">${escapeHtml(voucher.number)}</div></div></header>
+        <header class="header"><div><h1>${escapeHtml(schoolName || "School")}</h1><p class="muted">${escapeHtml(branchName)}</p></div><div><h2>${escapeHtml(voucherLabels[voucher.voucherType] || voucher.voucherType)}</h2><div class="number">${escapeHtml(voucher.number)}</div></div></header>
         <section class="meta"><div><span>Date</span><b>${escapeHtml(prettyDate(voucher.date))}</b></div><div><span>Party</span><b>${escapeHtml(voucher.partyName || "- ")}</b></div><div><span>Status</span><b>${escapeHtml(voucher.status.toUpperCase())}</b></div><div><span>Reference</span><b>${escapeHtml(voucher.reference || "- ")}</b></div><div><span>Branch</span><b>${escapeHtml(voucher.branchCode)}</b></div><div><span>Currency</span><b>${escapeHtml(voucher.currency)}</b></div></section>
         <div class="narration"><strong>Narration:</strong> ${escapeHtml(voucher.narration)}</div>
         ${items}<h3>Double-entry Posting</h3><table><thead><tr><th>Account</th><th>Narration</th><th class="amount">Debit</th><th class="amount">Credit</th></tr></thead><tbody>${lines}<tr class="total"><td colspan="2">TOTAL</td><td class="amount">${formatNumber(debitTotal)}</td><td class="amount">${formatNumber(creditTotal)}</td></tr></tbody></table>
@@ -1378,6 +1396,7 @@ export default function AccountingPage() {
               ["trial", "Trial Balance"],
               ["pnl", "Income & Expenditure"],
               ["balance", "Balance Sheet"],
+              ["cashflow", "Cash Flow"],
               ["bank", "Bank & WHT"],
             ] as const
           ).map(([key, label]) => (
@@ -1942,6 +1961,38 @@ export default function AccountingPage() {
                 <strong>{formatNumber(Math.abs(pnl.surplus))}</strong>
               </div>
             </>
+          )}
+        </Panel>
+      ) : null}
+
+      {activeTab === "cashflow" ? (
+        <Panel
+          title="Statement of Cash Flows"
+          meta={cashFlow ? (cashFlow.reconciled ? "RECONCILED TO CASH & BANK" : "CHECK CASH ACCOUNTS") : ""}
+        >
+          {!cashFlow ? (
+            <EmptyState message="No cash or bank movement yet." />
+          ) : (
+            <div className="cashflow">
+              <div className="statement-result">
+                <span>Opening cash &amp; bank balance</span>
+                <strong>{formatNumber(cashFlow.openingCash)}</strong>
+              </div>
+              <SectionTable title="Operating activities" section={cashFlow.operating} />
+              <SectionTable title="Investing activities" section={cashFlow.investing} />
+              <SectionTable title="Financing activities" section={cashFlow.financing} />
+              <div className="statement-result">
+                <span>Net increase / (decrease) in cash</span>
+                <strong>{formatNumber(cashFlow.netChange)}</strong>
+              </div>
+              <div className={`statement-result${cashFlow.reconciled ? " ok" : " bad"}`}>
+                <span>Closing cash &amp; bank balance</span>
+                <strong>{formatNumber(cashFlow.closingCash)}</strong>
+              </div>
+              <p style={{ fontSize: 11.5, color: "var(--text-dim)", marginTop: 8 }}>
+                Direct method: positive amounts are cash received, negative amounts are cash paid. Transfers between cash and bank are not counted.
+              </p>
+            </div>
           )}
         </Panel>
       ) : null}
@@ -2519,6 +2570,7 @@ const REPORT_TITLES: Record<Tab, string> = {
   trial: "Trial Balance",
   pnl: "Income & Expenditure Statement",
   balance: "Statement of Financial Position",
+  cashflow: "Statement of Cash Flows",
   bank: "Bank Reconciliation & WHT",
 };
 
@@ -2663,10 +2715,11 @@ function VoucherLinesTable({ voucher }: { voucher: Voucher }) {
 }
 
 function VoucherPrint({ voucher, branches }: { voucher: Voucher; branches: Branch[] }) {
+  const { name: schoolName } = useSchoolProfile();
   return (
     <div className="print-only voucher-print">
       <div className="voucher-print-head">
-        <div><h1>Sabaq School System</h1><p>{branches.find((b) => b.code === voucher.branchCode)?.name || voucher.branchCode}</p></div>
+        <div><h1>{schoolName || "School"}</h1><p>{branches.find((b) => b.code === voucher.branchCode)?.name || voucher.branchCode}</p></div>
         <div><h2>{voucherLabels[voucher.voucherType]}</h2><div className="num">{voucher.number}</div></div>
       </div>
       <div className="voucher-print-meta">

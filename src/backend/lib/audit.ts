@@ -5,14 +5,18 @@
 import { AuditEvent } from "@/backend/models/Platform";
 import type { SessionUser } from "@/backend/types";
 
+export type AuditModule = "accounting" | "inventory" | "ai";
+
 export async function recordAudit(params: {
-  module: "accounting" | "inventory";
+  module: AuditModule;
   action: string;
   entity: string;
   entityId?: string;
   summary: string;
   before?: Record<string, unknown>;
   after?: Record<string, unknown>;
+  /** Extra context; stored alongside `after` when no explicit snapshot is given. */
+  details?: Record<string, unknown>;
   actor?: SessionUser | null;
 }) {
   try {
@@ -26,7 +30,7 @@ export async function recordAudit(params: {
       entityId: params.entityId,
       summary: params.summary,
       before: params.before,
-      after: params.after,
+      after: params.after ?? params.details,
     });
   } catch (e) {
     // Audit logging must never block the underlying business transaction.
@@ -35,7 +39,7 @@ export async function recordAudit(params: {
 }
 
 export async function getAuditTrail(
-  module: "accounting" | "inventory",
+  module: AuditModule,
   entity: string,
   entityId: string
 ) {

@@ -12,6 +12,7 @@ import { accountingService } from "@/backend/services/accounting.service";
 import { DISCOUNT_DEFAULTS } from "@/backend/services/student.service";
 import { Settings } from "@/backend/models/Settings";
 import { platformService } from "@/backend/services/platform.service";
+import { allocateCode } from "@/backend/services/numbering.service";
 import type { SessionUser } from "@/backend/types";
 
 const studentPopulate = {
@@ -107,7 +108,7 @@ function toPayload(
   };
 }
 
-async function syncFeeLedger(fee: {
+export async function syncFeeLedger(fee: {
   _id: { toString(): string };
   title: string;
   paidAmount: number;
@@ -116,11 +117,40 @@ async function syncFeeLedger(fee: {
   method?: string;
   branchCode?: string;
   studentId: unknown;
+  receiptNo?: string;
+  payments?: { amount: number; date: Date; method: string; receiptNo: string }[];
 }) {
   const paid = fee.paidAmount || 0;
+  const id = String(fee._id);
   if (paid <= 0 || fee.status === "pending") {
-    await accountingService.removeBySource("fee", String(fee._id));
+    await accountingService.removeBySourcePrefix("fee", id);
     return;
+  }
+  // Counter collections: one receipt voucher per payment, on its own date and cash/bank account.
+  if (fee.payments?.length) {
+    await accountingService.removeBySource("fee", id);
+    for (const p of fee.payments) {
+      await accountingService.upsertLinked({
+        type: "income",
+        category: "Student Fees",
+        title: fee.title,
+        amount: p.amount,
+        date: p.date,
+        method: p.method as "cash" | "bank" | "online" | undefined,
+        reference: p.receiptNo,
+        notes: "Fee collected at counter",
+        branchCode: fee.branchCode,
+        sourceType: "fee",
+        sourceId: `${id}:${p.receiptNo}`,
+      });
+    }
+    return;
+  }
+  // Issue a receipt number once, on the first recorded payment; it never changes after.
+  let receiptNo = fee.receiptNo;
+  if (!receiptNo) {
+    receiptNo = await allocateCode("receipt", fee.branchCode);
+    await Fee.updateOne({ _id: fee._id, receiptNo: { $exists: false } }, { $set: { receiptNo } });
   }
   await accountingService.upsertLinked({
     type: "income",
@@ -129,7 +159,7 @@ async function syncFeeLedger(fee: {
     amount: paid,
     date: fee.paymentDate || new Date(),
     method: fee.method as "cash" | "bank" | "online" | undefined,
-    reference: `FEE-${String(fee._id).slice(-6).toUpperCase()}`,
+    reference: receiptNo,
     notes: "Auto-posted from fee voucher",
     branchCode: fee.branchCode,
     sourceType: "fee",
@@ -188,6 +218,13 @@ export const feeService = {
     const gross = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
     const existing = await Fee.findById(id).lean();
     if (!existing) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
+    if (existing.payments?.length && Number(data.paidAmount) !== existing.paidAmount) {
+      throw new ServiceError(
+        "VALIDATION",
+        "Payments on this voucher were collected at the counter — use Collect to record more",
+        400
+      );
+    }
 
     /** Keep original concession ratio when editing heads, if one was applied. */
     let amount = gross;
@@ -220,14 +257,14 @@ export const feeService = {
     ).populate(studentPopulate);
     if (!item) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
     await syncFeeLedger(item);
-    return item;
+    return Fee.findById(item._id).populate(studentPopulate).lean();
   },
 
   async remove(id: string) {
     await dbConnect();
     const item = await Fee.findByIdAndDelete(id);
     if (!item) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
-    await accountingService.removeBySource("fee", id);
+    await accountingService.removeBySourcePrefix("fee", id);
     return { ok: true };
   },
 
@@ -257,8 +294,9 @@ export const feeService = {
     const monthEnd = new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0, 23, 59, 59, 999);
     const already = await Fee.find({
       studentId: { $in: students.map((s) => s._id) },
-      title,
-      dueDate: { $gte: monthStart, $lte: monthEnd },
+      ...(data.billingMonth
+        ? { billingMonth: data.billingMonth }
+        : { title, dueDate: { $gte: monthStart, $lte: monthEnd } }),
     })
       .select("studentId")
       .lean();
@@ -280,6 +318,7 @@ export const feeService = {
           dueDate,
           status: "pending" as const,
           paidAmount: 0,
+          billingMonth: data.billingMonth,
           notes:
             priced.discountAmount > 0
               ? `${priced.discountType} ${priced.discountPercent}% concession`

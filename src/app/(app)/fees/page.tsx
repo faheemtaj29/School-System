@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   EmptyState,
   Field,
@@ -12,6 +12,8 @@ import {
   inputClass,
 } from "@/components/ui";
 import { FeeForm } from "@/components/forms/SchoolForms";
+import { CollectModal, FeeStructurePanel, monthName, type CollectTarget } from "@/components/fees/FeeTools";
+import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import {
   FeeItem,
   StudentItem,
@@ -22,7 +24,7 @@ import {
   toDateInput,
 } from "@/lib/types";
 
-type MainTab = "generate" | "received" | "pending" | "all";
+type MainTab = "generate" | "structure" | "received" | "pending" | "all";
 
 export default function FeesPage() {
   const [fees, setFees] = useState<FeeItem[]>([]);
@@ -30,6 +32,7 @@ export default function FeesPage() {
   const [classes, setClasses] = useState<{ _id: string; name: string; section: string }[]>([]);
   const [role, setRole] = useState("admin");
   const canEdit = role === "admin" || role === "staff";
+  const { currency: cur } = useSchoolProfile();
 
   // Main tab
   const [tab, setTab] = useState<MainTab>("generate");
@@ -54,10 +57,9 @@ export default function FeesPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editFee, setEditFee] = useState<FeeItem | null>(null);
 
-  // Quick-pay inline
-  const [payingId, setPayingId] = useState("");
-  const [payForm, setPayForm] = useState({ paidAmount: 0, method: "cash", paymentDate: toDateInput(new Date()) });
-  const [payMsg, setPayMsg] = useState("");
+  // Counter collection (opens the 2-copy receipt)
+  const [collecting, setCollecting] = useState<CollectTarget | null>(null);
+  const [filterMonth, setFilterMonth] = useState("");
 
   // Voucher print
   const [voucherId, setVoucherId] = useState("");
@@ -130,8 +132,8 @@ export default function FeesPage() {
           const cls = classes.find((c) => c._id === builderClassId);
           setBuilderMsg(
             `${data.created} voucher(s) created${cls ? ` for ${cls.name}-${cls.section}` : " (all classes)"}` +
-            ` · ${data.skipped} already billed · PKR ${formatNumber(data.billedAmount)} total` +
-            (data.discountTotal ? ` · PKR ${formatNumber(data.discountTotal)} concessions` : "")
+            ` · ${data.skipped} already billed · ${cur} ${formatNumber(data.billedAmount)} total` +
+            (data.discountTotal ? ` · ${cur} ${formatNumber(data.discountTotal)} concessions` : "")
           );
         } else {
           setBuilderMsg(data.error || "Failed");
@@ -141,37 +143,6 @@ export default function FeesPage() {
     } finally {
       setBuilderLoading(false);
     }
-  }
-
-  // ── Quick pay ───────────────────────────────────────────────────────────
-  function startPay(fee: FeeItem) {
-    setPayingId(fee._id);
-    setPayForm({
-      paidAmount: fee.amount - fee.paidAmount,
-      method: "cash",
-      paymentDate: toDateInput(new Date()),
-    });
-    setPayMsg("");
-  }
-
-  async function submitPay(fee: FeeItem) {
-    const res = await fetch(`/api/fees/${fee._id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        studentId: typeof fee.studentId === "object" ? (fee.studentId as { _id: string })._id : fee.studentId,
-        dueDate: toDateInput(fee.dueDate),
-        lines: fee.lines?.length ? fee.lines : [{ head: fee.title, amount: fee.amount }],
-        status: "paid",
-        paidAmount: payForm.paidAmount,
-        paymentDate: payForm.paymentDate,
-        method: payForm.method || undefined,
-        notes: fee.notes,
-      }),
-    });
-    const data = await res.json();
-    if (res.ok) { setPayingId(""); load(); }
-    else setPayMsg(data.error || "Failed");
   }
 
   // ── Filtered lists ──────────────────────────────────────────────────────
@@ -186,20 +157,22 @@ export default function FeesPage() {
   function feeStudentName(fee: FeeItem): string {
     const s = typeof fee.studentId === "object" ? fee.studentId : null;
     if (!s) return "";
-    return `${fullName(s)} ${s.admissionNo || ""}`.toLowerCase();
+    return `${fullName(s)} ${s.admissionNo || ""} ${fee.receiptNo || ""}`.toLowerCase();
   }
 
   const receivedFees = useMemo(() =>
     fees.filter((f) => f.status === "paid" &&
       (!filterClass || studentClass(f) === filterClass) &&
+      (!filterMonth || f.billingMonth === filterMonth) &&
       (!feeSearch || feeStudentName(f).includes(feeSearch.toLowerCase()))),
-    [fees, filterClass, feeSearch]);
+    [fees, filterClass, filterMonth, feeSearch]);
 
   const pendingFees = useMemo(() =>
     fees.filter((f) => (f.status === "pending" || f.status === "overdue" || f.status === "partial") &&
       (!filterClass || studentClass(f) === filterClass) &&
+      (!filterMonth || f.billingMonth === filterMonth) &&
       (!feeSearch || feeStudentName(f).includes(feeSearch.toLowerCase()))),
-    [fees, filterClass, feeSearch]);
+    [fees, filterClass, filterMonth, feeSearch]);
 
   const voucher = fees.find((f) => f._id === voucherId) ?? null;
   const voucherStudent = voucher && typeof voucher.studentId === "object" ? voucher.studentId : null;
@@ -207,7 +180,6 @@ export default function FeesPage() {
   // ── Render helpers ──────────────────────────────────────────────────────
   function FeeRow({ fee, showPay }: { fee: FeeItem; showPay?: boolean }) {
     const s = typeof fee.studentId === "object" ? fee.studentId : null;
-    const isPaying = payingId === fee._id;
     return (
       <>
         <tr key={fee._id} style={{ background: fee.status === "overdue" ? "var(--red-bg, #fff1f1)" : undefined }}>
@@ -221,14 +193,14 @@ export default function FeesPage() {
             <div style={{ fontWeight: 600, fontSize: 13 }}>{fee.title}</div>
             {fee.lines?.length ? (
               <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
-                {fee.lines.map((l) => `${l.head} PKR ${formatNumber(l.amount)}`).join(" · ")}
+                {fee.lines.map((l) => `${l.head} ${cur} ${formatNumber(l.amount)}`).join(" · ")}
               </div>
             ) : null}
           </td>
           <td className="num">{prettyDate(fee.dueDate)}</td>
-          <td className="num" style={{ fontWeight: 600 }}>PKR {formatNumber(fee.amount)}</td>
+          <td className="num" style={{ fontWeight: 600 }}>{cur} {formatNumber(fee.amount)}</td>
           <td className="num" style={{ color: fee.paidAmount > 0 ? "#16a34a" : "var(--text-dim)" }}>
-            {fee.paidAmount > 0 ? `PKR ${formatNumber(fee.paidAmount)}` : "—"}
+            {fee.paidAmount > 0 ? `${cur} ${formatNumber(fee.paidAmount)}` : "—"}
           </td>
           <td className="right">
             <StatusBadge status={fee.status} />
@@ -238,9 +210,30 @@ export default function FeesPage() {
               <button type="button" className="link-btn" onClick={() => setVoucherId(fee._id)}>Voucher</button>
               {canEdit ? (
                 <>
-                  {showPay && fee.status !== "paid" ? (
-                    <button type="button" className="link-btn" onClick={() => startPay(fee)}>
-                      {isPaying ? "Cancel" : "Mark Paid"}
+                  {showPay && fee.amount - fee.paidAmount > 0 ? (
+                    <button
+                      type="button"
+                      className="link-btn collect"
+                      onClick={() =>
+                        setCollecting({
+                          _id: fee._id,
+                          studentName: s ? fullName(s) : "Student",
+                          title: fee.title,
+                          amount: fee.amount,
+                          paidAmount: fee.paidAmount,
+                        })
+                      }
+                    >
+                      Collect
+                    </button>
+                  ) : null}
+                  {fee.paidAmount > 0 ? (
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => window.open(`/print/fee-receipt?id=${fee._id}`, "_blank", "noopener")}
+                    >
+                      Receipt
                     </button>
                   ) : null}
                   <button type="button" className="link-btn" onClick={() => { setEditFee(fee); setEditOpen(true); }}>Edit</button>
@@ -249,59 +242,49 @@ export default function FeesPage() {
             </div>
           </td>
         </tr>
-        {isPaying ? (
-          <tr>
-            <td colSpan={7} style={{ background: "var(--paper)", padding: "10px 16px" }}>
-              {payMsg ? <div className="alert" style={{ marginBottom: 8 }}>{payMsg}</div> : null}
-              <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
-                <div>
-                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 3 }}>Amount Paid (PKR)</div>
-                  <input
-                    type="number" min={0} className={inputClass}
-                    value={payForm.paidAmount}
-                    onChange={(e) => setPayForm({ ...payForm, paidAmount: Number(e.target.value) })}
-                    style={{ width: 120 }}
-                  />
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 3 }}>Method</div>
-                  <select className={inputClass} value={payForm.method} onChange={(e) => setPayForm({ ...payForm, method: e.target.value })} style={{ width: 110 }}>
-                    <option value="cash">Cash</option>
-                    <option value="bank">Bank</option>
-                    <option value="online">Online</option>
-                    <option value="card">Card</option>
-                  </select>
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 3 }}>Payment Date</div>
-                  <input type="date" className={inputClass} value={payForm.paymentDate}
-                    onChange={(e) => setPayForm({ ...payForm, paymentDate: e.target.value })} style={{ width: 140 }} />
-                </div>
-                <button type="button" className="btn-dark" onClick={() => submitPay(fee)} style={{ height: 36 }}>Confirm</button>
-                <button type="button" className="btn-ghost" onClick={() => setPayingId("")} style={{ height: 36 }}>Cancel</button>
-              </div>
-            </td>
-          </tr>
-        ) : null}
       </>
     );
   }
 
-  function ClassFilter() {
+  const months = useMemo(
+    () => Array.from(new Set(fees.map((f) => f.billingMonth).filter(Boolean) as string[])).sort().reverse(),
+    [fees]
+  );
+
+  function printChallans() {
+    if (!filterMonth && !filterClass) {
+      alert("Pick a month or a class first, then print its challans.");
+      return;
+    }
+    const q = new URLSearchParams({ status: tab === "received" ? "all" : "unpaid" });
+    if (filterMonth) q.set("month", filterMonth);
+    if (filterClass) q.set("classId", filterClass);
+    window.open(`/print/fee-challans?${q.toString()}`, "_blank", "noopener");
+  }
+
+  // Rendered by calling renderFilters() (not <Component />) so the search box keeps focus while typing.
+  function renderFilters() {
     return (
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <input
           type="search"
           className={inputClass}
-          placeholder="Search by student name or admission no…"
+          placeholder="Search name, admission no. or receipt no…"
           value={feeSearch}
           onChange={(e) => setFeeSearch(e.target.value)}
-          style={{ maxWidth: 260 }}
+          style={{ maxWidth: 280 }}
         />
         <select className={inputClass} value={filterClass} onChange={(e) => setFilterClass(e.target.value)} style={{ maxWidth: 200 }}>
           <option value="">All Classes</option>
           {classes.map((c) => <option key={c._id} value={c._id}>{c.name} — {c.section}</option>)}
         </select>
+        <select className={inputClass} value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} style={{ maxWidth: 180 }}>
+          <option value="">All Months</option>
+          {months.map((m) => <option key={m} value={m}>{monthName(m)}</option>)}
+        </select>
+        {canEdit && tab !== "received" ? (
+          <button type="button" className="btn-dark" onClick={printChallans}>Print challans</button>
+        ) : null}
       </div>
     );
   }
@@ -320,16 +303,16 @@ export default function FeesPage() {
         <div className="pay-stat-row">
           <div className="pay-stat">
             <div className="tag">Total Billed</div>
-            <div className="num">PKR {formatNumber(stats.billed)}</div>
+            <div className="num">{cur} {formatNumber(stats.billed)}</div>
           </div>
           <div className="pay-stat">
             <div className="tag">Collected</div>
-            <div className="num" style={{ color: "#16a34a" }}>PKR {formatNumber(stats.collected)}</div>
+            <div className="num" style={{ color: "#16a34a" }}>{cur} {formatNumber(stats.collected)}</div>
           </div>
           <div className="pay-stat">
             <div className="tag">Outstanding</div>
             <div className="num" style={{ color: stats.outstanding > 0 ? "#dc2626" : undefined }}>
-              PKR {formatNumber(stats.outstanding)}
+              {cur} {formatNumber(stats.outstanding)}
             </div>
           </div>
           <div className="pay-stat">
@@ -362,6 +345,7 @@ export default function FeesPage() {
       <div className="chips" style={{ padding: "0 24px", marginBottom: 0 }}>
         {[
           { key: "generate", label: "Generate Fees" },
+          ...(canEdit ? [{ key: "structure", label: "Fee Structure & Monthly Billing" }] : []),
           { key: "pending",  label: `Pending (${stats.pending})` },
           { key: "received", label: `Received (${stats.paid})` },
           { key: "all",      label: "All Vouchers" },
@@ -430,7 +414,7 @@ export default function FeesPage() {
             <div style={{ margin: "18px 0 8px", fontWeight: 600, fontSize: 13 }}>Fee Heads</div>
             <div className="voucher-line-head fee-line-head">
               <span>Fee Head</span>
-              <span>Amount (PKR)</span>
+              <span>Amount ({cur})</span>
               <span />
             </div>
             {builderLines.map((line, i) => (
@@ -458,7 +442,7 @@ export default function FeesPage() {
                 + Add Fee Head
               </button>
               <div className="voucher-balance">
-                Per student · PKR {formatNumber(builderTotal)}
+                Per student · {cur} {formatNumber(builderTotal)}
               </div>
             </div>
 
@@ -474,10 +458,24 @@ export default function FeesPage() {
         </Panel>
       ) : null}
 
+      {tab === "structure" && canEdit ? <FeeStructurePanel onGenerated={load} /> : null}
+
+      {collecting ? (
+        <CollectModal
+          fee={collecting}
+          currency={cur}
+          onClose={() => setCollecting(null)}
+          onDone={() => {
+            setCollecting(null);
+            load();
+          }}
+        />
+      ) : null}
+
       {/* ══ PENDING TAB ═══════════════════════════════════════════════════ */}
       {tab === "pending" ? (
         <Panel title="Pending & Overdue" meta="Students who have not yet paid">
-          <ClassFilter />
+          {renderFilters()}
           {!pendingFees.length ? (
             <EmptyState message="No pending fees for this selection." />
           ) : (
@@ -506,7 +504,7 @@ export default function FeesPage() {
       {/* ══ RECEIVED TAB ══════════════════════════════════════════════════ */}
       {tab === "received" ? (
         <Panel title="Fee Received" meta="Fully paid vouchers">
-          <ClassFilter />
+          {renderFilters()}
           {!receivedFees.length ? (
             <EmptyState message="No paid fees for this selection." />
           ) : (
@@ -535,8 +533,8 @@ export default function FeesPage() {
       {/* ══ ALL VOUCHERS TAB ══════════════════════════════════════════════ */}
       {tab === "all" ? (
         <Panel title="All Vouchers">
-          <ClassFilter />
-          {!fees.filter((f) => !filterClass || studentClass(f) === filterClass).length ? (
+          {renderFilters()}
+          {!fees.filter((f) => (!filterClass || studentClass(f) === filterClass) && (!filterMonth || f.billingMonth === filterMonth)).length ? (
             <EmptyState message="No fee vouchers found." />
           ) : (
             <div className="table-scroll">
@@ -554,7 +552,7 @@ export default function FeesPage() {
                 </thead>
                 <tbody>
                   {fees
-                    .filter((f) => !filterClass || studentClass(f) === filterClass)
+                    .filter((f) => (!filterClass || studentClass(f) === filterClass) && (!filterMonth || f.billingMonth === filterMonth))
                     .map((fee) => <FeeRow key={fee._id} fee={fee} showPay />)}
                 </tbody>
               </table>
@@ -612,7 +610,7 @@ export default function FeesPage() {
               <div className="fee-row"><span>Paid</span><span className="mono">- {formatNumber(voucher.paidAmount)}</span></div>
               <div className="fee-row total">
                 <span>BALANCE DUE</span>
-                <span>PKR {formatNumber(voucher.amount - voucher.paidAmount)}</span>
+                <span>{cur} {formatNumber(voucher.amount - voucher.paidAmount)}</span>
               </div>
               {voucher.paymentDate ? (
                 <div className="fee-row" style={{ fontSize: 12, color: "var(--text-dim)" }}>
@@ -629,7 +627,7 @@ export default function FeesPage() {
                 {voucherStudent?.parentPhone ? (
                   <a
                     href={`https://api.whatsapp.com/send?phone=${voucherStudent.parentPhone.replace(/\D/g, "")}&text=${encodeURIComponent(
-                      `*Fee Challan*\nStudent: ${fullName(voucherStudent)}\nAdmission No: ${voucherStudent.admissionNo}\nTitle: ${voucher.title}\nDue Date: ${prettyDate(voucher.dueDate)}\nBalance Due: PKR ${formatNumber(voucher.amount - voucher.paidAmount)}\nStatus: ${voucher.status}`
+                      `*Fee Challan*\nStudent: ${fullName(voucherStudent)}\nAdmission No: ${voucherStudent.admissionNo}\nTitle: ${voucher.title}\nDue Date: ${prettyDate(voucher.dueDate)}\nBalance Due: ${cur} ${formatNumber(voucher.amount - voucher.paidAmount)}\nStatus: ${voucher.status}`
                     )}`}
                     target="_blank"
                     rel="noreferrer"

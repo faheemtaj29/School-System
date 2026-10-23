@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import {
   EmptyState,
   Field,
@@ -272,6 +273,7 @@ type AiJobRow = {
 type Stat = { tag: string; value: string };
 
 export default function CampusOpsPage() {
+  const { currency: cur } = useSchoolProfile();
   const [active, setActive] = useState<ModuleKey>("timetable");
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
@@ -611,7 +613,7 @@ export default function CampusOpsPage() {
         { tag: "Sales Recorded", value: String(sales.length) },
         {
           tag: "Sales Value",
-          value: `PKR ${formatNumber(sales.reduce((sum, s) => sum + s.total, 0))}`,
+          value: `${cur} ${formatNumber(sales.reduce((sum, s) => sum + s.total, 0))}`,
         },
       ];
     }
@@ -620,7 +622,7 @@ export default function CampusOpsPage() {
         { tag: "Tagged Assets", value: String(assets.length) },
         {
           tag: "Book Value",
-          value: `PKR ${formatNumber(assets.reduce((sum, a) => sum + a.purchaseCost, 0))}`,
+          value: `${cur} ${formatNumber(assets.reduce((sum, a) => sum + a.purchaseCost, 0))}`,
         },
         {
           tag: "Under Repair",
@@ -649,7 +651,7 @@ export default function CampusOpsPage() {
       },
       { tag: "Provider", value: jobs[0]?.provider || "stub" },
     ];
-  }, [active, slots, books, loans, vehicles, rooms, visits, menu, sales, assets, documents, jobs]);
+  }, [active, slots, books, loans, vehicles, rooms, visits, menu, sales, assets, documents, jobs, cur]);
 
   const term = search.trim().toLowerCase();
   const match = (...fields: (string | undefined)[]) =>
