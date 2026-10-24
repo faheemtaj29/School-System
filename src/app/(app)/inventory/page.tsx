@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import {
   EmptyState,
@@ -13,6 +14,7 @@ import {
   inputClass,
 } from "@/components/ui";
 import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
+import { useSchoolBranding } from "@/components/SchoolBranding";
 
 type Item = {
   _id: string;
@@ -192,6 +194,7 @@ const voucherBlank = {
 };
 
 export default function InventoryPage() {
+  const branding = useSchoolBranding();
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
   const [tab, setTab] = useState<"vouchers" | "products">("vouchers");
@@ -566,14 +569,17 @@ export default function InventoryPage() {
         .replace(/'/g, "&#039;");
     const config = VOUCHERS[voucher.voucherType];
     const branchName = branches.find((branch) => branch.code === voucher.branchCode)?.name || voucher.branchCode;
+    const schoolLogo = branding.logoUrl
+      ? `<img class="school-logo" src="${escapeHtml(branding.logoUrl)}" alt="">`
+      : "";
     const items = voucher.items
       .map(
         (item) => `<tr><td><strong>${escapeHtml(item.sku || "-")}</strong><br><span>${escapeHtml(item.name)}</span></td><td>${escapeHtml(item.unit || "pcs")}</td><td class="amount">${formatNumber(item.quantity)}</td><td class="amount">${formatNumber(item.rate)}</td><td class="amount">${formatNumber(item.amount || item.quantity * item.rate)}</td></tr>`
       )
       .join("");
-    popup.document.write(`<!doctype html><html><head><title>${escapeHtml(voucher.number)} - Print</title><style>
-      @page { size: A4; margin: 14mm; } * { box-sizing:border-box; } body { margin:0; color:#17241d; font:12px Arial,sans-serif; } .document { max-width:190mm; margin:0 auto; } .header { display:flex; justify-content:space-between; gap:20px; padding-bottom:16px; border-bottom:3px solid #157a5c; } h1 { margin:0; font:700 25px Georgia,serif; } h2 { margin:0; font:700 17px Georgia,serif; text-align:right; } h3 { margin:23px 0 8px; color:#157a5c; font-size:11px; letter-spacing:.08em; text-transform:uppercase; } .muted { color:#627369; margin-top:5px; } .number { font:700 13px 'Courier New',monospace; margin-top:6px; } .meta { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:18px 0; padding:12px; background:#f3f7f3; border:1px solid #dce7dd; } .meta span { display:block; color:#64746b; font-size:9px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:3px; } .meta b { font-size:12px; } .narration { padding:10px 12px; border-left:3px solid #e8992e; background:#fffaf1; line-height:1.5; } table { width:100%; border-collapse:collapse; margin-top:8px; } th { background:#15332a; color:#fff; padding:9px 8px; font-size:9px; text-align:left; letter-spacing:.06em; text-transform:uppercase; } td { padding:9px 8px; border-bottom:1px solid #dfe7df; vertical-align:top; } td span { color:#64746b; font-size:10px; } .amount { text-align:right; font-family:'Courier New',monospace; } .summary { margin-left:auto; width:310px; margin-top:16px; border:1px solid #dce7dd; } .summary div { display:flex; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #e5ece5; } .summary div:last-child { border:0; background:#e3f2ec; font-weight:700; font-size:13px; } .signatures { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-top:70px; } .signatures div { border-top:1px solid #44534a; padding-top:7px; text-align:center; font-size:10px; color:#4e5e55; }
-      </style></head><body><main class="document"><header class="header"><div><h1>Sabaq School System</h1><p class="muted">${escapeHtml(branchName)}</p></div><div><h2>${escapeHtml(config.label)}</h2><div class="number">${escapeHtml(voucher.number)}</div></div></header><section class="meta"><div><span>Date</span><b>${escapeHtml(prettyDate(voucher.date))}</b></div><div><span>Party</span><b>${escapeHtml(voucher.partyName || "-")}</b></div><div><span>Status</span><b>${escapeHtml(voucher.status.toUpperCase())}</b></div><div><span>Movement</span><b>${escapeHtml(config.effect)}</b></div><div><span>Campus</span><b>${escapeHtml(voucher.toBranchCode ? `${voucher.branchCode} to ${voucher.toBranchCode}` : voucher.branchCode)}</b></div><div><span>Reference</span><b>${escapeHtml(voucher.reference || "-")}</b></div></section><div class="narration"><strong>Narration:</strong> ${escapeHtml(voucher.narration)}</div><h3>Stock Items</h3><table><thead><tr><th>Item</th><th>Unit</th><th class="amount">Quantity</th><th class="amount">Rate</th><th class="amount">Amount</th></tr></thead><tbody>${items}</tbody></table><section class="summary"><div><span>Subtotal</span><strong>${formatNumber(voucher.subtotal)}</strong></div><div><span>Discount</span><strong>${formatNumber(voucher.discountAmount)}</strong></div><div><span>Tax</span><strong>${formatNumber(voucher.taxAmount)}</strong></div><div><span>Grand Total</span><strong>PKR ${formatNumber(voucher.grandTotal)}</strong></div></section><footer class="signatures"><div>Prepared by</div><div>Checked by</div><div>Approved by</div><div>Received by</div></footer></main><script>window.onload=()=>window.print();</script></body></html>`);
+    popup.document.write(`<!doctype html><html><head><title>${escapeHtml(branding.schoolName)} - ${escapeHtml(voucher.number)}</title><style>
+      @page { size: A4; margin: 14mm; } * { box-sizing:border-box; } body { margin:0; color:#17241d; font:12px Arial,sans-serif; } .document { max-width:190mm; margin:0 auto; } .header { display:flex; justify-content:space-between; gap:20px; padding-bottom:16px; border-bottom:3px solid #157a5c; } .school-brand { display:flex; align-items:center; gap:12px; } .school-logo { width:56px; height:56px; object-fit:contain; } h1 { margin:0; font:700 25px Georgia,serif; } h2 { margin:0; font:700 17px Georgia,serif; text-align:right; } h3 { margin:23px 0 8px; color:#157a5c; font-size:11px; letter-spacing:.08em; text-transform:uppercase; } .muted { color:#627369; margin-top:5px; } .number { font:700 13px 'Courier New',monospace; margin-top:6px; } .meta { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:18px 0; padding:12px; background:#f3f7f3; border:1px solid #dce7dd; } .meta span { display:block; color:#64746b; font-size:9px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:3px; } .meta b { font-size:12px; } .narration { padding:10px 12px; border-left:3px solid #e8992e; background:#fffaf1; line-height:1.5; } table { width:100%; border-collapse:collapse; margin-top:8px; } th { background:#15332a; color:#fff; padding:9px 8px; font-size:9px; text-align:left; letter-spacing:.06em; text-transform:uppercase; } td { padding:9px 8px; border-bottom:1px solid #dfe7df; vertical-align:top; } td span { color:#64746b; font-size:10px; } .amount { text-align:right; font-family:'Courier New',monospace; } .summary { margin-left:auto; width:310px; margin-top:16px; border:1px solid #dce7dd; } .summary div { display:flex; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #e5ece5; } .summary div:last-child { border:0; background:#e3f2ec; font-weight:700; font-size:13px; } .signatures { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-top:70px; } .signatures div { border-top:1px solid #44534a; padding-top:7px; text-align:center; font-size:10px; color:#4e5e55; }
+      </style></head><body><main class="document"><header class="header"><div class="school-brand">${schoolLogo}<div><h1>${escapeHtml(branding.schoolName)}</h1><p class="muted">${escapeHtml(branchName)}</p></div></div><div><h2>${escapeHtml(config.label)}</h2><div class="number">${escapeHtml(voucher.number)}</div></div></header><section class="meta"><div><span>Date</span><b>${escapeHtml(prettyDate(voucher.date))}</b></div><div><span>Party</span><b>${escapeHtml(voucher.partyName || "-")}</b></div><div><span>Status</span><b>${escapeHtml(voucher.status.toUpperCase())}</b></div><div><span>Movement</span><b>${escapeHtml(config.effect)}</b></div><div><span>Campus</span><b>${escapeHtml(voucher.toBranchCode ? `${voucher.branchCode} to ${voucher.toBranchCode}` : voucher.branchCode)}</b></div><div><span>Reference</span><b>${escapeHtml(voucher.reference || "-")}</b></div></section><div class="narration"><strong>Narration:</strong> ${escapeHtml(voucher.narration)}</div><h3>Stock Items</h3><table><thead><tr><th>Item</th><th>Unit</th><th class="amount">Quantity</th><th class="amount">Rate</th><th class="amount">Amount</th></tr></thead><tbody>${items}</tbody></table><section class="summary"><div><span>Subtotal</span><strong>${formatNumber(voucher.subtotal)}</strong></div><div><span>Discount</span><strong>${formatNumber(voucher.discountAmount)}</strong></div><div><span>Tax</span><strong>${formatNumber(voucher.taxAmount)}</strong></div><div><span>Grand Total</span><strong>PKR ${formatNumber(voucher.grandTotal)}</strong></div></section><footer class="signatures"><div>Prepared by</div><div>Checked by</div><div>Approved by</div><div>Received by</div></footer></main><script>window.onload=()=>window.print();</script></body></html>`);
     popup.document.close();
   }
 
@@ -806,19 +812,25 @@ export default function InventoryPage() {
 
       {showVoucherRegister ? (
         <Panel title={voucherRegisterTitle} meta={`${vouchers.length} RECORDS`}>
-          <div className="chips no-print" style={{ marginBottom: 14 }}>
-            <select className={inputClass} value={effectiveVoucherTypeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-              <option value="">All voucher types</option>
-              {(Object.keys(VOUCHERS) as VoucherType[]).map((type) => (
-                <option key={type} value={type}>{VOUCHERS[type].label}</option>
-              ))}
-            </select>
-            <select className={inputClass} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="">All statuses</option>
-              <option value="draft">Draft</option>
-              <option value="posted">Posted</option>
-              <option value="void">Void / Cancelled</option>
-            </select>
+          <div className="voucher-register-toolbar no-print">
+            <div className="voucher-register-label">
+              <strong>Filter register</strong>
+              <span>Choose a stock voucher type or posting status</span>
+            </div>
+            <div className="voucher-register-filters">
+              <select className={inputClass} aria-label="Filter by voucher type" value={effectiveVoucherTypeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                <option value="">All voucher types</option>
+                {(Object.keys(VOUCHERS) as VoucherType[]).map((type) => (
+                  <option key={type} value={type}>{VOUCHERS[type].label}</option>
+                ))}
+              </select>
+              <select className={inputClass} aria-label="Filter by voucher status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                <option value="">All statuses</option>
+                <option value="draft">Draft</option>
+                <option value="posted">Posted</option>
+                <option value="void">Void / Cancelled</option>
+              </select>
+            </div>
           </div>
           {!vouchers.length ? (
             <EmptyState message={voucherEmptyMessage} />
@@ -1216,7 +1228,15 @@ export default function InventoryPage() {
         wide
       >
         {err ? <div className="alert err">{err}</div> : null}
-        <div className="form-grid">
+        <section className="voucher-form-section">
+          <div className="voucher-editor-heading">
+            <div>
+              <span>VOUCHER DETAILS</span>
+              <strong>Stock transaction information</strong>
+            </div>
+            <span className="voucher-line-count">{config.effect}</span>
+          </div>
+          <div className="form-grid voucher-meta-grid">
           <Field label="Voucher Type" required>
             <select
               className={inputClass}
@@ -1278,17 +1298,30 @@ export default function InventoryPage() {
               </Field>
             </>
           ) : null}
-        </div>
+          </div>
+        </section>
 
         <div className="voucher-editor">
-          <div className="form-section-title">
-            {config.label} Items {config.signedQty ? "(use minus for stock loss)" : ""}
+          <div className="voucher-editor-heading">
+            <div>
+              <span>LINE ITEMS</span>
+              <strong>{config.label} items</strong>
+              {config.signedQty ? <small>Use a minus quantity to record stock loss.</small> : null}
+            </div>
+            <span className="voucher-line-count">{voucherForm.items.length} lines</span>
+          </div>
+          <div className="stock-voucher-head">
+            <span>Product</span>
+            <span>Quantity</span>
+            <span>{config.rateLabel}</span>
+            <span className="right">Line total</span>
+            <span />
           </div>
           {voucherForm.items.map((line, index) => {
             const product = itemMap.get(line.itemId);
             return (
-              <div className="invoice-item-row" key={index}>
-                <select className={inputClass} value={line.itemId} onChange={(e) => pickProduct(index, e.target.value)} required>
+              <div className="invoice-item-row stock-voucher-row" key={index}>
+                <select className={inputClass} aria-label={`Product for line ${index + 1}`} value={line.itemId} onChange={(e) => pickProduct(index, e.target.value)} required>
                   <option value="">Select product</option>
                   {items.map((item) => (
                     <option key={item._id} value={item._id}>
@@ -1301,6 +1334,7 @@ export default function InventoryPage() {
                   step="0.01"
                   min={config.signedQty ? undefined : "0.01"}
                   className={inputClass}
+                  aria-label={`Quantity for line ${index + 1}`}
                   placeholder={product ? product.unit : "Qty"}
                   value={line.quantity}
                   onChange={(e) => updateLine(index, { quantity: Number(e.target.value) })}
@@ -1311,15 +1345,20 @@ export default function InventoryPage() {
                   min="0"
                   step="0.01"
                   className={inputClass}
+                  aria-label={`${config.rateLabel} for line ${index + 1}`}
                   placeholder={config.rateLabel}
                   value={line.rate}
                   onChange={(e) => updateLine(index, { rate: Number(e.target.value) })}
                   required
                 />
-                <div className="num">{formatNumber(Math.abs(line.quantity || 0) * (line.rate || 0))}</div>
+                <div className="stock-voucher-amount">
+                  <span>Line total</span>
+                  <strong className="num">{formatNumber(Math.abs(line.quantity || 0) * (line.rate || 0))}</strong>
+                </div>
                 <button
                   type="button"
                   className="link-btn danger"
+                  aria-label={`Remove line ${index + 1}`}
                   onClick={() => setVoucherForm({ ...voucherForm, items: voucherForm.items.filter((_, i) => i !== index) })}
                 >
                   ×
@@ -1433,7 +1472,7 @@ export default function InventoryPage() {
         </div>
       </ModalForm>
 
-      {selected ? <StockVoucherPrint voucher={selected} branches={branches} /> : null}
+      {selected ? <StockVoucherPrint voucher={selected} branches={branches} schoolName={branding.schoolName} logoUrl={branding.logoUrl} /> : null}
     </>
   );
 }
@@ -1471,13 +1510,18 @@ function StockItemsTable({ voucher }: { voucher: StockVoucher }) {
   );
 }
 
-function StockVoucherPrint({ voucher, branches }: { voucher: StockVoucher; branches: Branch[] }) {
+function StockVoucherPrint({ voucher, branches, schoolName, logoUrl }: { voucher: StockVoucher; branches: Branch[]; schoolName: string; logoUrl: string }) {
   return (
     <div className="print-only voucher-print">
       <div className="voucher-print-head">
         <div>
-          <h1>Sabaq School System</h1>
-          <p>{branches.find((b) => b.code === voucher.branchCode)?.name || voucher.branchCode}</p>
+          <div className="voucher-print-brand">
+            {logoUrl ? <Image src={logoUrl} alt="" width={52} height={52} unoptimized /> : null}
+            <div>
+              <h1>{schoolName}</h1>
+              <p>{branches.find((b) => b.code === voucher.branchCode)?.name || voucher.branchCode}</p>
+            </div>
+          </div>
         </div>
         <div>
           <h2>{VOUCHERS[voucher.voucherType]?.label}</h2>

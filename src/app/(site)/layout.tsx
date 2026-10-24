@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ReactNode } from "react";
 import { siteService } from "@/backend/services/site.service";
+import { SchoolLogo, SchoolName } from "@/components/SchoolBranding";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +19,9 @@ export default async function SiteLayout({ children }: { children: ReactNode }) 
     <div className="site">
       <header className="site-nav">
         <Link href="/" className="site-brand">
-          <span className="site-badge">S</span>
+          <SchoolLogo className="site-brand-logo" fallbackClassName="site-badge" />
           <span>
-            {content.brandName}
+            <SchoolName />
             <small>{content.tagline}</small>
           </span>
         </Link>
@@ -46,7 +47,7 @@ export default async function SiteLayout({ children }: { children: ReactNode }) 
       <footer className="site-footer">
         <div className="site-foot-grid">
           <div>
-            <h4>{content.brandName}</h4>
+            <h4><SchoolName /></h4>
             <p>{content.tagline}</p>
             {content.address ? <p>{content.address}</p> : null}
           </div>
@@ -73,7 +74,7 @@ export default async function SiteLayout({ children }: { children: ReactNode }) 
           </div>
         </div>
         <div className="site-copy">
-          © {new Date().getFullYear()} {content.brandName}
+          © {new Date().getFullYear()} <SchoolName />
         </div>
       </footer>
     </div>

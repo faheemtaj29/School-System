@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import { Field, Hero, Panel, StatusBadge, inputClass } from "@/components/ui";
+import { publishSchoolBranding } from "@/components/SchoolBranding";
 import { DEFAULT_THEME, THEME_PRESETS, themeVars, type Theme } from "@/lib/theme";
 import { prettyDate } from "@/lib/types";
 
@@ -270,6 +272,11 @@ export default function SettingsPage() {
       ...data.settings,
       theme: { ...DEFAULT_THEME, ...(data.settings.theme || {}) },
     });
+    publishSchoolBranding({
+      schoolName: data.settings.schoolName,
+      logoUrl: data.settings.logoUrl || "",
+      motto: data.settings.motto || "",
+    });
     setMsg("Settings saved — theme, tax, branches and profile apply across the system.");
   }
 
@@ -491,9 +498,12 @@ export default function SettingsPage() {
               <div className="form-section-title">School Logo</div>
               <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 20 }}>
                 {form.logoUrl ? (
-                  <img
+                  <Image
                     src={form.logoUrl}
                     alt="School logo"
+                    width={80}
+                    height={80}
+                    unoptimized
                     style={{ height: 80, width: 80, objectFit: "contain", borderRadius: 8, border: "1px solid var(--line)", background: "var(--card)" }}
                   />
                 ) : (

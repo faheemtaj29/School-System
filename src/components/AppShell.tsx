@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
+import { useSchoolBranding } from "@/components/SchoolBranding";
 import {
   AccountingIcon,
   AttendanceIcon,
@@ -207,6 +209,7 @@ export function AppShell({
   const [campus, setCampus] = useState("MAIN");
   const [academicYear, setAcademicYear] = useState("");
   const [expandedTrees, setExpandedTrees] = useState({ accounting: false, inventory: false });
+  const branding = useSchoolBranding();
   const currentRole = (user.role || "").toLowerCase();
 
   const visibleGroups = navGroups
@@ -317,10 +320,16 @@ export function AppShell({
     <div className="app">
       <aside className={`sidebar${open ? " open" : ""}`}>
         <div className="brand">
-          <div className="brand-badge">S</div>
+          {branding.logoUrl ? (
+            <Image className="brand-logo" src={branding.logoUrl} alt="" width={38} height={38} unoptimized />
+          ) : (
+            <div className="brand-badge">
+              {branding.schoolName.split(/\s+/).slice(0, 2).map((word) => word[0]).join("")}
+            </div>
+          )}
           <div className="brand-text">
-            Sabaq
-            <small>ALL-IN-ONE SCHOOL ERP</small>
+            {branding.schoolName}
+            {branding.motto ? <small>{branding.motto}</small> : null}
           </div>
         </div>
 

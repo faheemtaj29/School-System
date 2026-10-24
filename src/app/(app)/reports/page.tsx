@@ -1,9 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState, Hero, Panel, StatusBadge, NameCell, inputClass } from "@/components/ui";
 import { PrintIcon } from "@/components/Icons";
 import { formatNumber, fullName, labelOfClass, prettyDate } from "@/lib/types";
+import { useSchoolBranding } from "@/components/SchoolBranding";
 
 type SchoolProfile = { schoolName: string; logoUrl?: string; motto?: string; principalName?: string; address?: string; phone?: string; boardName?: string };
 
@@ -59,6 +61,7 @@ type ResultData = {
 const EXAM_TYPES = ["", "midterm", "final", "quiz", "assignment"];
 
 export default function ReportsPage() {
+  const branding = useSchoolBranding();
   const [type, setType] = useState<(typeof REPORTS)[number]["id"]>("overview");
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
@@ -69,6 +72,12 @@ export default function ReportsPage() {
   const [students, setStudents] = useState<{ _id: string; firstName: string; lastName: string; admissionNo: string }[]>([]);
   const [studentId, setStudentId] = useState("");
   const [school, setSchool] = useState<SchoolProfile>({ schoolName: "School" });
+  const currentSchool = {
+    ...school,
+    schoolName: branding.schoolName,
+    logoUrl: branding.logoUrl || undefined,
+    motto: branding.motto || school.motto,
+  };
 
   useEffect(() => {
     setGeneratedAt(new Date().toLocaleString("en-GB"));
@@ -286,7 +295,7 @@ export default function ReportsPage() {
       ) : null}
 
       <div className="print-only" style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 20 }}>{school.schoolName} — {REPORTS.find((r) => r.id === type)?.label}</h2>
+        <h2 style={{ fontSize: 20 }}>{currentSchool.schoolName} — {REPORTS.find((r) => r.id === type)?.label}</h2>
         <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
           Generated {generatedAt || "—"}
           {results
@@ -306,7 +315,7 @@ export default function ReportsPage() {
           ) : (
             <div className="result-cards">
               {results.cards.map((card) => (
-                <ResultCardView key={`${card.student._id}-${card.classLabel || ""}`} card={card} meta={results} school={school} />
+                <ResultCardView key={`${card.student._id}-${card.classLabel || ""}`} card={card} meta={results} school={currentSchool} />
               ))}
             </div>
           )
@@ -409,7 +418,7 @@ function ResultCardView({
         <header className="result-card-head doc-sheet-head">
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {school.logoUrl ? (
-              <img src={school.logoUrl} alt="Logo" style={{ height: 56, width: 56, objectFit: "contain" }} />
+              <Image src={school.logoUrl} alt="Logo" width={56} height={56} unoptimized style={{ objectFit: "contain" }} />
             ) : null}
             <div>
               <h3 style={{ margin: 0 }}>{school.schoolName}</h3>

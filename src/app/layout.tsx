@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Spectral, Work_Sans, Space_Mono } from "next/font/google";
 import { settingsService } from "@/backend/services/settings.service";
+import { SchoolBrandingProvider } from "@/components/SchoolBranding";
 import { themeCss } from "@/lib/theme";
 import "./globals.css";
 
@@ -22,10 +23,21 @@ const mono = Space_Mono({
   weight: ["400", "700"],
 });
 
-export const metadata: Metadata = {
-  title: "Sabaq — School Management System",
-  description: "School management built with Next.js, React and MongoDB",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  try {
+    const settings = await settingsService.get();
+    return {
+      title: `${settings.schoolName} | School Management System`,
+      description: settings.motto || `${settings.schoolName} school management portal`,
+    };
+  } catch (error) {
+    console.error("Could not load school branding for page metadata", error);
+    return {
+      title: "Sabaq Model School | School Management System",
+      description: "School management portal",
+    };
+  }
+}
 
 /** Theme comes from Settings; a missing database must never block rendering. */
 async function themeStyle() {
@@ -47,7 +59,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <style id="sabaq-theme" dangerouslySetInnerHTML={{ __html: css }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <SchoolBrandingProvider>{children}</SchoolBrandingProvider>
+      </body>
     </html>
   );
 }

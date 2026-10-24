@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import {
   EmptyState,
@@ -12,6 +13,7 @@ import {
   inputClass,
 } from "@/components/ui";
 import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
+import { useSchoolBranding } from "@/components/SchoolBranding";
 
 type Account = {
   _id: string;
@@ -172,6 +174,7 @@ const voucherLabels: Record<string, string> = {
 };
 
 export default function AccountingPage() {
+  const branding = useSchoolBranding();
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
   const [tab, setTab] = useState<Tab>("overview");
@@ -1250,15 +1253,18 @@ export default function AccountingPage() {
     const debitTotal = voucher.lines.reduce((sum, line) => sum + Number(line.debit || 0), 0);
     const creditTotal = voucher.lines.reduce((sum, line) => sum + Number(line.credit || 0), 0);
     const branchName = branches.find((branch) => branch.code === voucher.branchCode)?.name || voucher.branchCode;
+    const schoolLogo = branding.logoUrl
+      ? `<img class="school-logo" src="${escapeHtml(branding.logoUrl)}" alt="">`
+      : "";
 
     popup.document.write(`<!doctype html>
-      <html><head><title>${escapeHtml(voucher.number)} - Print</title>
+      <html><head><title>${escapeHtml(branding.schoolName)} - ${escapeHtml(voucher.number)}</title>
       <style>
         @page { size: A4; margin: 14mm; }
         * { box-sizing: border-box; }
         body { margin: 0; color: #17241d; font: 12px Arial, sans-serif; }
         .document { max-width: 190mm; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; gap: 20px; padding-bottom: 16px; border-bottom: 3px solid #157a5c; }
+        .header { display: flex; justify-content: space-between; gap: 20px; padding-bottom: 16px; border-bottom: 3px solid #157a5c; }.school-brand { display:flex; align-items:center; gap:12px; }.school-logo { width:56px; height:56px; object-fit:contain; }
         h1 { margin: 0; font: 700 25px Georgia, serif; } h2 { margin: 0; font: 700 17px Georgia, serif; text-align: right; }
         h3 { margin: 23px 0 8px; color: #157a5c; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
         .muted { color: #627369; margin-top: 5px; } .number { font: 700 13px 'Courier New', monospace; margin-top: 6px; }
@@ -1269,7 +1275,7 @@ export default function AccountingPage() {
         .summary { margin-left:auto; width:310px; margin-top:16px; border:1px solid #dce7dd; }.summary div { display:flex; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #e5ece5; }.summary div:last-child { border:0; background:#e3f2ec; font-weight:700; font-size:13px; }
         .signatures { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-top:70px; }.signatures div { border-top:1px solid #44534a; padding-top:7px; text-align:center; font-size:10px; color:#4e5e55; }
       </style></head><body><main class="document">
-        <header class="header"><div><h1>Sabaq School System</h1><p class="muted">${escapeHtml(branchName)}</p></div><div><h2>${escapeHtml(voucherLabels[voucher.voucherType] || voucher.voucherType)}</h2><div class="number">${escapeHtml(voucher.number)}</div></div></header>
+        <header class="header"><div class="school-brand">${schoolLogo}<div><h1>${escapeHtml(branding.schoolName)}</h1><p class="muted">${escapeHtml(branchName)}</p></div></div><div><h2>${escapeHtml(voucherLabels[voucher.voucherType] || voucher.voucherType)}</h2><div class="number">${escapeHtml(voucher.number)}</div></div></header>
         <section class="meta"><div><span>Date</span><b>${escapeHtml(prettyDate(voucher.date))}</b></div><div><span>Party</span><b>${escapeHtml(voucher.partyName || "- ")}</b></div><div><span>Status</span><b>${escapeHtml(voucher.status.toUpperCase())}</b></div><div><span>Reference</span><b>${escapeHtml(voucher.reference || "- ")}</b></div><div><span>Branch</span><b>${escapeHtml(voucher.branchCode)}</b></div><div><span>Currency</span><b>${escapeHtml(voucher.currency)}</b></div></section>
         <div class="narration"><strong>Narration:</strong> ${escapeHtml(voucher.narration)}</div>
         ${items}<h3>Double-entry Posting</h3><table><thead><tr><th>Account</th><th>Narration</th><th class="amount">Debit</th><th class="amount">Credit</th></tr></thead><tbody>${lines}<tr class="total"><td colspan="2">TOTAL</td><td class="amount">${formatNumber(debitTotal)}</td><td class="amount">${formatNumber(creditTotal)}</td></tr></tbody></table>
@@ -1562,24 +1568,30 @@ export default function AccountingPage() {
 
       {activeTab === "vouchers" ? (
         <Panel title={pageHeaderTitle.includes("Voucher") ? pageHeaderTitle : "Voucher Register"} meta={`${visibleVouchers.length} RECORDS`}>
-          <div className="chips no-print" style={{ marginBottom: 14 }}>
-            <select className={inputClass} value={effectiveVoucherTypeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-              <option value="">All voucher types</option>
-              {Object.entries(voucherLabels).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
-            <select className={inputClass} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="">All statuses</option>
-              <option value="draft">Draft</option>
-              <option value="pending_approval">Pending Approval</option>
-              <option value="approved">Approved</option>
-              <option value="posted">Posted</option>
-              <option value="rejected">Rejected</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="reversed">Reversed</option>
-              <option value="void">Void</option>
-            </select>
+          <div className="voucher-register-toolbar no-print">
+            <div className="voucher-register-label">
+              <strong>Filter register</strong>
+              <span>Choose a voucher type or posting status</span>
+            </div>
+            <div className="voucher-register-filters">
+              <select className={inputClass} aria-label="Filter by voucher type" value={effectiveVoucherTypeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                <option value="">All voucher types</option>
+                {Object.entries(voucherLabels).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              <select className={inputClass} aria-label="Filter by voucher status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                <option value="">All statuses</option>
+                <option value="draft">Draft</option>
+                <option value="pending_approval">Pending Approval</option>
+                <option value="approved">Approved</option>
+                <option value="posted">Posted</option>
+                <option value="rejected">Rejected</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="reversed">Reversed</option>
+                <option value="void">Void</option>
+              </select>
+            </div>
           </div>
           {!visibleVouchers.length ? (
             <EmptyState message={voucherEmptyMessage} />
@@ -2166,7 +2178,15 @@ export default function AccountingPage() {
         wide
       >
         {err ? <div className="alert err">{err}</div> : null}
-        <div className="form-grid">
+        <section className="voucher-form-section">
+          <div className="voucher-editor-heading">
+            <div>
+              <span>VOUCHER DETAILS</span>
+              <strong>Transaction information</strong>
+            </div>
+            <span className="voucher-line-count">{isInvoice ? "Invoice" : "General ledger"}</span>
+          </div>
+          <div className="form-grid voucher-meta-grid">
           <Field label="Voucher No.">
             <input
               className={inputClass}
@@ -2286,17 +2306,34 @@ export default function AccountingPage() {
               </Field>
             </>
           ) : null}
-        </div>
+          </div>
+        </section>
 
         {isInvoice ? (
           <div className="voucher-editor">
-            <div className="form-section-title">Invoice Items</div>
+            <div className="voucher-editor-heading">
+              <div>
+                <span>LINE ITEMS</span>
+                <strong>Invoice items</strong>
+              </div>
+              <span className="voucher-line-count">{voucherForm.items.length} lines</span>
+            </div>
+            <div className="invoice-item-head">
+              <span>Description</span>
+              <span>Qty</span>
+              <span>Rate</span>
+              <span className="right">Amount</span>
+              <span />
+            </div>
             {voucherForm.items.map((item, index) => (
               <div className="invoice-item-row" key={index}>
                 <input className={inputClass} placeholder="Description" value={item.description} onChange={(e) => updateItem(index, { description: e.target.value })} required />
                 <input type="number" min="0.01" step="0.01" className={inputClass} placeholder="Qty" value={item.quantity} onChange={(e) => updateItem(index, { quantity: Number(e.target.value) })} required />
                 <input type="number" min="0" step="0.01" className={inputClass} placeholder="Rate" value={item.rate} onChange={(e) => updateItem(index, { rate: Number(e.target.value) })} required />
-                <div className="num">{formatNumber(item.quantity * item.rate)}</div>
+                <div className="invoice-item-total">
+                  <span>Amount</span>
+                  <strong className="num">{formatNumber(item.quantity * item.rate)}</strong>
+                </div>
                 <button type="button" className="link-btn danger" onClick={() => setVoucherForm({ ...voucherForm, items: voucherForm.items.filter((_, i) => i !== index) })}>×</button>
               </div>
             ))}
@@ -2310,7 +2347,13 @@ export default function AccountingPage() {
           </div>
         ) : (
           <div className="voucher-editor">
-            <div className="form-section-title">{fixedSettlementConfig ? "Entry Lines" : "Double-Entry Lines"}</div>
+            <div className="voucher-editor-heading">
+              <div>
+                <span>LINE ITEMS</span>
+                <strong>{fixedSettlementConfig ? "Settlement details" : "Double-entry lines"}</strong>
+              </div>
+              <span className="voucher-line-count">{voucherForm.lines.length} lines</span>
+            </div>
             <div className={`voucher-line-head${fixedSettlementConfig ? " amount-only" : ""}`}>
               {fixedSettlementConfig ? (
                 <><span>Account</span><span>Amount</span><span>Narration</span><span /></>
@@ -2505,7 +2548,7 @@ export default function AccountingPage() {
         )}
       </ModalForm>
 
-      {selected ? <VoucherPrint voucher={selected} branches={branches} /> : null}
+      {selected ? <VoucherPrint voucher={selected} branches={branches} schoolName={branding.schoolName} logoUrl={branding.logoUrl} /> : null}
     </>
   );
 }
@@ -2662,11 +2705,14 @@ function VoucherLinesTable({ voucher }: { voucher: Voucher }) {
   );
 }
 
-function VoucherPrint({ voucher, branches }: { voucher: Voucher; branches: Branch[] }) {
+function VoucherPrint({ voucher, branches, schoolName, logoUrl }: { voucher: Voucher; branches: Branch[]; schoolName: string; logoUrl: string }) {
   return (
     <div className="print-only voucher-print">
       <div className="voucher-print-head">
-        <div><h1>Sabaq School System</h1><p>{branches.find((b) => b.code === voucher.branchCode)?.name || voucher.branchCode}</p></div>
+        <div className="voucher-print-brand">
+          {logoUrl ? <Image src={logoUrl} alt="" width={52} height={52} unoptimized /> : null}
+          <div><h1>{schoolName}</h1><p>{branches.find((b) => b.code === voucher.branchCode)?.name || voucher.branchCode}</p></div>
+        </div>
         <div><h2>{voucherLabels[voucher.voucherType]}</h2><div className="num">{voucher.number}</div></div>
       </div>
       <div className="voucher-print-meta">

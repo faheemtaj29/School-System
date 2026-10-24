@@ -14,7 +14,7 @@ const publicPaths = [
 ];
 
 /** Public read/submit endpoints for the website. */
-const publicApi = ["/api/auth", "/api/site"];
+const publicApi = ["/api/auth", "/api/site", "/api/branding"];
 
 function matches(pathname: string, paths: string[]) {
   return paths.some((p) => pathname === p || pathname.startsWith(`${p}/`));

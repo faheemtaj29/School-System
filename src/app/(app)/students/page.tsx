@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   EmptyState,
@@ -13,15 +14,16 @@ import {
   Field,
 } from "@/components/ui";
 import { StudentForm } from "@/components/forms/PeopleForms";
+import { useSchoolBranding } from "@/components/SchoolBranding";
 import { ClassItem, StudentItem, fullName, labelOfClass, prettyDate, toDateInput } from "@/lib/types";
 
 type DocTab = "admission" | "tc";
 
 export default function StudentsPage() {
+  const branding = useSchoolBranding();
   const [students, setStudents] = useState<StudentItem[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [branches, setBranches] = useState<{ code: string; name: string }[]>([]);
-  const [schoolName, setSchoolName] = useState("Sabaq Model School");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<StudentItem | null>(null);
   const [filterClass, setFilterClass] = useState("");
@@ -52,7 +54,6 @@ export default function StudentsPage() {
     setStudents(s.students || []);
     setClasses(c.classes || []);
     setBranches(st.settings?.branches || []);
-    if (st.settings?.schoolName) setSchoolName(st.settings.schoolName);
   }, [filterClass, filterBranch]);
 
   useEffect(() => {
@@ -371,7 +372,10 @@ export default function StudentsPage() {
             {docTab === "admission" ? (
               <div className="print-doc">
                 <div className="print-header">
-                  <h2 className="print-school">{schoolName}</h2>
+                <div className="print-school-brand">
+                  {branding.logoUrl ? <Image src={branding.logoUrl} alt="" width={56} height={56} unoptimized /> : null}
+                  <h2 className="print-school">{branding.schoolName}</h2>
+                </div>
                   <h3 className="print-title">Student Admission Form</h3>
                 </div>
                 <div className="print-section-title">Student Information</div>
@@ -489,7 +493,10 @@ export default function StudentsPage() {
                 {docStudent.tcNo ? (
                   <div className="print-doc">
                     <div className="print-header">
-                      <h2 className="print-school">{schoolName}</h2>
+                      <div className="print-school-brand">
+                        {branding.logoUrl ? <Image src={branding.logoUrl} alt="" width={56} height={56} unoptimized /> : null}
+                        <h2 className="print-school">{branding.schoolName}</h2>
+                      </div>
                       <h3 className="print-title">Transfer / Leaving Certificate</h3>
                       <div style={{ fontSize: 13, color: "var(--text-dim)" }}>
                         TC No: <strong>{docStudent.tcNo}</strong> &nbsp;·&nbsp; Issued:{" "}

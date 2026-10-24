@@ -1,10 +1,12 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
 import { Field, inputClass } from "@/components/ui";
+import { useSchoolBranding } from "@/components/SchoolBranding";
 
 type Portal = "admin" | "teacher" | "staff" | "student";
 
@@ -55,6 +57,7 @@ function LoginInner() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const active = PORTALS.find((p) => p.key === portal)!;
+  const branding = useSchoolBranding();
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -95,7 +98,11 @@ function LoginInner() {
       <div className="auth-wrap auth-wrap-wide">
         <div className="auth-intro">
           <div className="kicker">Multi-portal campus system</div>
-          <h1>Sabaq</h1>
+          <div className="auth-brand-lockup">
+            {branding.logoUrl ? <Image src={branding.logoUrl} alt="" width={64} height={64} unoptimized /> : null}
+            <h1>{branding.schoolName}</h1>
+          </div>
+          {branding.motto ? <p className="auth-motto">{branding.motto}</p> : null}
           <p>
             Separate portals for administrators, teachers, campus staff and students — one school,
             every role.
