@@ -2,21 +2,16 @@
  * Environment configuration.
  * All process.env reads for the backend should go through here.
  */
+const DEFAULT_MONGODB_URI = "mongodb://127.0.0.1:27017/school-system";
+const DEFAULT_JWT_SECRET = "dev-secret-change-me";
+
 export const env = {
   get mongodbUri() {
-    const uri = process.env.MONGODB_URI;
-    if (!uri) {
-      throw new Error("Missing MONGODB_URI in .env.local");
-    }
-    return uri;
+    return process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
   },
 
   get jwtSecret() {
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-      throw new Error("Missing JWT_SECRET in .env.local");
-    }
-    return secret;
+    return process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
   },
 
   get isProd() {

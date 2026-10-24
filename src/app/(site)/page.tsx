@@ -1,107 +1,83 @@
 import Link from "next/link";
+import { ReactNode } from "react";
 import { siteService } from "@/backend/services/site.service";
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
-  const { content, courses, branches, currency } = await siteService.publicData();
+const links = [
+  { href: "/", label: "Home" },
+  { href: "/courses", label: "Courses" },
+  { href: "/admissions", label: "Admissions" },
+  { href: "/contact", label: "Contact" },
+];
+
+export default async function SiteLayout({ children }: { children: ReactNode }) {
+  const { content, branches } = await siteService.publicData();
 
   return (
-    <>
-      <section className="site-hero">
-        <div className="site-hero-text">
-          <span className="site-kicker">{content.tagline}</span>
-          <h1>{content.heroTitle}</h1>
-          <p>{content.heroSubtitle}</p>
-          <div className="site-hero-actions">
-            <Link href="/admissions" className="site-btn">
-              {content.heroCtaLabel}
+    <div className="site">
+      <header className="site-nav">
+        <Link href="/" className="site-brand" aria-label="Sabaq home">
+          <span className="site-badge">S</span>
+          <span>
+            {content.brandName || "Sabaq"}
+            <small>{content.tagline || "School experience"}</small>
+          </span>
+        </Link>
+
+        <nav className="site-links" aria-label="Main navigation">
+          {links.map((l) => (
+            <Link key={l.href} href={l.href}>
+              {l.label}
             </Link>
-            <Link href="/courses" className="site-btn ghost">
-              Browse Courses
-            </Link>
+          ))}
+        </nav>
+
+        <div className="site-nav-actions">
+          <Link href="/admissions" className="site-btn">
+            {content.heroCtaLabel || "Apply now"}
+          </Link>
+          <Link href="/login" className="site-btn ghost">
+            Staff Login
+          </Link>
+        </div>
+      </header>
+
+      <main>{children}</main>
+
+      <footer className="site-footer">
+        <div className="site-foot-grid">
+          <div>
+            <h4>{content.brandName || "Sabaq"}</h4>
+            <p>{content.tagline || "School experience"}</p>
+            {content.address ? <p>{content.address}</p> : null}
           </div>
-        </div>
-        <div className="site-stats">
-          {content.stats.map((s: { title: string; text?: string }) => (
-            <div className="site-stat" key={s.title + s.text}>
-              <strong>{s.title}</strong>
-              <span>{s.text}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="site-section">
-        <h2>{content.aboutTitle}</h2>
-        <p className="site-lead">{content.aboutBody}</p>
-        <div className="site-cards">
-          {content.features.map((f: { title: string; text?: string }) => (
-            <div className="site-card" key={f.title}>
-              <h3>{f.title}</h3>
-              <p>{f.text}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="site-section alt">
-        <h2>Our campuses</h2>
-        <p className="site-lead">One school, multiple branches — pick the campus nearest to you.</p>
-        <div className="site-cards">
-          {branches.map((b: { code: string; name: string; address?: string; phone?: string }) => (
-            <div className="site-card" key={b.code}>
-              <h3>{b.name}</h3>
-              <p>{b.address || "Campus address coming soon"}</p>
-              {b.phone ? <p className="site-mono">{b.phone}</p> : null}
-              <Link href={`/admissions?branch=${b.code}`} className="site-link">
-                Apply to this campus →
-              </Link>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {courses.length ? (
-        <section className="site-section">
-          <h2>Popular programs</h2>
-          <p className="site-lead">Certificates, diplomas and short courses — online or on campus.</p>
-          <div className="site-cards">
-            {courses.slice(0, 6).map((c: {
-              _id: string;
-              code: string;
-              title: string;
-              description?: string;
-              level: string;
-              mode: string;
-              fee: number;
-              durationWeeks: number;
-            }) => (
-              <div className="site-card" key={c._id}>
-                <span className="site-tag">{c.level} · {c.mode}</span>
-                <h3>{c.title}</h3>
-                <p>{c.description || `${c.durationWeeks} weeks program`}</p>
-                <p className="site-mono">
-                  {currency} {c.fee.toLocaleString()} · {c.durationWeeks} weeks
-                </p>
-              </div>
+          <div>
+            <h4>Campuses</h4>
+            {branches.map((b: { code: string; name: string; address?: string }) => (
+              <p key={b.code}>
+                {b.name}
+                {b.address ? ` — ${b.address}` : ""}
+              </p>
             ))}
           </div>
-          <div style={{ marginTop: 24 }}>
-            <Link href="/courses" className="site-btn">
-              View all courses
-            </Link>
+          <div>
+            <h4>Contact</h4>
+            {content.phone ? <p>{content.phone}</p> : null}
+            {content.email ? <p>{content.email}</p> : null}
+            {content.facebook ? (
+              <p>
+                <a href={content.facebook} target="_blank" rel="noreferrer">
+                  Facebook
+                </a>
+              </p>
+            ) : null}
           </div>
-        </section>
-      ) : null}
-
-      <section className="site-cta">
-        <h2>{content.admissionsTitle}</h2>
-        <p>{content.admissionsBody}</p>
-        <Link href="/admissions" className="site-btn light">
-          {content.heroCtaLabel}
-        </Link>
-      </section>
-    </>
+        </div>
+        <div className="site-copy">
+          © {new Date().getFullYear()} {content.brandName || "Sabaq"}
+        </div>
+      </footer>
+    </div>
   );
 }
