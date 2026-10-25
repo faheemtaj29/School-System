@@ -15,7 +15,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 export const teacherController = {
   async list(req: Request) {
-    const { error } = await requireAuth();
+    const { error } = await requireAuth(["admin", "staff"]);
     if (error) return error;
     try {
       const teachers = await teacherService.list(new URL(req.url).searchParams.get("branch"));
@@ -26,7 +26,7 @@ export const teacherController = {
   },
 
   async get(_: Request, ctx: Ctx) {
-    const { error } = await requireAuth();
+    const { error } = await requireAuth(["admin", "staff"]);
     if (error) return error;
     try {
       const { id } = await ctx.params;
