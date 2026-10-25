@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   firstZodError,
   fromServiceError,
@@ -457,9 +458,12 @@ export const hrController = {
     try {
       const { id } = await ctx.params;
       const body = await req.json();
-      const status = body.status as "pending" | "approved" | "rejected";
+      const statusResult = z.enum(["pending", "approved", "rejected"]).safeParse(body?.status);
+      if (!statusResult.success) {
+        return jsonError("Status must be pending, approved, or rejected.");
+      }
       return jsonOk({
-        leave: await hrService.updateLeaveStatus(id, status, session!.id),
+        leave: await hrService.updateLeaveStatus(id, statusResult.data, session!.id),
       });
     } catch (e) {
       return fromServiceError(e);
