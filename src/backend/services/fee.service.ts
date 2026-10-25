@@ -162,6 +162,15 @@ export const feeService = {
     const lines = cleanLines(data.lines);
     const gross = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
     const priced = applyConcession(gross, student);
+    if (data.paidAmount > priced.amount) {
+      throw new ServiceError("VALIDATION", "Paid amount cannot exceed the net fee after concession", 400);
+    }
+    if (data.status === "paid" && data.paidAmount < priced.amount) {
+      throw new ServiceError("VALIDATION", "A fee can be marked paid only when the full net amount has been received", 400);
+    }
+    if (data.status === "partial" && (data.paidAmount <= 0 || data.paidAmount >= priced.amount)) {
+      throw new ServiceError("VALIDATION", "A partial payment must be greater than zero and less than the net fee", 400);
+    }
     const title = titleFromLines(lines, data.title);
     const note =
       priced.discountAmount > 0
@@ -189,6 +198,18 @@ export const feeService = {
     const existing = await Fee.findById(id).lean();
     if (!existing) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
 
+    // Once money has been collected, protect the billed obligation from silent edits.
+    // Payment status, amount received, method, date and notes can still be updated.
+    if ((existing.paidAmount || 0) > 0) {
+      const oldLines = (existing.lines || []).map((line) => ({ head: line.head, amount: roundMoney(line.amount) }));
+      const sameLines = JSON.stringify(oldLines) === JSON.stringify(lines.map((line) => ({ head: line.head, amount: roundMoney(line.amount) })));
+      const sameStudent = String(existing.studentId) === data.studentId;
+      const sameDueDate = new Date(existing.dueDate).getTime() === new Date(data.dueDate).getTime();
+      if (!sameLines || !sameStudent || !sameDueDate) {
+        throw new ServiceError("CONFLICT", "This fee has recorded payments. Its student, fee heads, and due date cannot be edited; use an approved adjustment or refund workflow.", 409);
+      }
+    }
+
     /** Keep original concession ratio when editing heads, if one was applied. */
     let amount = gross;
     let originalAmount = gross;
@@ -199,6 +220,15 @@ export const feeService = {
       discountAmount = roundMoney((gross * (existing.discountPercent || 0)) / 100);
       amount = roundMoney(Math.max(0, gross - discountAmount));
       originalAmount = gross;
+    }
+    if (data.paidAmount > amount) {
+      throw new ServiceError("VALIDATION", "Paid amount cannot exceed the net fee after concession", 400);
+    }
+    if (data.status === "paid" && data.paidAmount < amount) {
+      throw new ServiceError("VALIDATION", "A fee can be marked paid only when the full net amount has been received", 400);
+    }
+    if (data.status === "partial" && (data.paidAmount <= 0 || data.paidAmount >= amount)) {
+      throw new ServiceError("VALIDATION", "A partial payment must be greater than zero and less than the net fee", 400);
     }
 
     const item = await Fee.findByIdAndUpdate(
@@ -225,8 +255,12 @@ export const feeService = {
 
   async remove(id: string) {
     await dbConnect();
-    const item = await Fee.findByIdAndDelete(id);
+    const item = await Fee.findById(id);
     if (!item) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
+    if ((item.paidAmount || 0) > 0) {
+      throw new ServiceError("CONFLICT", "This fee has recorded payments and cannot be deleted. Use an approved refund or adjustment workflow.", 409);
+    }
+    await Fee.findByIdAndDelete(id);
     await accountingService.removeBySource("fee", id);
     return { ok: true };
   },

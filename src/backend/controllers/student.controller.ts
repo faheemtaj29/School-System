@@ -9,20 +9,34 @@ import {
   requireAuth,
 } from "@/backend/lib/http";
 import { studentService } from "@/backend/services/student.service";
+import { resolveTeacher } from "@/backend/lib/portal";
+import { ClassModel } from "@/backend/models/Class";
 import { issueTcSchema, promoteAllSchema, promoteSchema, studentSchema } from "@/backend/validators/student.validator";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export const studentController = {
   async list(req: Request) {
-    const { error } = await requireAuth(["admin", "teacher", "staff"]);
+    const { session, error } = await requireAuth(["admin", "teacher", "staff"]);
     if (error) return error;
     try {
       const url = new URL(req.url);
-      const students = await studentService.list(
-        url.searchParams.get("classId"),
-        url.searchParams.get("branch")
-      );
+      const requestedClass = url.searchParams.get("classId");
+      if (session!.role === "teacher") {
+        const teacher = await resolveTeacher(session!);
+        if (!teacher) return jsonOk({ students: [] });
+        const assigned = (teacher.classes || []).map((id: unknown) => String(id));
+        const lead = await ClassModel.find({ classTeacher: teacher._id }).distinct("_id");
+        const allowed = [...new Set([...assigned, ...lead.map(String)])];
+        if (requestedClass && !allowed.includes(requestedClass)) {
+          return jsonError("You are not assigned to this class", 403);
+        }
+        if (!requestedClass) {
+          const lists = await Promise.all(allowed.map((id) => studentService.list(id, url.searchParams.get("branch"))));
+          return jsonOk({ students: lists.flat() });
+        }
+      }
+      const students = await studentService.list(requestedClass, url.searchParams.get("branch"));
       return jsonOk({ students });
     } catch (e) {
       return fromServiceError(e);
@@ -30,11 +44,19 @@ export const studentController = {
   },
 
   async get(_: Request, ctx: Ctx) {
-    const { error } = await requireAuth(["admin", "teacher", "staff"]);
+    const { session, error } = await requireAuth(["admin", "teacher", "staff"]);
     if (error) return error;
     try {
       const { id } = await ctx.params;
       const student = await studentService.getById(id);
+      if (session!.role === "teacher") {
+        const teacher = await resolveTeacher(session!);
+        if (!teacher) return jsonError("Teacher profile not linked", 403);
+        const studentClassId = String((student as { classId?: { _id?: unknown } }).classId?._id ?? (student as { classId?: unknown }).classId ?? "");
+        const assigned = (teacher.classes || []).some((classId: unknown) => String(classId) === studentClassId);
+        const classTeacher = await ClassModel.exists({ _id: studentClassId, classTeacher: teacher._id });
+        if (!assigned && !classTeacher) return jsonError("You are not assigned to this student's class", 403);
+      }
       return jsonOk({ student });
     } catch (e) {
       return fromServiceError(e);

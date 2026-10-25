@@ -155,6 +155,19 @@ export default function FeesPage() {
   }
 
   async function submitPay(fee: FeeItem) {
+    setPayMsg("");
+    const payment = Number(payForm.paidAmount);
+    const outstanding = Math.max(0, fee.amount - fee.paidAmount);
+    if (!Number.isFinite(payment) || payment <= 0) {
+      setPayMsg("Enter a payment amount greater than zero.");
+      return;
+    }
+    if (payment > outstanding) {
+      setPayMsg(`Payment cannot exceed the outstanding balance of PKR ${formatNumber(outstanding)}.`);
+      return;
+    }
+    const cumulativePaid = Math.round((fee.paidAmount + payment) * 100) / 100;
+    const isFullyPaid = cumulativePaid >= fee.amount;
     const res = await fetch(`/api/fees/${fee._id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -162,15 +175,15 @@ export default function FeesPage() {
         studentId: typeof fee.studentId === "object" ? (fee.studentId as { _id: string })._id : fee.studentId,
         dueDate: toDateInput(fee.dueDate),
         lines: fee.lines?.length ? fee.lines : [{ head: fee.title, amount: fee.amount }],
-        status: "paid",
-        paidAmount: payForm.paidAmount,
+        status: isFullyPaid ? "paid" : "partial",
+        paidAmount: cumulativePaid,
         paymentDate: payForm.paymentDate,
         method: payForm.method || undefined,
         notes: fee.notes,
       }),
     });
     const data = await res.json();
-    if (res.ok) { setPayingId(""); load(); }
+    if (res.ok) { setPayingId(""); await load(); }
     else setPayMsg(data.error || "Failed");
   }
 
