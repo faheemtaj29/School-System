@@ -9,7 +9,7 @@ import { ServiceError } from "@/backend/types";
 import type { AttendanceInput } from "@/backend/validators/attendance.validator";
 
 function calendarDate(value: string) {
-  const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) {
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) throw new ServiceError("VALIDATION", "Invalid attendance date", 400);
