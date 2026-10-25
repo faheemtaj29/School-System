@@ -233,17 +233,22 @@ export const leaveSchema = z.object({
   status: z.enum(["pending", "approved", "rejected"]).default("pending"),
 });
 
-export const payslipSchema = z.object({
-  teacherId: z.string().min(1),
-  month: z.string().min(4),
-  basic: z.coerce.number().min(0),
-  allowances: z.coerce.number().min(0).default(0),
-  deductions: z.coerce.number().min(0).default(0),
-  status: z.enum(["draft", "paid", "pending"]).default("pending"),
-  paidOn: z.string().optional().nullable(),
-  notes: z.string().optional(),
-  branchCode: z.string().optional(),
-});
+export const payslipSchema = z
+  .object({
+    teacherId: z.string().min(1),
+    month: z.string().min(4),
+    basic: z.coerce.number().finite().min(0),
+    allowances: z.coerce.number().finite().min(0).default(0),
+    deductions: z.coerce.number().finite().min(0).default(0),
+    status: z.enum(["draft", "paid", "pending"]).default("pending"),
+    paidOn: z.string().optional().nullable(),
+    notes: z.string().optional(),
+    branchCode: z.string().optional(),
+  })
+  .refine((data) => data.deductions <= data.basic + data.allowances, {
+    message: "Total deductions cannot exceed basic salary plus allowances.",
+    path: ["deductions"],
+  });
 
 export const noticeSchema = z.object({
   title: z.string().min(1),
