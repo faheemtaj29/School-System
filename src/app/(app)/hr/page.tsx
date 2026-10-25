@@ -290,7 +290,7 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
                         <td className="right"><StatusBadge status={l.status === "approved" ? "active" : l.status === "rejected" ? "overdue" : "pending"} /></td>
                         <td>
                           <div className="row-actions">
-                            {l.status === "pending" ? (
+                            {portal === "admin" && l.status === "pending" ? (
                               <>
                                 <button type="button" className="link-btn" onClick={() => setLeaveStatus(l._id, "approved")}>Approve</button>
                                 <button type="button" className="link-btn danger" onClick={() => setLeaveStatus(l._id, "rejected")}>Reject</button>
