@@ -236,7 +236,7 @@ export const leaveSchema = z.object({
 export const payslipSchema = z
   .object({
     teacherId: z.string().min(1),
-    month: z.string().min(4),
+    month: z.string().regex(/^\\d{4}-(0[1-9]|1[0-2])$/, "Month must use YYYY-MM format."),
     basic: z.coerce.number().finite().min(0),
     allowances: z.coerce.number().finite().min(0).default(0),
     deductions: z.coerce.number().finite().min(0).default(0),
