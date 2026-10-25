@@ -18,11 +18,11 @@ export function fromServiceError(error: unknown) {
     return jsonError(error.message, error.status || statusForCode(error.code));
   }
   console.error(error);
-  const message = error instanceof Error ? error.message : "Internal server error";
+  const message = error instanceof Error ? error.message : "";
   if (message.includes("duplicate") || message.includes("E11000")) {
     return jsonError("Record already exists", 409);
   }
-  return jsonError(message, 500);
+  return jsonError("An unexpected server error occurred.", 500);
 }
 
 export async function requireAuth(roles?: SessionUser["role"][]) {
