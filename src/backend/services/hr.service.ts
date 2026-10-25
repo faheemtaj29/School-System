@@ -127,12 +127,29 @@ export const hrService = {
   async createPayslip(data: PayslipInput) {
     await dbConnect();
     const net = data.basic + data.allowances - data.deductions;
-    const slip = await Payslip.create({
-      ...data,
-      branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
-      net,
-      paidOn: parseOptionalDate(data.paidOn ?? undefined),
-    });
+    let slip;
+    try {
+      slip = await Payslip.create({
+        ...data,
+        branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
+        net,
+        paidOn: parseOptionalDate(data.paidOn ?? undefined),
+      });
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === 11000
+      ) {
+        throw new ServiceError(
+          "CONFLICT",
+          "A payslip already exists for this teacher and month.",
+          409
+        );
+      }
+      throw error;
+    }
     await syncPayslipLedger(slip);
     return slip;
   },
