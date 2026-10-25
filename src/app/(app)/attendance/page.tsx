@@ -126,7 +126,8 @@ export default function AttendancePage() {
   }
 
   const selectedClass = classes.find((c) => c._id === classId);
-  const presentCount = records.filter((r) => r.status === "present").length;\n  const unmarkedCount = records.filter((r) => !r.status).length;
+  const presentCount = records.filter((r) => r.status === "present").length;
+  const unmarkedCount = records.filter((r) => !r.status).length;
 
   const summary = useMemo(() => {
     if (!history.length) return null;
