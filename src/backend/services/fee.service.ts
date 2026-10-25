@@ -198,6 +198,18 @@ export const feeService = {
     const existing = await Fee.findById(id).lean();
     if (!existing) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
 
+    // Once money has been collected, protect the billed obligation from silent edits.
+    // Payment status, amount received, method, date and notes can still be updated.
+    if ((existing.paidAmount || 0) > 0) {
+      const oldLines = (existing.lines || []).map((line) => ({ head: line.head, amount: roundMoney(line.amount) }));
+      const sameLines = JSON.stringify(oldLines) === JSON.stringify(lines.map((line) => ({ head: line.head, amount: roundMoney(line.amount) })));
+      const sameStudent = String(existing.studentId) === data.studentId;
+      const sameDueDate = new Date(existing.dueDate).getTime() === new Date(data.dueDate).getTime();
+      if (!sameLines || !sameStudent || !sameDueDate) {
+        throw new ServiceError("CONFLICT", "This fee has recorded payments. Its student, fee heads, and due date cannot be edited; use an approved adjustment or refund workflow.", 409);
+      }
+    }
+
     /** Keep original concession ratio when editing heads, if one was applied. */
     let amount = gross;
     let originalAmount = gross;
@@ -243,8 +255,12 @@ export const feeService = {
 
   async remove(id: string) {
     await dbConnect();
-    const item = await Fee.findByIdAndDelete(id);
+    const item = await Fee.findById(id);
     if (!item) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
+    if ((item.paidAmount || 0) > 0) {
+      throw new ServiceError("CONFLICT", "This fee has recorded payments and cannot be deleted. Use an approved refund or adjustment workflow.", 409);
+    }
+    await Fee.findByIdAndDelete(id);
     await accountingService.removeBySource("fee", id);
     return { ok: true };
   },
