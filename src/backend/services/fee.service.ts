@@ -162,6 +162,15 @@ export const feeService = {
     const lines = cleanLines(data.lines);
     const gross = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
     const priced = applyConcession(gross, student);
+    if (data.paidAmount > priced.amount) {
+      throw new ServiceError("VALIDATION", "Paid amount cannot exceed the net fee after concession", 400);
+    }
+    if (data.status === "paid" && data.paidAmount < priced.amount) {
+      throw new ServiceError("VALIDATION", "A fee can be marked paid only when the full net amount has been received", 400);
+    }
+    if (data.status === "partial" && (data.paidAmount <= 0 || data.paidAmount >= priced.amount)) {
+      throw new ServiceError("VALIDATION", "A partial payment must be greater than zero and less than the net fee", 400);
+    }
     const title = titleFromLines(lines, data.title);
     const note =
       priced.discountAmount > 0
@@ -199,6 +208,15 @@ export const feeService = {
       discountAmount = roundMoney((gross * (existing.discountPercent || 0)) / 100);
       amount = roundMoney(Math.max(0, gross - discountAmount));
       originalAmount = gross;
+    }
+    if (data.paidAmount > amount) {
+      throw new ServiceError("VALIDATION", "Paid amount cannot exceed the net fee after concession", 400);
+    }
+    if (data.status === "paid" && data.paidAmount < amount) {
+      throw new ServiceError("VALIDATION", "A fee can be marked paid only when the full net amount has been received", 400);
+    }
+    if (data.status === "partial" && (data.paidAmount <= 0 || data.paidAmount >= amount)) {
+      throw new ServiceError("VALIDATION", "A partial payment must be greater than zero and less than the net fee", 400);
     }
 
     const item = await Fee.findByIdAndUpdate(
