@@ -42,6 +42,7 @@ export default function HrPage() {
   const [leaves, setLeaves] = useState<Leave[]>([]);
   const [payslips, setPayslips] = useState<Payslip[]>([]);
   const [payroll, setPayroll] = useState({ paid: 0, pending: 0, draft: 0, total: 0 });
+  const [portal, setPortal] = useState<"admin" | "teacher" | null>(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [leaveForm, setLeaveForm] = useState({
@@ -65,14 +66,25 @@ export default function HrPage() {
   const [err, setErr] = useState("");
 
   const load = useCallback(async () => {
-    const [hr, t] = await Promise.all([
-      fetch("/api/hr").then((r) => r.json()),
-      fetch("/api/teachers").then((r) => r.json()),
-    ]);
+    const hrResponse = await fetch("/api/hr");
+    const hr = await hrResponse.json();
+    if (!hrResponse.ok) {
+      setErr(hr.error || "Unable to load HR records.");
+      return;
+    }
+    const currentPortal = hr.portal === "teacher" ? "teacher" : "admin";
+    setPortal(currentPortal);
     setLeaves(hr.leaves || []);
     setPayslips(hr.payslips || []);
     setPayroll(hr.payroll || { paid: 0, pending: 0, draft: 0, total: 0 });
-    setTeachers(t.teachers || []);
+    if (currentPortal === "admin") {
+      const teacherResponse = await fetch("/api/teachers");
+      const teacherData = await teacherResponse.json();
+      if (teacherResponse.ok) setTeachers(teacherData.teachers || []);
+      else setTeachers([]);
+    } else {
+      setTeachers([]);
+    }
   }, []);
 
   useEffect(() => {
@@ -181,8 +193,8 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
       <Hero
         title="HR & Payroll"
         subtitle="Staff leave, salaries and payslips"
-        actionLabel={tab === "payroll" ? "Create Payslip" : "Add Leave"}
-        onAction={() => (tab === "payroll" ? setPayOpen(true) : setLeaveOpen(true))}
+        actionLabel={tab === "payroll" ? (portal === "teacher" ? undefined : "Create Payslip") : "Add Leave"}
+        onAction={() => (tab === "payroll" ? (portal === "admin" ? setPayOpen(true) : undefined) : setLeaveOpen(true))}
       />
 
       {tab === "payroll" ? (
@@ -236,7 +248,7 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
                         <td>
                           <div className="row-actions">
                             <button type="button" className="link-btn" onClick={() => printPayslip(p)}>Print / Save PDF</button>
-                            {p.status !== "paid" ? (
+                            {portal === "admin" && p.status !== "paid" ? (
                               <button type="button" className="link-btn" onClick={() => markPaid(p)}>Mark Paid</button>
                             ) : null}
                           </div>
