@@ -157,16 +157,33 @@ export const hrService = {
   async updatePayslip(id: string, data: PayslipInput) {
     await dbConnect();
     const net = data.basic + data.allowances - data.deductions;
-    const item = await Payslip.findByIdAndUpdate(
-      id,
-      {
-        ...data,
-        branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
-        net,
-        paidOn: parseOptionalDate(data.paidOn ?? undefined),
-      },
-      { new: true }
-    ).populate("teacherId", "firstName lastName employeeId email");
+    let item;
+    try {
+      item = await Payslip.findByIdAndUpdate(
+        id,
+        {
+          ...data,
+          branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
+          net,
+          paidOn: parseOptionalDate(data.paidOn ?? undefined),
+        },
+        { new: true, runValidators: true }
+      ).populate("teacherId", "firstName lastName employeeId email");
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === 11000
+      ) {
+        throw new ServiceError(
+          "CONFLICT",
+          "A payslip already exists for this teacher and month.",
+          409
+        );
+      }
+      throw error;
+    }
     if (!item) throw new ServiceError("NOT_FOUND", "Payslip not found", 404);
     await syncPayslipLedger(item);
     return item;
