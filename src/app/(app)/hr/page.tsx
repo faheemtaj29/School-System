@@ -26,6 +26,16 @@ type Payslip = {
   status: string;
 };
 
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[char] || char);
+}
+
 export default function HrPage() {
   const [tab, setTab] = useState<"payroll" | "leave">("payroll");
   const [teachers, setTeachers] = useState<TeacherItem[]>([]);
@@ -130,6 +140,35 @@ export default function HrPage() {
     load();
   }
 
+  function printPayslip(p: Payslip) {
+    const teacher = typeof p.teacherId === "object" ? p.teacherId : null;
+    const name = teacher ? fullName(teacher) : "Staff member";
+    const net = Number(p.net) || 0;
+    const basic = Number(p.basic) || 0;
+    const allowances = Number(p.allowances) || 0;
+    const deductions = Number(p.deductions) || 0;
+    const printWindow = window.open("", "_blank", "width=800,height=700");
+    if (!printWindow) {
+      setErr("Please allow pop-ups to print or save the payslip as PDF.");
+      return;
+    }
+    printWindow.document.write(`<!doctype html>
+<html><head><meta charset="utf-8"><title>Salary Slip - ${escapeHtml(p.month)}</title>
+<style>
+body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2px solid #17212b;padding-bottom:16px;margin-bottom:24px}h1{font-size:24px;margin:0 0 8px}p{margin:4px 0;color:#526170}.meta{display:flex;justify-content:space-between;margin:20px 0}.box{border:1px solid #d6dde5;border-radius:8px;padding:16px;margin:12px 0}table{width:100%;border-collapse:collapse;margin-top:20px}td{padding:12px;border-bottom:1px solid #e5e9ef}td:last-child{text-align:right;font-variant-numeric:tabular-nums}.net{font-size:18px;font-weight:bold}footer{margin-top:40px;color:#526170;font-size:12px}@media print{body{margin:15mm}}
+</style></head><body>
+<header><h1>Salary Slip</h1><p>Confidential employee payroll record</p></header>
+<div class="meta"><div><strong>Employee</strong><br>${escapeHtml(name)}</div><div><strong>Pay period</strong><br>${escapeHtml(p.month)}</div><div><strong>Status</strong><br>${escapeHtml(p.status)}</div></div>
+<table><tbody>
+<tr><td>Basic salary</td><td>PKR ${basic.toLocaleString("en-PK")}</td></tr>
+<tr><td>Allowances</td><td>PKR ${allowances.toLocaleString("en-PK")}</td></tr>
+<tr><td>Deductions</td><td>PKR ${deductions.toLocaleString("en-PK")}</td></tr>
+<tr class="net"><td>Net salary</td><td>PKR ${net.toLocaleString("en-PK")}</td></tr>
+</tbody></table><footer>Generated from the School-System payroll records. Please contact HR if any detail needs correction.</footer>
+<script>window.onload=()=>window.print();</script></body></html>`);
+    printWindow.document.close();
+  }
+
   const leaveStats = useMemo(() => ({
     pending:  leaves.filter((l) => l.status === "pending").length,
     approved: leaves.filter((l) => l.status === "approved").length,
@@ -196,6 +235,7 @@ export default function HrPage() {
                         <td className="right"><StatusBadge status={p.status === "paid" ? "paid" : "pending"} /></td>
                         <td>
                           <div className="row-actions">
+                            <button type="button" className="link-btn" onClick={() => printPayslip(p)}>Print / Save PDF</button>
                             {p.status !== "paid" ? (
                               <button type="button" className="link-btn" onClick={() => markPaid(p)}>Mark Paid</button>
                             ) : null}
