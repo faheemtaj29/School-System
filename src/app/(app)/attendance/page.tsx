@@ -14,7 +14,7 @@ import {
 } from "@/lib/types";
 
 type Status = "present" | "absent" | "late" | "excused";
-type RecordRow = { studentId: string; status: Status; note?: string };
+type RecordRow = { studentId: string; status: Status | ""; note?: string };
 
 const options: { value: Status; short: string; cls: string }[] = [
   { value: "present", short: "P", cls: "p" },
@@ -48,19 +48,55 @@ export default function AttendancePage() {
   }, [loadMeta]);
 
   useEffect(() => {
+    let cancelled = false;
     if (!classId) {
       setStudents([]);
       setRecords([]);
       return;
     }
-    fetch(`/api/students?classId=${classId}`)
-      .then((r) => r.json())
-      .then((d) => {
-        const list: StudentItem[] = d.students || [];
+
+    setStudents([]);
+    setRecords([]);
+    setError("");
+    setMessage("");
+
+    Promise.all([
+      fetch(`/api/students?classId=${encodeURIComponent(classId)}`).then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || "Unable to load class students");
+        return data;
+      }),
+      fetch(`/api/attendance?classId=${encodeURIComponent(classId)}&date=${encodeURIComponent(date)}`).then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || "Unable to load saved attendance");
+        return data;
+      }),
+    ])
+      .then(([studentData, attendanceData]) => {
+        if (cancelled) return;
+        const list: StudentItem[] = studentData.students || [];
+        const sheet = (attendanceData.attendance || []).find((item: AttendanceItem) =>
+          toDateInput(new Date(item.date)) === date
+        );
+        const saved = new Map<string, RecordRow>(
+          (sheet?.records || []).map((record: { studentId: string | { _id: string }; status: Status; note?: string }) => {
+            const id = typeof record.studentId === "string" ? record.studentId : record.studentId._id;
+            return [id, { studentId: id, status: record.status, note: record.note || "" }];
+          })
+        );
         setStudents(list);
-        setRecords(list.map((s) => ({ studentId: s._id, status: "present", note: "" })));
+        setRecords(list.map((student) => saved.get(student._id) || {
+          studentId: student._id,
+          status: "",
+          note: "",
+        }));
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Unable to load attendance");
       });
-  }, [classId]);
+
+    return () => { cancelled = true; };
+  }, [classId, date]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -71,7 +107,7 @@ export default function AttendancePage() {
       const res = await fetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ classId, date, records }),
+        body: JSON.stringify({ classId, date, records: records.filter((r): r is RecordRow & { status: Status } => Boolean(r.status)) }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -90,7 +126,7 @@ export default function AttendancePage() {
   }
 
   const selectedClass = classes.find((c) => c._id === classId);
-  const presentCount = records.filter((r) => r.status === "present").length;
+  const presentCount = records.filter((r) => r.status === "present").length;\n  const unmarkedCount = records.filter((r) => !r.status).length;
 
   const summary = useMemo(() => {
     if (!history.length) return null;
@@ -143,7 +179,7 @@ export default function AttendancePage() {
       ) : null}
 
       <form onSubmit={onSubmit}>
-        <Panel title="Daily Roll Call" meta={records.length ? `${presentCount}/${records.length} PRESENT` : undefined}>
+        <Panel title="Daily Roll Call" meta={records.length ? `${presentCount}/${records.length} PRESENT${unmarkedCount ? ` · ${unmarkedCount} UNMARKED` : ""}` : undefined}>
           {error ? <div className="alert err">{error}</div> : null}
           {message ? <div className="alert ok">{message}</div> : null}
 
@@ -228,8 +264,8 @@ export default function AttendancePage() {
           ) : null}
 
           <div className="form-actions">
-            <button type="submit" className="btn-dark" disabled={!classId || !records.length || saving}>
-              {saving ? "Saving…" : "Save Attendance"}
+            <button type="submit" className="btn-dark" disabled={!classId || !records.length || unmarkedCount > 0 || saving}>
+              {saving ? "Saving…" : unmarkedCount ? `Mark all students first (${unmarkedCount} unmarked)` : "Save Attendance"}
             </button>
             <button type="button" className="btn-ghost" onClick={() => markAll("absent")}>
               Mark All Absent
