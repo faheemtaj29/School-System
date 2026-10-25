@@ -44,7 +44,7 @@ async function validateExamAccess(session: Session, data: { classId: string; sub
 
 export const examController = {
   async list() {
-    const { session, error } = await requireAuth();
+    const { session, error } = await requireAuth(["admin", "teacher", "staff"]);
     if (error) return error;
     try {
       const exams = await examService.list();
