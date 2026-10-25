@@ -11,7 +11,6 @@ import {
 import { studentService } from "@/backend/services/student.service";
 import { resolveTeacher } from "@/backend/lib/portal";
 import { ClassModel } from "@/backend/models/Class";
-import { Student } from "@/backend/models/Student";
 import { issueTcSchema, promoteAllSchema, promoteSchema, studentSchema } from "@/backend/validators/student.validator";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -51,8 +50,9 @@ export const studentController = {
         }
         if (!requestedClass) {
           const lists = await Promise.all(allowed.map((id) => studentService.list(id, url.searchParams.get("branch"))));
-          const unique = new Map<string, (typeof lists)[number][number]>();
-          for (const student of lists.flat()) unique.set(String(student._id), student);
+          const unique = new Map(
+            lists.flat().map((student) => [String(student._id), student] as const)
+          );
           return jsonOk({ students: [...unique.values()] });
         }
       }
