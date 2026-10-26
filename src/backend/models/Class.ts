@@ -22,6 +22,8 @@ export interface IClass {
   stream?: string;
   /** Sort order across the whole ladder (pre-nursery = 1). */
   level?: number;
+  /** Reusable monthly fee heads and amounts for this class. */
+  feeStructure?: { head: string; amount: number }[];
   subjects: Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
@@ -50,6 +52,10 @@ const ClassSchema = new Schema<IClass>(
     },
     stream: { type: String, trim: true },
     level: { type: Number, default: 0 },
+    feeStructure: {
+      type: [{ head: { type: String, required: true, trim: true }, amount: { type: Number, required: true, min: 0 } }],
+      default: [],
+    },
     subjects: [{ type: Schema.Types.ObjectId, ref: "Subject" }],
   },
   { timestamps: true }
