@@ -291,8 +291,9 @@ export const feeService = {
     const monthEnd = new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0, 23, 59, 59, 999);
     const already = await Fee.find({
       studentId: { $in: students.map((s) => s._id) },
-      title,
-      dueDate: { $gte: monthStart, $lte: monthEnd },
+      ...(data.billingMonth
+        ? { billingMonth: data.billingMonth }
+        : { title, dueDate: { $gte: monthStart, $lte: monthEnd } }),
     })
       .select("studentId")
       .lean();
@@ -314,6 +315,7 @@ export const feeService = {
           dueDate,
           status: "pending" as const,
           paidAmount: 0,
+          ...(data.billingMonth ? { billingMonth: data.billingMonth } : {}),
           notes:
             priced.discountAmount > 0
               ? `${priced.discountType} ${priced.discountPercent}% concession`
