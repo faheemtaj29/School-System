@@ -18,11 +18,11 @@ export function fromServiceError(error: unknown) {
     return jsonError(error.message, error.status || statusForCode(error.code));
   }
   console.error(error);
-  const message = error instanceof Error ? error.message : "Internal server error";
+  const message = error instanceof Error ? error.message : "";
   if (message.includes("duplicate") || message.includes("E11000")) {
     return jsonError("Record already exists", 409);
   }
-  return jsonError(message, 500);
+  return jsonError("An unexpected server error occurred.", 500);
 }
 
 export async function requireAuth(roles?: SessionUser["role"][]) {
@@ -40,8 +40,6 @@ export async function requireAuth(roles?: SessionUser["role"][]) {
 export function firstZodError(issues: { message: string; path?: PropertyKey[] }[]) {
   const issue = issues[0];
   if (!issue) return "Invalid input";
-  // Zod's built-in messages ("Invalid input: expected string…", "Too small…") don't
-  // say which field failed; prefix the field path. Custom messages are kept as-is.
   const path = issue.path?.map(String).join(".");
   if (path && /^(Invalid|Too (small|big))/.test(issue.message)) {
     return `${path}: ${issue.message}`;

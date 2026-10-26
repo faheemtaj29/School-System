@@ -9,11 +9,13 @@ import { feeBillingService } from "@/backend/services/feeBilling.service";
 import {
   collectFeeSchema,
   feeStructureSchema,
-  generateMonthSchema,
 } from "@/backend/validators/fee.validator";
+import { z } from "zod";
 
-type Ctx = { params: Promise<{ id: string }> };
-const ID = /^[a-f0-9]{24}$/i;
+const monthSchema = z.object({
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Month must use YYYY-MM format"),
+  classIds: z.array(z.string().regex(/^[a-f\d]{24}$/i, "Invalid class ID")).optional(),
+});
 
 export const feeBillingController = {
   async structure() {
@@ -30,7 +32,8 @@ export const feeBillingController = {
     const { error } = await requireAuth(["admin"]);
     if (error) return error;
     try {
-      const parsed = feeStructureSchema.safeParse(await req.json());
+      const body = await req.json();
+      const parsed = feeStructureSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
       return jsonOk(await feeBillingService.saveStructure(parsed.data));
     } catch (e) {
@@ -39,26 +42,12 @@ export const feeBillingController = {
   },
 
   async generateMonth(req: Request) {
-    const { error } = await requireAuth(["admin", "staff"]);
+    const { error } = await requireAuth(["admin"]);
     if (error) return error;
     try {
-      const parsed = generateMonthSchema.safeParse(await req.json());
+      const parsed = monthSchema.safeParse(await req.json());
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
-      return jsonOk(await feeBillingService.generateMonth(parsed.data.month, parsed.data.classIds), 201);
-    } catch (e) {
-      return fromServiceError(e);
-    }
-  },
-
-  async collect(req: Request, ctx: Ctx) {
-    const { error, session } = await requireAuth(["admin", "staff"]);
-    if (error) return error;
-    try {
-      const { id } = await ctx.params;
-      if (!ID.test(id)) return jsonError("Invalid voucher");
-      const parsed = collectFeeSchema.safeParse(await req.json());
-      if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
-      return jsonOk(await feeBillingService.collect(id, parsed.data, session || undefined));
+      return jsonOk(await feeBillingService.generateMonth(parsed.data.month, parsed.data.classIds));
     } catch (e) {
       return fromServiceError(e);
     }
@@ -68,29 +57,50 @@ export const feeBillingController = {
     const { error } = await requireAuth(["admin", "staff"]);
     if (error) return error;
     try {
-      const q = new URL(req.url).searchParams;
-      const ids = (q.get("ids") || "").split(",").filter((s) => ID.test(s));
-      const classId = q.get("classId") || "";
-      return jsonOk(
-        await feeBillingService.challans({
-          month: q.get("month") || undefined,
-          classId: ID.test(classId) ? classId : undefined,
-          status: q.get("status") || undefined,
-          ids,
-        })
-      );
+      const url = new URL(req.url);
+      const ids = url.searchParams.get("ids")?.split(",").filter(Boolean);
+      return jsonOk(await feeBillingService.challans({
+        month: url.searchParams.get("month") || undefined,
+        classId: url.searchParams.get("classId") || undefined,
+        status: url.searchParams.get("status") || undefined,
+        ids,
+      }));
     } catch (e) {
       return fromServiceError(e);
     }
   },
 
-  async receipt(req: Request, ctx: Ctx) {
+  async collect(req: Request, ctx: { params: Promise<{ id: string }> }) {
+    const { session, error } = await requireAuth(["admin", "staff"]);
+    if (error) return error;
+    try {
+      const parsed = collectFeeSchema.safeParse(await req.json());
+      if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+      const { id } = await ctx.params;
+      return jsonOk(await feeBillingService.collect(id, parsed.data, session!), 201);
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  async syncLedger(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+    const { error } = await requireAuth(["admin"]);
+    if (error) return error;
+    try {
+      const { id } = await ctx.params;
+      return jsonOk(await feeBillingService.syncLedger(id));
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  async receipt(req: Request, ctx: { params: Promise<{ id: string }> }) {
     const { error } = await requireAuth(["admin", "staff"]);
     if (error) return error;
     try {
       const { id } = await ctx.params;
-      if (!ID.test(id)) return jsonError("Invalid voucher");
-      return jsonOk(await feeBillingService.receipt(id, new URL(req.url).searchParams.get("receiptNo")));
+      const receiptNo = new URL(req.url).searchParams.get("receiptNo");
+      return jsonOk(await feeBillingService.receipt(id, receiptNo));
     } catch (e) {
       return fromServiceError(e);
     }

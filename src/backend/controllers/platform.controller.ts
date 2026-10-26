@@ -47,7 +47,7 @@ export const platformController = {
       view === "instances" || view === "fields"
         ? (["admin", "staff", "teacher"] as const)
         : (["admin"] as const);
-    const { error } = await requireAuth([...roles]);
+    const { session, error } = await requireAuth([...roles]);
     if (error) return error;
     try {
       if (view === "fields") {
@@ -61,7 +61,8 @@ export const platformController = {
       if (view === "instances") {
         return jsonOk({
           instances: await platformService.listInstances(
-            new URL(req.url).searchParams.get("status")
+            new URL(req.url).searchParams.get("status"),
+            session!
           ),
         });
       }

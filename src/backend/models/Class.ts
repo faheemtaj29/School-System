@@ -22,9 +22,9 @@ export interface IClass {
   stream?: string;
   /** Sort order across the whole ladder (pre-nursery = 1). */
   level?: number;
-  subjects: Types.ObjectId[];
-  /** Monthly fee structure — billed to every active student of the class each month. */
+  /** Reusable monthly fee heads and amounts for this class. */
   feeStructure?: { head: string; amount: number }[];
+  subjects: Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -52,17 +52,11 @@ const ClassSchema = new Schema<IClass>(
     },
     stream: { type: String, trim: true },
     level: { type: Number, default: 0 },
-    subjects: [{ type: Schema.Types.ObjectId, ref: "Subject" }],
     feeStructure: {
-      type: [
-        {
-          _id: false,
-          head: { type: String, required: true, trim: true },
-          amount: { type: Number, required: true, min: 0 },
-        },
-      ],
+      type: [{ head: { type: String, required: true, trim: true }, amount: { type: Number, required: true, min: 0 } }],
       default: [],
     },
+    subjects: [{ type: Schema.Types.ObjectId, ref: "Subject" }],
   },
   { timestamps: true }
 );

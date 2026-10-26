@@ -12,7 +12,6 @@ import { accountingService } from "@/backend/services/accounting.service";
 import { DISCOUNT_DEFAULTS } from "@/backend/services/student.service";
 import { Settings } from "@/backend/models/Settings";
 import { platformService } from "@/backend/services/platform.service";
-import { allocateCode } from "@/backend/services/numbering.service";
 import type { SessionUser } from "@/backend/types";
 
 const studentPopulate = {
@@ -117,16 +116,19 @@ export async function syncFeeLedger(fee: {
   method?: string;
   branchCode?: string;
   studentId: unknown;
-  receiptNo?: string;
   payments?: { amount: number; date: Date; method: string; receiptNo: string }[];
 }) {
   const paid = fee.paidAmount || 0;
   const id = String(fee._id);
+  // The legacy accounting ledger supports cash/bank/online only.
+  // Card settlements are deposited through the bank, so map them to bank.
+  const ledgerMethod = (m?: string) => (m === "card" ? "bank" : (m as "cash" | "bank" | "online" | undefined));
   if (paid <= 0 || fee.status === "pending") {
     await accountingService.removeBySourcePrefix("fee", id);
     return;
   }
-  // Counter collections: one receipt voucher per payment, on its own date and cash/bank account.
+  // Counter collections: one receipt voucher per payment, on its own date and cash/bank account,
+  // so the cash book, bank book and cash flow show each payment where and when it was received.
   if (fee.payments?.length) {
     await accountingService.removeBySource("fee", id);
     for (const p of fee.payments) {
@@ -136,7 +138,7 @@ export async function syncFeeLedger(fee: {
         title: fee.title,
         amount: p.amount,
         date: p.date,
-        method: p.method as "cash" | "bank" | "online" | undefined,
+        method: ledgerMethod(p.method),
         reference: p.receiptNo,
         notes: "Fee collected at counter",
         branchCode: fee.branchCode,
@@ -146,20 +148,14 @@ export async function syncFeeLedger(fee: {
     }
     return;
   }
-  // Issue a receipt number once, on the first recorded payment; it never changes after.
-  let receiptNo = fee.receiptNo;
-  if (!receiptNo) {
-    receiptNo = await allocateCode("receipt", fee.branchCode);
-    await Fee.updateOne({ _id: fee._id, receiptNo: { $exists: false } }, { $set: { receiptNo } });
-  }
   await accountingService.upsertLinked({
     type: "income",
     category: "Student Fees",
     title: fee.title,
     amount: paid,
     date: fee.paymentDate || new Date(),
-    method: fee.method as "cash" | "bank" | "online" | undefined,
-    reference: receiptNo,
+    method: ledgerMethod(fee.method),
+    reference: `FEE-${String(fee._id).slice(-6).toUpperCase()}`,
     notes: "Auto-posted from fee voucher",
     branchCode: fee.branchCode,
     sourceType: "fee",
@@ -192,6 +188,15 @@ export const feeService = {
     const lines = cleanLines(data.lines);
     const gross = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
     const priced = applyConcession(gross, student);
+    if (data.paidAmount > priced.amount) {
+      throw new ServiceError("VALIDATION", "Paid amount cannot exceed the net fee after concession", 400);
+    }
+    if (data.status === "paid" && data.paidAmount < priced.amount) {
+      throw new ServiceError("VALIDATION", "A fee can be marked paid only when the full net amount has been received", 400);
+    }
+    if (data.status === "partial" && (data.paidAmount <= 0 || data.paidAmount >= priced.amount)) {
+      throw new ServiceError("VALIDATION", "A partial payment must be greater than zero and less than the net fee", 400);
+    }
     const title = titleFromLines(lines, data.title);
     const note =
       priced.discountAmount > 0
@@ -218,12 +223,17 @@ export const feeService = {
     const gross = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
     const existing = await Fee.findById(id).lean();
     if (!existing) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
-    if (existing.payments?.length && Number(data.paidAmount) !== existing.paidAmount) {
-      throw new ServiceError(
-        "VALIDATION",
-        "Payments on this voucher were collected at the counter — use Collect to record more",
-        400
-      );
+
+    // Once money has been collected, protect the billed obligation from silent edits.
+    // Payment status, amount received, method, date and notes can still be updated.
+    if ((existing.paidAmount || 0) > 0) {
+      const oldLines = (existing.lines || []).map((line: { head: string; amount: number }) => ({ head: line.head, amount: roundMoney(line.amount) }));
+      const sameLines = JSON.stringify(oldLines) === JSON.stringify(lines.map((line) => ({ head: line.head, amount: roundMoney(line.amount) })));
+      const sameStudent = String(existing.studentId) === data.studentId;
+      const sameDueDate = new Date(existing.dueDate).getTime() === new Date(data.dueDate).getTime();
+      if (!sameLines || !sameStudent || !sameDueDate) {
+        throw new ServiceError("CONFLICT", "This fee has recorded payments. Its student, fee heads, and due date cannot be edited; use an approved adjustment or refund workflow.", 409);
+      }
     }
 
     /** Keep original concession ratio when editing heads, if one was applied. */
@@ -236,6 +246,23 @@ export const feeService = {
       discountAmount = roundMoney((gross * (existing.discountPercent || 0)) / 100);
       amount = roundMoney(Math.max(0, gross - discountAmount));
       originalAmount = gross;
+    }
+    // Counter collections keep a payment-by-payment record; change those only through Collect.
+    if (existing.payments?.length && Number(data.paidAmount) !== existing.paidAmount) {
+      throw new ServiceError(
+        "VALIDATION",
+        "Payments on this voucher were collected at the counter — use Collect to record more",
+        400
+      );
+    }
+    if (data.paidAmount > amount) {
+      throw new ServiceError("VALIDATION", "Paid amount cannot exceed the net fee after concession", 400);
+    }
+    if (data.status === "paid" && data.paidAmount < amount) {
+      throw new ServiceError("VALIDATION", "A fee can be marked paid only when the full net amount has been received", 400);
+    }
+    if (data.status === "partial" && (data.paidAmount <= 0 || data.paidAmount >= amount)) {
+      throw new ServiceError("VALIDATION", "A partial payment must be greater than zero and less than the net fee", 400);
     }
 
     const item = await Fee.findByIdAndUpdate(
@@ -257,14 +284,18 @@ export const feeService = {
     ).populate(studentPopulate);
     if (!item) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
     await syncFeeLedger(item);
-    return Fee.findById(item._id).populate(studentPopulate).lean();
+    return item;
   },
 
   async remove(id: string) {
     await dbConnect();
-    const item = await Fee.findByIdAndDelete(id);
+    const item = await Fee.findById(id);
     if (!item) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
-    await accountingService.removeBySourcePrefix("fee", id);
+    if ((item.paidAmount || 0) > 0) {
+      throw new ServiceError("CONFLICT", "This fee has recorded payments and cannot be deleted. Use an approved refund or adjustment workflow.", 409);
+    }
+    await Fee.findByIdAndDelete(id);
+    await accountingService.removeBySource("fee", id);
     return { ok: true };
   },
 
@@ -318,7 +349,7 @@ export const feeService = {
           dueDate,
           status: "pending" as const,
           paidAmount: 0,
-          billingMonth: data.billingMonth,
+          ...(data.billingMonth ? { billingMonth: data.billingMonth } : {}),
           notes:
             priced.discountAmount > 0
               ? `${priced.discountType} ${priced.discountPercent}% concession`

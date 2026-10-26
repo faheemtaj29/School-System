@@ -65,6 +65,9 @@ export const feeController = {
         return jsonOk(await feeService.createInstallments(parsed.data), 201);
       }
       if (body.kind === "late-fees") {
+        if (session!.role !== "admin") {
+          return jsonError("Only an administrator can apply late fees in bulk", 403);
+        }
         return jsonOk(await feeService.applyLateFees());
       }
       if (body.kind === "waiver") {

@@ -26,7 +26,7 @@ const PREFIX: Record<NumberKind, string> = {
   asset: "AST",
   book: "LIB",
   document: "DOC",
-  receipt: "RCP",
+  receipt: "RCT",
 };
 
 /** Student and receipt prefixes are configurable in Settings → School Profile. */

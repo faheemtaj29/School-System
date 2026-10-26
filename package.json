@@ -9,7 +9,9 @@
     "lint": "eslint",
     "db:backup": "node scripts/db/backup.js",
     "db:migrate": "node scripts/migrations/run.js up",
-    "db:migrate:status": "node scripts/migrations/run.js status"
+    "db:migrate:status": "node scripts/migrations/run.js status",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run lint && npm run typecheck"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.8.0",

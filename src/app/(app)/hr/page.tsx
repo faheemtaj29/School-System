@@ -27,6 +27,16 @@ type Payslip = {
   status: string;
 };
 
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[char] || char);
+}
+
 export default function HrPage() {
   const { currency: cur } = useSchoolProfile();
   const [tab, setTab] = useState<"payroll" | "leave">("payroll");
@@ -34,6 +44,7 @@ export default function HrPage() {
   const [leaves, setLeaves] = useState<Leave[]>([]);
   const [payslips, setPayslips] = useState<Payslip[]>([]);
   const [payroll, setPayroll] = useState({ paid: 0, pending: 0, draft: 0, total: 0 });
+  const [portal, setPortal] = useState<"admin" | "teacher" | null>(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [leaveForm, setLeaveForm] = useState({
@@ -57,14 +68,25 @@ export default function HrPage() {
   const [err, setErr] = useState("");
 
   const load = useCallback(async () => {
-    const [hr, t] = await Promise.all([
-      fetch("/api/hr").then((r) => r.json()),
-      fetch("/api/teachers").then((r) => r.json()),
-    ]);
+    const hrResponse = await fetch("/api/hr");
+    const hr = await hrResponse.json();
+    if (!hrResponse.ok) {
+      setErr(hr.error || "Unable to load HR records.");
+      return;
+    }
+    const currentPortal = hr.portal === "teacher" ? "teacher" : "admin";
+    setPortal(currentPortal);
     setLeaves(hr.leaves || []);
     setPayslips(hr.payslips || []);
     setPayroll(hr.payroll || { paid: 0, pending: 0, draft: 0, total: 0 });
-    setTeachers(t.teachers || []);
+    if (currentPortal === "admin") {
+      const teacherResponse = await fetch("/api/teachers");
+      const teacherData = await teacherResponse.json();
+      if (teacherResponse.ok) setTeachers(teacherData.teachers || []);
+      else setTeachers([]);
+    } else {
+      setTeachers([]);
+    }
   }, []);
 
   useEffect(() => {
@@ -132,6 +154,35 @@ export default function HrPage() {
     load();
   }
 
+  function printPayslip(p: Payslip) {
+    const teacher = typeof p.teacherId === "object" ? p.teacherId : null;
+    const name = teacher ? fullName(teacher) : "Staff member";
+    const net = Number(p.net) || 0;
+    const basic = Number(p.basic) || 0;
+    const allowances = Number(p.allowances) || 0;
+    const deductions = Number(p.deductions) || 0;
+    const printWindow = window.open("", "_blank", "width=800,height=700");
+    if (!printWindow) {
+      setErr("Please allow pop-ups to print or save the payslip as PDF.");
+      return;
+    }
+    printWindow.document.write(`<!doctype html>
+<html><head><meta charset="utf-8"><title>Salary Slip - ${escapeHtml(p.month)}</title>
+<style>
+body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2px solid #17212b;padding-bottom:16px;margin-bottom:24px}h1{font-size:24px;margin:0 0 8px}p{margin:4px 0;color:#526170}.meta{display:flex;justify-content:space-between;margin:20px 0}.box{border:1px solid #d6dde5;border-radius:8px;padding:16px;margin:12px 0}table{width:100%;border-collapse:collapse;margin-top:20px}td{padding:12px;border-bottom:1px solid #e5e9ef}td:last-child{text-align:right;font-variant-numeric:tabular-nums}.net{font-size:18px;font-weight:bold}footer{margin-top:40px;color:#526170;font-size:12px}@media print{body{margin:15mm}}
+</style></head><body>
+<header><h1>Salary Slip</h1><p>Confidential employee payroll record</p></header>
+<div class="meta"><div><strong>Employee</strong><br>${escapeHtml(name)}</div><div><strong>Pay period</strong><br>${escapeHtml(p.month)}</div><div><strong>Status</strong><br>${escapeHtml(p.status)}</div></div>
+<table><tbody>
+<tr><td>Basic salary</td><td>PKR ${basic.toLocaleString("en-PK")}</td></tr>
+<tr><td>Allowances</td><td>PKR ${allowances.toLocaleString("en-PK")}</td></tr>
+<tr><td>Deductions</td><td>PKR ${deductions.toLocaleString("en-PK")}</td></tr>
+<tr class="net"><td>Net salary</td><td>PKR ${net.toLocaleString("en-PK")}</td></tr>
+</tbody></table><footer>Generated from the School-System payroll records. Please contact HR if any detail needs correction.</footer>
+<script>window.onload=()=>window.print();</script></body></html>`);
+    printWindow.document.close();
+  }
+
   const leaveStats = useMemo(() => ({
     pending:  leaves.filter((l) => l.status === "pending").length,
     approved: leaves.filter((l) => l.status === "approved").length,
@@ -144,8 +195,8 @@ export default function HrPage() {
       <Hero
         title="HR & Payroll"
         subtitle="Staff leave, salaries and payslips"
-        actionLabel={tab === "payroll" ? "Create Payslip" : "Add Leave"}
-        onAction={() => (tab === "payroll" ? setPayOpen(true) : setLeaveOpen(true))}
+        actionLabel={tab === "payroll" ? (portal === "teacher" ? undefined : "Create Payslip") : "Add Leave"}
+        onAction={() => (tab === "payroll" ? (portal === "admin" ? setPayOpen(true) : undefined) : setLeaveOpen(true))}
       />
 
       {tab === "payroll" ? (
@@ -198,7 +249,8 @@ export default function HrPage() {
                         <td className="right"><StatusBadge status={p.status === "paid" ? "paid" : "pending"} /></td>
                         <td>
                           <div className="row-actions">
-                            {p.status !== "paid" ? (
+                            <button type="button" className="link-btn" onClick={() => printPayslip(p)}>Print / Save PDF</button>
+                            {portal === "admin" && p.status !== "paid" ? (
                               <button type="button" className="link-btn" onClick={() => markPaid(p)}>Mark Paid</button>
                             ) : null}
                           </div>
@@ -240,7 +292,7 @@ export default function HrPage() {
                         <td className="right"><StatusBadge status={l.status === "approved" ? "active" : l.status === "rejected" ? "overdue" : "pending"} /></td>
                         <td>
                           <div className="row-actions">
-                            {l.status === "pending" ? (
+                            {portal === "admin" && l.status === "pending" ? (
                               <>
                                 <button type="button" className="link-btn" onClick={() => setLeaveStatus(l._id, "approved")}>Approve</button>
                                 <button type="button" className="link-btn danger" onClick={() => setLeaveStatus(l._id, "rejected")}>Reject</button>

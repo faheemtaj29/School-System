@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { isValidObjectId } from "mongoose";
 import {
   firstZodError,
   fromServiceError,
@@ -459,10 +461,14 @@ export const hrController = {
     if (error) return error;
     try {
       const { id } = await ctx.params;
+      if (!isValidObjectId(id)) return jsonError("Invalid record ID.", 400);
       const body = await req.json();
-      const status = body.status as "pending" | "approved" | "rejected";
+      const statusResult = z.enum(["pending", "approved", "rejected"]).safeParse(body?.status);
+      if (!statusResult.success) {
+        return jsonError("Status must be pending, approved, or rejected.");
+      }
       return jsonOk({
-        leave: await hrService.updateLeaveStatus(id, status, session!.id),
+        leave: await hrService.updateLeaveStatus(id, statusResult.data, session!.id),
       });
     } catch (e) {
       return fromServiceError(e);
@@ -473,6 +479,7 @@ export const hrController = {
     if (error) return error;
     try {
       const { id } = await ctx.params;
+      if (!isValidObjectId(id)) return jsonError("Invalid record ID.", 400);
       return jsonOk(await hrService.removeLeave(id));
     } catch (e) {
       return fromServiceError(e);
@@ -495,6 +502,7 @@ export const hrController = {
     if (error) return error;
     try {
       const { id } = await ctx.params;
+      if (!isValidObjectId(id)) return jsonError("Invalid record ID.", 400);
       const body = await req.json();
       const parsed = payslipSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
@@ -508,6 +516,7 @@ export const hrController = {
     if (error) return error;
     try {
       const { id } = await ctx.params;
+      if (!isValidObjectId(id)) return jsonError("Invalid record ID.", 400);
       return jsonOk(await hrService.removePayslip(id));
     } catch (e) {
       return fromServiceError(e);

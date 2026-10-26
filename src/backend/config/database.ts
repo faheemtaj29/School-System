@@ -33,10 +33,12 @@ export async function dbConnect() {
 
   try {
     cached.conn = await cached.promise;
-  } catch (e) {
-    // Don't keep a failed attempt cached — e.g. the app started before MongoDB did.
+  } catch (error) {
+    // Allow a later request to retry if MongoDB was temporarily unavailable
+    // during startup or the connection attempt failed.
     cached.promise = null;
-    throw e;
+    throw error;
   }
+
   return cached.conn;
 }

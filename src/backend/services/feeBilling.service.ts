@@ -170,7 +170,17 @@ export const feeBillingService = {
         results.push({ classLabel: classLabel(cls), created: r.created, skipped: r.skipped });
       } catch (e) {
         // A class without active students is not an error for a whole-school run.
-        results.push({ classLabel: classLabel(cls), created: 0, skipped: 0, note: (e as Error).message });
+        // Keep internal database/error details out of the API response.
+        console.error("[fees] monthly billing failed for class", {
+          classId: String(cls._id),
+          error: e,
+        });
+        results.push({
+          classLabel: classLabel(cls),
+          created: 0,
+          skipped: 0,
+          note: "Billing failed for this class. Check server logs and retry.",
+        });
       }
     }
     return { month, monthLabel: monthLabel(month), dueDate, classes: results, created, skipped, billedAmount: round(billed) };
@@ -192,36 +202,113 @@ export const feeBillingService = {
       { $set: { lastAutoFeeMonth: month } }
     );
     if (!claimed) return null;
-    const result = await this.generateMonth(month);
-    console.log(`[fees] automatic billing for ${month}: ${result.created} challan(s) raised`);
-    return result;
+    try {
+      const result = await this.generateMonth(month);
+      if (result.classes.some((item) => "note" in item)) {
+        // Some classes failed even though the whole-school run returned a partial result.
+        // Release the claim so the next request can retry; already-created challans are skipped.
+        await Settings.updateOne(
+          { _id: settings._id, lastAutoFeeMonth: month },
+          { $unset: { lastAutoFeeMonth: 1 } }
+        );
+      }
+      console.log(`[fees] automatic billing for ${month}: ${result.created} challan(s) raised`);
+      return result;
+    } catch (error) {
+      // Release the monthly claim if billing fails, so a later request can retry.
+      await Settings.updateOne(
+        { _id: settings._id, lastAutoFeeMonth: month },
+        { $unset: { lastAutoFeeMonth: 1 } }
+      );
+      throw error;
+    }
   },
 
   /** Record money received at the counter and issue a receipt number for it. */
   async collect(feeId: string, data: CollectFeeInput, actor?: SessionUser) {
     await dbConnect();
-    const fee = await Fee.findById(feeId);
-    if (!fee) throw new ServiceError("NOT_FOUND", "Fee voucher not found", 404);
-    const balance = round(fee.amount - (fee.paidAmount || 0));
-    if (balance <= 0) throw new ServiceError("VALIDATION", "This voucher is already fully paid", 400);
+    if (!Types.ObjectId.isValid(feeId)) {
+      throw new ServiceError("VALIDATION", "Invalid fee voucher ID", 400);
+    }
     const amount = round(data.amount);
+    const date = data.date ? new Date(data.date) : new Date();
+    if (!Number.isFinite(date.getTime())) {
+      throw new ServiceError("VALIDATION", "Payment date is invalid", 400);
+    }
+    const existing = await Fee.findById(feeId).select("amount paidAmount branchCode");
+    if (!existing) throw new ServiceError("NOT_FOUND", "Fee voucher not found", 404);
+    const balance = round(existing.amount - (existing.paidAmount || 0));
+    if (balance <= 0) throw new ServiceError("VALIDATION", "This voucher is already fully paid", 400);
     if (amount > balance) {
       throw new ServiceError("VALIDATION", `Amount is more than the balance due (${balance})`, 400);
     }
-    const date = data.date ? new Date(data.date) : new Date();
-    const receiptNo = await allocateCode("receipt", fee.branchCode);
-    fee.payments = [
-      ...(fee.payments || []),
-      { amount, date, method: data.method, receiptNo, receivedBy: actor?.name, note: data.note },
-    ];
-    fee.paidAmount = round((fee.paidAmount || 0) + amount);
-    fee.status = fee.paidAmount >= fee.amount ? "paid" : "partial";
-    fee.paymentDate = date;
-    fee.method = data.method;
-    if (!fee.receiptNo) fee.receiptNo = receiptNo;
-    await fee.save();
+
+    // Atomic balance predicate prevents concurrent counter requests from collecting
+    // more than the outstanding amount on the same voucher.
+    const receiptNo = await allocateCode("receipt", existing.branchCode);
+    const fee = await Fee.findOneAndUpdate(
+      {
+        _id: feeId,
+        $expr: {
+          $lte: [
+            { $add: [{ $ifNull: ["$paidAmount", 0] }, amount] },
+            "$amount",
+          ],
+        },
+      },
+      {
+        $inc: { paidAmount: amount },
+        $push: {
+          payments: { amount, date, method: data.method, receiptNo, receivedBy: actor?.name, note: data.note },
+        },
+        $set: { paymentDate: date, method: data.method, receiptNo },
+      },
+      { new: true, runValidators: true }
+    );
+    if (!fee) {
+      const latest = await Fee.findById(feeId).select("amount paidAmount");
+      if (!latest) throw new ServiceError("NOT_FOUND", "Fee voucher not found", 404);
+      const latestBalance = round(latest.amount - (latest.paidAmount || 0));
+      throw new ServiceError("VALIDATION", latestBalance <= 0
+        ? "This voucher is already fully paid"
+        : `Amount is more than the balance due (${latestBalance})`, 400);
+    }
+    await Fee.updateOne(
+      { _id: fee._id, $expr: { $gte: ["$paidAmount", "$amount"] } },
+      { $set: { status: "paid" } }
+    );
+    await Fee.updateOne(
+      { _id: fee._id, status: { $ne: "paid" } },
+      { $set: { status: "partial" } }
+    );
+    const updatedFee = await Fee.findById(fee._id);
+    if (!updatedFee) throw new ServiceError("NOT_FOUND", "Fee voucher not found after collection", 404);
+    let ledgerSyncPending = false;
+    try {
+      // Ledger posting is idempotent by source type + fee ID. Do not make the
+      // caller repeat a successful collection if accounting is temporarily unavailable.
+      await syncFeeLedger(updatedFee);
+    } catch (error) {
+      ledgerSyncPending = true;
+      console.error("[fees] payment saved but ledger synchronization failed", {
+        feeId: String(updatedFee._id),
+        receiptNo,
+        error,
+      });
+    }
+    return { fee: updatedFee.toObject(), receiptNo, ledgerSyncPending };
+  },
+
+  /** Retry the idempotent accounting projection without collecting money again. */
+  async syncLedger(feeId: string) {
+    await dbConnect();
+    if (!Types.ObjectId.isValid(feeId)) {
+      throw new ServiceError("VALIDATION", "Invalid fee voucher ID", 400);
+    }
+    const fee = await Fee.findById(feeId);
+    if (!fee) throw new ServiceError("NOT_FOUND", "Fee voucher not found", 404);
     await syncFeeLedger(fee);
-    return { fee: fee.toObject(), receiptNo };
+    return { feeId: String(fee._id), synchronized: true };
   },
 
   /** Challans to print in bulk, with each student's earlier unpaid balance as arrears. */
@@ -294,6 +381,9 @@ export const feeBillingService = {
   /** One payment receipt (latest payment unless a receipt number is given). */
   async receipt(feeId: string, receiptNo?: string | null) {
     await dbConnect();
+    if (!Types.ObjectId.isValid(feeId)) {
+      throw new ServiceError("VALIDATION", "Invalid fee voucher ID", 400);
+    }
     const fee = (await Fee.findById(feeId).populate(studentFields).lean()) as unknown as FeeLean | null;
     if (!fee || !fee.studentId) throw new ServiceError("NOT_FOUND", "Fee voucher not found", 404);
     // Vouchers paid before counter collection existed have no payment rows — show the paid total.

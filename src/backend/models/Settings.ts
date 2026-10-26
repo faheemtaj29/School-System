@@ -32,6 +32,9 @@ export interface ISettings {
   registrationNo?: string;
   academicYear: string;
   feeDueDay: number;
+  autoMonthlyFees?: boolean;
+  feeGenerateDay?: number;
+  lastAutoFeeMonth?: string;
   address?: string;
   phone?: string;
   email?: string;
@@ -75,11 +78,6 @@ export interface ISettings {
   /** School logo as a data URL; excluded from normal reads, served by /api/settings/logo. */
   logoData?: string;
   logoUpdatedAt?: Date;
-  /** Raise every class's monthly challans automatically on `feeGenerateDay`. */
-  autoMonthlyFees?: boolean;
-  feeGenerateDay?: number;
-  /** "YYYY-MM" of the last automatic run, so each month runs once. */
-  lastAutoFeeMonth?: string;
   /** Older versions kept the logo here as a data URL; moved to logoData on first read. */
   logoUrl?: string;
   motto?: string;
@@ -109,7 +107,10 @@ const SettingsSchema = new Schema<ISettings>(
     schoolName: { type: String, required: true, default: "Sabaq Model School" },
     registrationNo: String,
     academicYear: { type: String, default: "2026–27" },
-    feeDueDay: { type: Number, default: 25 },
+    feeDueDay: { type: Number, default: 25, min: 1, max: 28 },
+    autoMonthlyFees: { type: Boolean, default: false },
+    feeGenerateDay: { type: Number, default: 1, min: 1, max: 28 },
+    lastAutoFeeMonth: { type: String, match: /^\d{4}-(0[1-9]|1[0-2])$/ },
     address: String,
     phone: String,
     email: String,
@@ -177,9 +178,6 @@ const SettingsSchema = new Schema<ISettings>(
     udiseCode: { type: String, trim: true },
     logoData: { type: String, select: false },
     logoUpdatedAt: Date,
-    autoMonthlyFees: { type: Boolean, default: false },
-    feeGenerateDay: { type: Number, default: 1, min: 1, max: 28 },
-    lastAutoFeeMonth: String,
     logoUrl: String,
     motto: String,
     website: String,

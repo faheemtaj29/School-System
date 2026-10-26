@@ -159,9 +159,17 @@ export const authService = {
       );
     }
     const clash = await User.findOne({ email });
-    if (clash && record.user && String(clash._id) !== String(record.user)) {
-      throw new ServiceError("CONFLICT", "Another account already uses this email", 409);
+
+    // Never repurpose an unrelated account (especially an admin account) just
+    // because its email matches a profile being granted portal access.
+    if (clash && (!record.user || String(clash._id) !== String(record.user))) {
+      throw new ServiceError(
+        "CONFLICT",
+        "Another portal account already uses this email. Verify the profile's existing account link before proceeding.",
+        409
+      );
     }
+
     const password = await hashPassword(input.password);
     const name = `${record.firstName} ${record.lastName}`;
     const user = await User.findOneAndUpdate(
