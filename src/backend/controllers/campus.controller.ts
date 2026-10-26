@@ -229,8 +229,17 @@ export const campusController = {
         return jsonOk({ loan: await campusService.issueBook(parsed.data) }, 201);
       }
       if (mod === "return") {
+        if (session!.role !== "admin" && session!.role !== "staff") {
+          return jsonError("Only an administrator or staff member can process library returns", 403);
+        }
+        const returnSchema = z.object({
+          loanId: z.string().min(1),
+          fine: z.coerce.number().finite().min(0).optional(),
+        });
+        const parsed = returnSchema.safeParse(body);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
         return jsonOk({
-          loan: await campusService.returnBook(body.loanId, Number(body.fine) || 0),
+          loan: await campusService.returnBook(parsed.data.loanId, parsed.data.fine ?? 0),
         });
       }
       if (mod === "vehicle") {
