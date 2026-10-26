@@ -31,6 +31,14 @@ export async function dbConnect() {
     });
   }
 
-  cached.conn = await cached.promise;
+  try {
+    cached.conn = await cached.promise;
+  } catch (error) {
+    // Allow a later request to retry if MongoDB was temporarily unavailable
+    // during startup or the connection attempt failed.
+    cached.promise = null;
+    throw error;
+  }
+
   return cached.conn;
 }
