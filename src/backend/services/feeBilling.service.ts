@@ -260,10 +260,18 @@ export const feeBillingService = {
         ? "This voucher is already fully paid"
         : `Amount is more than the balance due (${latestBalance})`, 400);
     }
-    fee.status = fee.paidAmount >= fee.amount ? "paid" : "partial";
-    await fee.save();
-    await syncFeeLedger(fee);
-    return { fee: fee.toObject(), receiptNo };
+    await Fee.updateOne(
+      { _id: fee._id, $expr: { $gte: ["$paidAmount", "$amount"] } },
+      { $set: { status: "paid" } }
+    );
+    await Fee.updateOne(
+      { _id: fee._id, status: { $ne: "paid" } },
+      { $set: { status: "partial" } }
+    );
+    const updatedFee = await Fee.findById(fee._id);
+    if (!updatedFee) throw new ServiceError("NOT_FOUND", "Fee voucher not found after collection", 404);
+    await syncFeeLedger(updatedFee);
+    return { fee: updatedFee.toObject(), receiptNo };
   },
 
   /** Challans to print in bulk, with each student's earlier unpaid balance as arrears. */
