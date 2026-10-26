@@ -194,6 +194,14 @@ export const feeBillingService = {
     if (!claimed) return null;
     try {
       const result = await this.generateMonth(month);
+      if (result.classes.some((item) => "note" in item)) {
+        // Some classes failed even though the whole-school run returned a partial result.
+        // Release the claim so the next request can retry; already-created challans are skipped.
+        await Settings.updateOne(
+          { _id: settings._id, lastAutoFeeMonth: month },
+          { $unset: { lastAutoFeeMonth: 1 } }
+        );
+      }
       console.log(`[fees] automatic billing for ${month}: ${result.created} challan(s) raised`);
       return result;
     } catch (error) {
