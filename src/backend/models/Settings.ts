@@ -32,6 +32,9 @@ export interface ISettings {
   registrationNo?: string;
   academicYear: string;
   feeDueDay: number;
+  autoMonthlyFees?: boolean;
+  feeGenerateDay?: number;
+  lastAutoFeeMonth?: string;
   address?: string;
   phone?: string;
   email?: string;
@@ -95,7 +98,10 @@ const SettingsSchema = new Schema<ISettings>(
     schoolName: { type: String, required: true, default: "Sabaq Model School" },
     registrationNo: String,
     academicYear: { type: String, default: "2026–27" },
-    feeDueDay: { type: Number, default: 25 },
+    feeDueDay: { type: Number, default: 25, min: 1, max: 28 },
+    autoMonthlyFees: { type: Boolean, default: false },
+    feeGenerateDay: { type: Number, default: 1, min: 1, max: 28 },
+    lastAutoFeeMonth: { type: String, match: /^\d{4}-(0[1-9]|1[0-2])$/ },
     address: String,
     phone: String,
     email: String,
