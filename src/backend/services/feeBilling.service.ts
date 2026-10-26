@@ -170,7 +170,17 @@ export const feeBillingService = {
         results.push({ classLabel: classLabel(cls), created: r.created, skipped: r.skipped });
       } catch (e) {
         // A class without active students is not an error for a whole-school run.
-        results.push({ classLabel: classLabel(cls), created: 0, skipped: 0, note: (e as Error).message });
+        // Keep internal database/error details out of the API response.
+        console.error("[fees] monthly billing failed for class", {
+          classId: String(cls._id),
+          error: e,
+        });
+        results.push({
+          classLabel: classLabel(cls),
+          created: 0,
+          skipped: 0,
+          note: "Billing failed for this class. Check server logs and retry.",
+        });
       }
     }
     return { month, monthLabel: monthLabel(month), dueDate, classes: results, created, skipped, billedAmount: round(billed) };
