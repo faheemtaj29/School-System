@@ -29,7 +29,7 @@ export const feeBillingController = {
   },
 
   async saveStructure(req: Request) {
-    const { session, error } = await requireAuth(["admin"]);
+    const { error } = await requireAuth(["admin"]);
     if (error) return error;
     try {
       const body = await req.json();
