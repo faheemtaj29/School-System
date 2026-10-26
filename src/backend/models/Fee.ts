@@ -29,6 +29,8 @@ export interface IFee {
   installmentTotal?: number;
   lateFeeAmount?: number;
   lateFeeApplied?: boolean;
+  /** Month key (YYYY-MM) for generated monthly challans. */
+  billingMonth?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -67,6 +69,7 @@ const FeeSchema = new Schema<IFee>(
     installmentTotal: { type: Number, min: 1 },
     lateFeeAmount: { type: Number, default: 0, min: 0 },
     lateFeeApplied: { type: Boolean, default: false },
+    billingMonth: { type: String, match: /^\\d{4}-(0[1-9]|1[0-2])$/ },
   },
   { timestamps: true }
 );
