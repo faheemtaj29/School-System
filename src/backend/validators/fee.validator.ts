@@ -42,3 +42,24 @@ export const installmentFeeSchema = z.object({
 export type FeeInput = z.infer<typeof feeSchema>;
 export type BulkFeeInput = z.infer<typeof bulkFeeSchema>;
 export type InstallmentFeeInput = z.infer<typeof installmentFeeSchema>;
+
+
+export const collectFeeSchema = z.object({
+  amount: z.coerce.number().positive("Payment amount must be greater than zero"),
+  date: z.string().optional(),
+  method: z.enum(["cash", "card", "bank", "online"]),
+  note: z.string().max(500).optional(),
+});
+
+export const feeStructureSchema = z.object({
+  classes: z.array(z.object({
+    classId: z.string().min(1),
+    lines: z.array(feeLineSchema),
+  })),
+  autoMonthlyFees: z.boolean().optional(),
+  feeGenerateDay: z.coerce.number().int().min(1).max(28).optional(),
+  feeDueDay: z.coerce.number().int().min(1).max(28).optional(),
+});
+
+export type CollectFeeInput = z.infer<typeof collectFeeSchema>;
+export type FeeStructureInput = z.infer<typeof feeStructureSchema>;
