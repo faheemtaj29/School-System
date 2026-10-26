@@ -53,7 +53,7 @@ export const collectFeeSchema = z.object({
 
 export const feeStructureSchema = z.object({
   classes: z.array(z.object({
-    classId: z.string().regex(/^[a-f\\d]{24}$/i, "Invalid class ID"),
+    classId: z.string().regex(/^[a-f\d]{24}$/i, "Invalid class ID"),
     lines: z.array(feeLineSchema),
   })),
   autoMonthlyFees: z.boolean().optional(),
