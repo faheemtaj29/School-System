@@ -61,7 +61,8 @@ export const platformController = {
       if (view === "instances") {
         return jsonOk({
           instances: await platformService.listInstances(
-            new URL(req.url).searchParams.get("status")
+            new URL(req.url).searchParams.get("status"),
+            session!
           ),
         });
       }
