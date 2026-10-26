@@ -14,7 +14,7 @@ import { z } from "zod";
 
 const monthSchema = z.object({
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Month must use YYYY-MM format"),
-  classIds: z.array(z.string().min(1)).optional(),
+  classIds: z.array(z.string().regex(/^[a-f\\d]{24}$/i, "Invalid class ID")).optional(),
 });
 
 export const feeBillingController = {
