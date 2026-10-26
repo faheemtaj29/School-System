@@ -107,7 +107,7 @@ function toPayload(
   };
 }
 
-async function syncFeeLedger(fee: {
+export async function syncFeeLedger(fee: {
   _id: { toString(): string };
   title: string;
   paidAmount: number;
