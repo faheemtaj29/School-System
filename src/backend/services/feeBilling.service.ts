@@ -217,25 +217,50 @@ export const feeBillingService = {
   /** Record money received at the counter and issue a receipt number for it. */
   async collect(feeId: string, data: CollectFeeInput, actor?: SessionUser) {
     await dbConnect();
-    const fee = await Fee.findById(feeId);
-    if (!fee) throw new ServiceError("NOT_FOUND", "Fee voucher not found", 404);
-    const balance = round(fee.amount - (fee.paidAmount || 0));
-    if (balance <= 0) throw new ServiceError("VALIDATION", "This voucher is already fully paid", 400);
     const amount = round(data.amount);
+    const date = data.date ? new Date(data.date) : new Date();
+    if (!Number.isFinite(date.getTime())) {
+      throw new ServiceError("VALIDATION", "Payment date is invalid", 400);
+    }
+    const existing = await Fee.findById(feeId).select("amount paidAmount branchCode");
+    if (!existing) throw new ServiceError("NOT_FOUND", "Fee voucher not found", 404);
+    const balance = round(existing.amount - (existing.paidAmount || 0));
+    if (balance <= 0) throw new ServiceError("VALIDATION", "This voucher is already fully paid", 400);
     if (amount > balance) {
       throw new ServiceError("VALIDATION", `Amount is more than the balance due (${balance})`, 400);
     }
-    const date = data.date ? new Date(data.date) : new Date();
-    const receiptNo = await allocateCode("receipt", fee.branchCode);
-    fee.payments = [
-      ...(fee.payments || []),
-      { amount, date, method: data.method, receiptNo, receivedBy: actor?.name, note: data.note },
-    ];
-    fee.paidAmount = round((fee.paidAmount || 0) + amount);
+
+    // Atomic balance predicate prevents concurrent counter requests from collecting
+    // more than the outstanding amount on the same voucher.
+    const receiptNo = await allocateCode("receipt", existing.branchCode);
+    const fee = await Fee.findOneAndUpdate(
+      {
+        _id: feeId,
+        $expr: {
+          $lte: [
+            { $add: [{ $ifNull: ["$paidAmount", 0] }, amount] },
+            "$amount",
+          ],
+        },
+      },
+      {
+        $inc: { paidAmount: amount },
+        $push: {
+          payments: { amount, date, method: data.method, receiptNo, receivedBy: actor?.name, note: data.note },
+        },
+        $set: { paymentDate: date, method: data.method, receiptNo },
+      },
+      { new: true, runValidators: true }
+    );
+    if (!fee) {
+      const latest = await Fee.findById(feeId).select("amount paidAmount");
+      if (!latest) throw new ServiceError("NOT_FOUND", "Fee voucher not found", 404);
+      const latestBalance = round(latest.amount - (latest.paidAmount || 0));
+      throw new ServiceError("VALIDATION", latestBalance <= 0
+        ? "This voucher is already fully paid"
+        : `Amount is more than the balance due (${latestBalance})`, 400);
+    }
     fee.status = fee.paidAmount >= fee.amount ? "paid" : "partial";
-    fee.paymentDate = date;
-    fee.method = data.method;
-    if (!fee.receiptNo) fee.receiptNo = receiptNo;
     await fee.save();
     await syncFeeLedger(fee);
     return { fee: fee.toObject(), receiptNo };
