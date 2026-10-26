@@ -217,6 +217,9 @@ export const feeBillingService = {
   /** Record money received at the counter and issue a receipt number for it. */
   async collect(feeId: string, data: CollectFeeInput, actor?: SessionUser) {
     await dbConnect();
+    if (!Types.ObjectId.isValid(feeId)) {
+      throw new ServiceError("VALIDATION", "Invalid fee voucher ID", 400);
+    }
     const amount = round(data.amount);
     const date = data.date ? new Date(data.date) : new Date();
     if (!Number.isFinite(date.getTime())) {
@@ -344,6 +347,9 @@ export const feeBillingService = {
   /** One payment receipt (latest payment unless a receipt number is given). */
   async receipt(feeId: string, receiptNo?: string | null) {
     await dbConnect();
+    if (!Types.ObjectId.isValid(feeId)) {
+      throw new ServiceError("VALIDATION", "Invalid fee voucher ID", 400);
+    }
     const fee = (await Fee.findById(feeId).populate(studentFields).lean()) as unknown as FeeLean | null;
     if (!fee || !fee.studentId) throw new ServiceError("NOT_FOUND", "Fee voucher not found", 404);
     // Vouchers paid before counter collection existed have no payment rows — show the paid total.
