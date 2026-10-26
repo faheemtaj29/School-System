@@ -369,6 +369,21 @@ export const platformService = {
 
     const steps = [...def.steps].sort((a, b) => a.order - b.order);
     const current = steps.find((s) => s.order === instance.currentStep) || steps[0];
+    if (!current) {
+      throw new ServiceError("VALIDATION", "This workflow has no configured approval steps", 409);
+    }
+
+    // Enforce the role assigned to the current approval step in the service
+    // layer as well as the controller. Admins retain an explicit override.
+    const requiredRole = String(current.role || "").toLowerCase();
+    const actorRole = String(session.role || "").toLowerCase();
+    if (actorRole !== "admin" && (!requiredRole || actorRole !== requiredRole)) {
+      throw new ServiceError(
+        "FORBIDDEN",
+        "You are not authorized to act on this workflow's current approval step",
+        403
+      );
+    }
 
     if (input.action === "reject") {
       instance.status = "rejected";
