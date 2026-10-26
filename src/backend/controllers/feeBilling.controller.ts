@@ -42,7 +42,7 @@ export const feeBillingController = {
   },
 
   async generateMonth(req: Request) {
-    const { session, error } = await requireAuth(["admin"]);
+    const { error } = await requireAuth(["admin"]);
     if (error) return error;
     try {
       const parsed = monthSchema.safeParse(await req.json());
