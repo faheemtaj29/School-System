@@ -83,6 +83,17 @@ export const feeBillingController = {
     }
   },
 
+  async syncLedger(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+    const { error } = await requireAuth(["admin"]);
+    if (error) return error;
+    try {
+      const { id } = await ctx.params;
+      return jsonOk(await feeBillingService.syncLedger(id));
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
   async receipt(req: Request, ctx: { params: Promise<{ id: string }> }) {
     const { error } = await requireAuth(["admin", "staff"]);
     if (error) return error;
