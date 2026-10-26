@@ -121,7 +121,7 @@ export const aiController = {
   },
 
   async remove(req: Request, ctx: { params: Promise<{ id: string }> }) {
-    const { error } = await requireAuth(["admin"]);
+    const { session, error } = await requireAuth(["admin"]);
     if (error) return error;
     try {
       const { id } = await ctx.params;
@@ -131,7 +131,12 @@ export const aiController = {
       if (["posted", "rejected"].includes(tx.status)) {
         return jsonError("Cannot delete a posted or rejected transaction", 409);
       }
-      return jsonOk({ ok: true, message: "Transaction marked as rejected" });
+      const rejected = await aiService.rejectTransaction(
+        id,
+        session!.id,
+        "Marked as rejected by administrator"
+      );
+      return jsonOk({ ok: true, transaction: rejected, message: "Transaction marked as rejected" });
     } catch (e) {
       return fromServiceError(e);
     }
