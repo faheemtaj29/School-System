@@ -5,6 +5,15 @@ export interface IFeeLine {
   amount: number;
 }
 
+export interface IFeePayment {
+  amount: number;
+  date: Date;
+  method: "cash" | "card" | "bank" | "online";
+  receiptNo: string;
+  receivedBy?: string;
+  note?: string;
+}
+
 export interface IFee {
   studentId: Types.ObjectId;
   title: string;
@@ -29,9 +38,25 @@ export interface IFee {
   installmentTotal?: number;
   lateFeeAmount?: number;
   lateFeeApplied?: boolean;
+  /** Month key (YYYY-MM) for generated monthly challans. */
+  billingMonth?: string;
+  receiptNo?: string;
+  payments?: IFeePayment[];
   createdAt: Date;
   updatedAt: Date;
 }
+
+const FeePaymentSchema = new Schema<IFeePayment>(
+  {
+    amount: { type: Number, required: true, min: 0.01 },
+    date: { type: Date, required: true },
+    method: { type: String, enum: ["cash", "card", "bank", "online"], required: true },
+    receiptNo: { type: String, required: true, trim: true },
+    receivedBy: String,
+    note: String,
+  },
+  { _id: false }
+);
 
 const FeeLineSchema = new Schema<IFeeLine>(
   {
@@ -67,6 +92,9 @@ const FeeSchema = new Schema<IFee>(
     installmentTotal: { type: Number, min: 1 },
     lateFeeAmount: { type: Number, default: 0, min: 0 },
     lateFeeApplied: { type: Boolean, default: false },
+    billingMonth: { type: String, match: /^\d{4}-(0[1-9]|1[0-2])$/ },
+    receiptNo: { type: String, trim: true },
+    payments: { type: [FeePaymentSchema], default: [] },
   },
   { timestamps: true }
 );

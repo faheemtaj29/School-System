@@ -37,8 +37,14 @@ export async function requireAuth(roles?: SessionUser["role"][]) {
 }
 
 /** Parse Zod result or return first error message. */
-export function firstZodError(issues: { message: string }[]) {
-  return issues[0]?.message ?? "Invalid input";
+export function firstZodError(issues: { message: string; path?: PropertyKey[] }[]) {
+  const issue = issues[0];
+  if (!issue) return "Invalid input";
+  const path = issue.path?.map(String).join(".");
+  if (path && /^(Invalid|Too (small|big))/.test(issue.message)) {
+    return `${path}: ${issue.message}`;
+  }
+  return issue.message;
 }
 
 export function parseOptionalDate(value?: string | null) {

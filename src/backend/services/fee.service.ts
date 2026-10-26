@@ -107,7 +107,7 @@ function toPayload(
   };
 }
 
-async function syncFeeLedger(fee: {
+export async function syncFeeLedger(fee: {
   _id: { toString(): string };
   title: string;
   paidAmount: number;
@@ -128,7 +128,9 @@ async function syncFeeLedger(fee: {
     title: fee.title,
     amount: paid,
     date: fee.paymentDate || new Date(),
-    method: fee.method as "cash" | "bank" | "online" | undefined,
+    // The legacy accounting ledger supports cash/bank/online only.
+    // Card settlements are deposited through the bank, so map them to bank.
+    method: fee.method === "card" ? "bank" : fee.method as "cash" | "bank" | "online" | undefined,
     reference: `FEE-${String(fee._id).slice(-6).toUpperCase()}`,
     notes: "Auto-posted from fee voucher",
     branchCode: fee.branchCode,
@@ -291,8 +293,9 @@ export const feeService = {
     const monthEnd = new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0, 23, 59, 59, 999);
     const already = await Fee.find({
       studentId: { $in: students.map((s) => s._id) },
-      title,
-      dueDate: { $gte: monthStart, $lte: monthEnd },
+      ...(data.billingMonth
+        ? { billingMonth: data.billingMonth }
+        : { title, dueDate: { $gte: monthStart, $lte: monthEnd } }),
     })
       .select("studentId")
       .lean();
@@ -314,6 +317,7 @@ export const feeService = {
           dueDate,
           status: "pending" as const,
           paidAmount: 0,
+          ...(data.billingMonth ? { billingMonth: data.billingMonth } : {}),
           notes:
             priced.discountAmount > 0
               ? `${priced.discountType} ${priced.discountPercent}% concession`
