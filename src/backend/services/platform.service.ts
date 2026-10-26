@@ -293,10 +293,28 @@ export const platformService = {
       .lean();
   },
 
-  async listInstances(status?: string | null) {
+  async listInstances(status: string | null | undefined, session: SessionUser) {
     const inst = await ensureInstitution();
     const filter: Record<string, unknown> = { institutionCode: inst.code };
     if (status) filter.status = status;
+
+    // Admins can review all workflows. Other roles see requests they created
+    // plus pending requests currently assigned to their role.
+    if (session.role !== "admin") {
+      const assigned = await WorkflowDefinition.find({
+        institutionCode: inst.code,
+        active: true,
+        steps: { $elemMatch: { role: session.role } },
+      }).select("code").lean();
+      const assignedCodes = assigned.map((workflow) => workflow.code);
+      filter.$or = [
+        { createdBy: session.id },
+        ...(assignedCodes.length
+          ? [{ status: "pending", workflowCode: { $in: assignedCodes } }]
+          : []),
+      ];
+    }
+
     return WorkflowInstance.find(filter).sort({ updatedAt: -1 }).limit(100).lean();
   },
 
