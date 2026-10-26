@@ -335,7 +335,7 @@ export const campusController = {
   },
 
   async remove(req: Request, ctx: Ctx) {
-    const { error } = await requireAuth(["admin", "staff"]);
+    const { session, error } = await requireAuth(["admin", "staff"]);
     if (error) return error;
     try {
       const { id } = await ctx.params;
