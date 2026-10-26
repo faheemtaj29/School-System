@@ -319,10 +319,14 @@ export const campusController = {
       const body = await req.json();
       const mod = body.module || body.kind;
       if (mod === "vehicle") {
-        return jsonOk({ vehicle: await campusService.updateVehicle(id, body) });
+        const parsed = vehicleSchema.safeParse(body);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        return jsonOk({ vehicle: await campusService.updateVehicle(id, parsed.data) });
       }
       if (mod === "asset") {
-        return jsonOk({ asset: await campusService.updateAsset(id, body) });
+        const parsed = assetSchema.safeParse(body);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        return jsonOk({ asset: await campusService.updateAsset(id, parsed.data) });
       }
       return jsonError("Unknown update kind");
     } catch (e) {
@@ -336,6 +340,12 @@ export const campusController = {
     try {
       const { id } = await ctx.params;
       const kind = new URL(req.url).searchParams.get("kind");
+      if (!kind) return jsonError("Specify ?kind=", 400);
+      // Medical notes and document records can contain highly sensitive data.
+      // Restrict destructive operations on these records to administrators.
+      if ((kind === "visit" || kind === "document") && session!.role !== "admin") {
+        return jsonError("Only an administrator can delete medical visits or documents", 403);
+      }
       if (kind === "timetable") return jsonOk(await campusService.removeTimetable(id));
       if (kind === "book") return jsonOk(await campusService.removeBook(id));
       if (kind === "vehicle") return jsonOk(await campusService.removeVehicle(id));
@@ -344,7 +354,7 @@ export const campusController = {
       if (kind === "cafe-item") return jsonOk(await campusService.removeCafeItem(id));
       if (kind === "asset") return jsonOk(await campusService.removeAsset(id));
       if (kind === "document") return jsonOk(await campusService.removeDocument(id));
-      return jsonError("Specify ?kind=");
+      return jsonError("Unsupported removal kind", 400);
     } catch (e) {
       return fromServiceError(e);
     }
