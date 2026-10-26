@@ -162,11 +162,18 @@ const aiSchema = z.object({
 
 export const campusController = {
   async list(req: Request) {
-    const { error } = await requireAuth(["admin", "staff", "teacher"]);
+    const { session, error } = await requireAuth(["admin", "staff", "teacher"]);
     if (error) return error;
     try {
       const params = new URL(req.url).searchParams;
       const view = params.get("view") || "overview";
+
+      // Medical visits contain sensitive health information. Keep the list
+      // restricted to administrators instead of exposing every visit to all
+      // staff and teachers who can access the general campus module.
+      if (view === "medical" && session!.role !== "admin") {
+        return jsonError("Only an administrator can view medical records", 403);
+      }
       if (view === "timetable") {
         return jsonOk({
           slots: await campusService.listTimetable({
