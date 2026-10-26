@@ -273,8 +273,32 @@ export const feeBillingService = {
     );
     const updatedFee = await Fee.findById(fee._id);
     if (!updatedFee) throw new ServiceError("NOT_FOUND", "Fee voucher not found after collection", 404);
-    await syncFeeLedger(updatedFee);
-    return { fee: updatedFee.toObject(), receiptNo };
+    let ledgerSyncPending = false;
+    try {
+      // Ledger posting is idempotent by source type + fee ID. Do not make the
+      // caller repeat a successful collection if accounting is temporarily unavailable.
+      await syncFeeLedger(updatedFee);
+    } catch (error) {
+      ledgerSyncPending = true;
+      console.error("[fees] payment saved but ledger synchronization failed", {
+        feeId: String(updatedFee._id),
+        receiptNo,
+        error,
+      });
+    }
+    return { fee: updatedFee.toObject(), receiptNo, ledgerSyncPending };
+  },
+
+  /** Retry the idempotent accounting projection without collecting money again. */
+  async syncLedger(feeId: string) {
+    await dbConnect();
+    if (!Types.ObjectId.isValid(feeId)) {
+      throw new ServiceError("VALIDATION", "Invalid fee voucher ID", 400);
+    }
+    const fee = await Fee.findById(feeId);
+    if (!fee) throw new ServiceError("NOT_FOUND", "Fee voucher not found", 404);
+    await syncFeeLedger(fee);
+    return { feeId: String(fee._id), synchronized: true };
   },
 
   /** Challans to print in bulk, with each student's earlier unpaid balance as arrears. */
