@@ -26,7 +26,7 @@ export const bulkFeeSchema = z.object({
   title: z.string().optional().or(z.literal("")),
   dueDate: z.string().min(1),
   branchCode: z.string().optional(),
-  billingMonth: z.string().regex(/^\\d{4}-(0[1-9]|1[0-2])$/, "Billing month must use YYYY-MM format").optional(),
+  billingMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Billing month must use YYYY-MM format").optional(),
 });
 
 /** Split a fee into equal monthly installments. */
