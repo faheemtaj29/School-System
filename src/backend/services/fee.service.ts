@@ -128,7 +128,9 @@ export async function syncFeeLedger(fee: {
     title: fee.title,
     amount: paid,
     date: fee.paymentDate || new Date(),
-    method: fee.method as "cash" | "bank" | "online" | undefined,
+    // The legacy accounting ledger supports cash/bank/online only.
+    // Card settlements are deposited through the bank, so map them to bank.
+    method: fee.method === "card" ? "bank" : fee.method as "cash" | "bank" | "online" | undefined,
     reference: `FEE-${String(fee._id).slice(-6).toUpperCase()}`,
     notes: "Auto-posted from fee voucher",
     branchCode: fee.branchCode,
