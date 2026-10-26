@@ -38,17 +38,40 @@ export const aiController = {
 
       if (source === "image" || source === "pdf") {
         const { fileUrl, fileName, mimeType, fileSize, branchCode } = body;
-        if (!fileUrl || !fileName || !mimeType) {
-          return jsonError("fileUrl, fileName and mimeType are required for image/pdf uploads");
+        if (
+          typeof fileUrl !== "string" ||
+          !fileUrl.trim() ||
+          typeof fileName !== "string" ||
+          !fileName.trim() ||
+          typeof mimeType !== "string"
+        ) {
+          return jsonError("fileUrl, fileName and mimeType are required for image/pdf uploads", 400);
         }
+
+        const allowedMimeTypes =
+          source === "pdf"
+            ? ["application/pdf"]
+            : ["image/jpeg", "image/png", "image/webp"];
+        if (!allowedMimeTypes.includes(mimeType.toLowerCase())) {
+          return jsonError("Unsupported file type for the selected upload source", 400);
+        }
+
+        const parsedSize = Number(fileSize);
+        const maxFileSize = 10 * 1024 * 1024;
+        if (!Number.isFinite(parsedSize) || parsedSize <= 0 || parsedSize > maxFileSize) {
+          return jsonError("File size must be greater than zero and no more than 10 MB", 400);
+        }
+
         const doc = await aiService.processImage({
-          fileUrl,
-          fileName,
-          mimeType,
-          fileSize: fileSize || 0,
+          fileUrl: fileUrl.trim(),
+          fileName: fileName.trim().slice(0, 255),
+          mimeType: mimeType.toLowerCase(),
+          fileSize: parsedSize,
           source: source as "image" | "pdf",
           userId: session!.id,
-          branchCode: branchCode || "MAIN",
+          branchCode: typeof branchCode === "string" && branchCode.trim()
+            ? branchCode.trim().toUpperCase()
+            : "MAIN",
         });
         return jsonOk({ document: doc }, 201);
       }
