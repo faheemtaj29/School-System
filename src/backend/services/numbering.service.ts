@@ -15,7 +15,8 @@ export type NumberKind =
   | "vehicle"
   | "asset"
   | "book"
-  | "document";
+  | "document"
+  | "receipt";
 
 const PREFIX: Record<NumberKind, string> = {
   student: "STD",
@@ -25,6 +26,7 @@ const PREFIX: Record<NumberKind, string> = {
   asset: "AST",
   book: "LIB",
   document: "DOC",
+  receipt: "RCT",
 };
 
 async function campusCode(branch?: string | null) {
