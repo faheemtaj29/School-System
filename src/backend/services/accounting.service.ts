@@ -6,6 +6,7 @@ import { dbConnect } from "@/backend/config/database";
 import { Account, AccountingCounter, Voucher } from "@/backend/models/Accounting";
 import { LedgerEntry, type LedgerSource } from "@/backend/models/Ledger";
 import { Settings } from "@/backend/models/Settings";
+import { StockVoucher } from "@/backend/models/Inventory";
 import { ServiceError } from "@/backend/types";
 import type { SessionUser } from "@/backend/types";
 import { recordAudit, getAuditTrail } from "@/backend/lib/audit";
@@ -1367,9 +1368,20 @@ export const accountingService = {
       .limit(1000)
       .lean();
 
+    // Postings made by stock vouchers show the bill / invoice number people know, not the JV number.
+    const stockIds = vouchers
+      .filter((v) => v.sourceType === "inventory" && v.sourceId && /^[a-f0-9]{24}$/i.test(String(v.sourceId)))
+      .map((v) => String(v.sourceId));
+    const stockDocs = stockIds.length
+      ? await StockVoucher.find({ _id: { $in: stockIds } }).select("number").lean()
+      : [];
+    const stockNumber = new Map(stockDocs.map((d) => [String(d._id), d.number as string]));
+
     const rows: {
       voucherId: string;
       number: string;
+      docNumber: string;
+      docLink: string;
       voucherType: string;
       date: Date;
       narration: string;
@@ -1388,6 +1400,10 @@ export const accountingService = {
         rows.push({
           voucherId: String(voucher._id),
           number: voucher.number,
+          docNumber: stockNumber.get(String(voucher.sourceId)) || voucher.number,
+          docLink: stockNumber.has(String(voucher.sourceId))
+            ? `/print/stock-voucher?id=${voucher.sourceId}`
+            : `/print/voucher?id=${voucher._id}`,
           voucherType: voucher.voucherType,
           date: voucher.date,
           narration: line.narration || voucher.narration,

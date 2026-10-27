@@ -9,6 +9,7 @@ type StatementData = {
   openingBalance: number;
   rows: {
     number: string;
+    docNumber: string;
     voucherType: string;
     date: string;
     narration: string;
@@ -112,11 +113,11 @@ export function LedgerStatementPrintPage({ query }: { query: string }) {
     : "";
 
   return (
-    <PrintShell title={a ? `Statement · ${a.name}` : "Account statement"} error={error} loading={!data}>
+    <PrintShell title={a ? `Ledger · ${a.name}` : "Party ledger"} error={error} loading={!data}>
       {data && a ? (
         <section className="doc-page qbp">
           <Letterhead school={data.school} />
-          <h1 className="qbp-title">ACCOUNT STATEMENT</h1>
+          <h1 className="qbp-title">PARTY LEDGER</h1>
           <div className="qbp-info">
             <div>
               <h4>Account</h4>
@@ -144,9 +145,9 @@ export function LedgerStatementPrintPage({ query }: { query: string }) {
           <table className="qbp-lines">
             <thead>
               <tr>
+                <th style={{ width: 140 }}>Voucher no.</th>
                 <th style={{ width: 90 }}>Date</th>
-                <th style={{ width: 150 }}>Transaction</th>
-                <th>Details</th>
+                <th>Description</th>
                 <th className="num" style={{ width: 100 }}>Debit</th>
                 <th className="num" style={{ width: 100 }}>Credit</th>
                 <th className="num" style={{ width: 120 }}>Balance</th>
@@ -154,29 +155,29 @@ export function LedgerStatementPrintPage({ query }: { query: string }) {
             </thead>
             <tbody>
               <tr>
+                <td />
                 <td>{data.from ? fmtDate(data.from) : ""}</td>
-                <td colSpan={4}><b>Opening balance</b></td>
+                <td><b>Opening balance</b></td>
+                <td />
+                <td />
                 <td className="num"><b>{drCr(data.openingBalance)}</b></td>
               </tr>
               {data.rows.map((r, i) => (
                 <tr key={i}>
+                  <td>{r.docNumber}</td>
                   <td>{fmtDate(r.date)}</td>
-                  <td>
-                    {VTYPE[r.voucherType] || r.voucherType}
-                    <small style={{ display: "block", color: "#6b6c72" }}>{r.number}</small>
-                  </td>
-                  <td>
-                    {r.narration}
-                    <small style={{ display: "block", color: "#6b6c72" }}>
-                      {r.contra ? `Against: ${r.contra}` : ""}
-                      {r.partyName ? ` · ${r.partyName}` : ""}
-                    </small>
-                  </td>
+                  <td>{r.narration}</td>
                   <td className="num">{r.debit ? money(r.debit) : ""}</td>
                   <td className="num">{r.credit ? money(r.credit) : ""}</td>
                   <td className="num">{drCr(r.balance)}</td>
                 </tr>
               ))}
+              <tr>
+                <td colSpan={3}><b>Total</b></td>
+                <td className="num"><b>{money(data.totalDebit)}</b></td>
+                <td className="num"><b>{money(data.totalCredit)}</b></td>
+                <td className="num"><b>{drCr(data.closingBalance)}</b></td>
+              </tr>
             </tbody>
           </table>
 

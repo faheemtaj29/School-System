@@ -196,6 +196,16 @@ async function syncVoucherLedger(voucher: IStockVoucher, actorId?: string) {
   const cost = round(
     voucher.items.reduce((sum, it) => sum + Math.abs(it.quantity) * (it.unitCost || it.rate || 0), 0)
   );
+  // What a supplier / customer sees on their ledger line: which items, how many, at what rate.
+  const DOC: Record<string, string> = {
+    purchase: "Purchase",
+    purchase_return: "Purchase return",
+    sales: "Sale",
+    sales_return: "Sale return",
+  };
+  const detail = `${DOC[voucher.voucherType] || "Stock"}${voucher.reference ? ` (bill / ref ${voucher.reference})` : ""}: ${voucher.items
+    .map((it) => `${it.name} ${Math.abs(it.quantity)} ${it.unit || ""} @ ${round(it.rate)}`.replace(/\s+@/, " @"))
+    .join(", ")}`;
   type L = { accountCode: string; debit: number; credit: number; narration?: string };
   const lines: L[] = [];
   const dr = (accountCode: string, amount: number, narration?: string) =>
@@ -209,9 +219,9 @@ async function syncVoucherLedger(voucher: IStockVoucher, actorId?: string) {
     if (voucher.voucherType === "purchase") {
       dr(inventory, net, "Stock purchased");
       if (tax > 0) dr(taxCode, tax, "Input tax");
-      cr(settle, total);
+      cr(settle, total, detail);
     } else {
-      dr(settle, total);
+      dr(settle, total, detail);
       cr(inventory, net, "Stock returned to supplier");
       if (tax > 0) cr(taxCode, tax, "Input tax reversed");
     }
@@ -230,7 +240,7 @@ async function syncVoucherLedger(voucher: IStockVoucher, actorId?: string) {
     ).code as string;
     const taxCode = tax > 0 ? await systemCode("taxPayable") : "";
     if (voucher.voucherType === "sales") {
-      dr(settle, total);
+      dr(settle, total, detail);
       cr(sales, net, "Goods sold");
       if (tax > 0) cr(taxCode, tax, "Output tax");
       dr(cogs, cost, "Cost of goods sold");
@@ -238,7 +248,7 @@ async function syncVoucherLedger(voucher: IStockVoucher, actorId?: string) {
     } else {
       dr(sales, net, "Goods returned by customer");
       if (tax > 0) dr(taxCode, tax, "Output tax reversed");
-      cr(settle, total);
+      cr(settle, total, detail);
       dr(inventory, cost, "Stock returned at cost");
       cr(cogs, cost, "Cost of goods sold reversed");
     }

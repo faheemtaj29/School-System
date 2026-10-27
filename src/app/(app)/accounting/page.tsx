@@ -13,6 +13,7 @@ import {
   inputClass,
 } from "@/components/ui";
 import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
+import { PartyLedger } from "@/components/accounting/PartyLedger";
 import { QbVoucher, type QbMode } from "@/components/accounting/QbVoucher";
 
 type Account = {
@@ -105,19 +106,6 @@ type ReportGroup = {
 };
 
 type Section = { groups: ReportGroup[]; total: number };
-
-type LedgerIndexRow = {
-  code: string;
-  name: string;
-  type: string;
-  group: string;
-  bankName: string;
-  accountNumber: string;
-  opening: number;
-  debit: number;
-  credit: number;
-  closing: number;
-};
 
 type LedgerRow = {
   voucherId: string;
@@ -230,10 +218,6 @@ export default function AccountingPage() {
     totalCredit: number;
     closingBalance: number;
   } | null>(null);
-  const [ledgerIndex, setLedgerIndex] = useState<LedgerIndexRow[]>([]);
-  const [partyGroup, setPartyGroup] = useState("");
-  const [partySearch, setPartySearch] = useState("");
-  const [hideZero, setHideZero] = useState(true);
   const [dayBook, setDayBook] = useState<Voucher[]>([]);
   const [pnl, setPnl] = useState<{ income: Section; expense: Section; surplus: number } | null>(
     null
@@ -351,7 +335,7 @@ export default function AccountingPage() {
       return "Create expense vouchers and choose cash/bank payment account from chart of accounts.";
     }
     if (navNode === "chart-of-accounts") return "5-level account hierarchy for journal posting and controls.";
-    if (navNode === "party-ledger") return "Every account — suppliers, customers, banks, cash, students, staff, income and expenses — with balances and printable statements.";
+    if (navNode === "party-ledger") return "Khata of any account — supplier, customer, bank, cash or expense — between two dates.";
     if (navNode === "general-ledger") return "View account-wise ledger movement and balances.";
     if (navNode === "cash-book") return "Daily cash movement with opening and closing position.";
     if (navNode === "bank-book") return "Daily bank movement and reconciliation-ready balances.";
@@ -594,21 +578,6 @@ export default function AccountingPage() {
     loadLedger();
   }, [loadLedger]);
 
-  const loadLedgerIndex = useCallback(async () => {
-    if (navNode !== "party-ledger") return;
-    const params = new URLSearchParams({ view: "ledger-index" });
-    if (branch) params.set("branch", branch);
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
-    const data = await fetch(`/api/accounting?${params}`).then((r) => r.json());
-    setLedgerIndex(Array.isArray(data.rows) ? data.rows : []);
-  }, [navNode, branch, from, to]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadLedgerIndex();
-  }, [loadLedgerIndex]);
-
   const printStatement = (code: string) => {
     const params = new URLSearchParams({ account: code });
     if (branch) params.set("branch", branch);
@@ -629,21 +598,6 @@ export default function AccountingPage() {
     () => accounts.filter((account) => account.isPosting && account.isActive),
     [accounts]
   );
-
-  const partyGroups = useMemo(
-    () => Array.from(new Set(ledgerIndex.map((r) => r.group))),
-    [ledgerIndex]
-  );
-
-  const partyRows = useMemo(() => {
-    const q = partySearch.trim().toLowerCase();
-    return ledgerIndex.filter(
-      (r) =>
-        (!partyGroup || r.group === partyGroup) &&
-        (!hideZero || r.opening || r.debit || r.credit || r.closing) &&
-        (!q || `${r.code} ${r.name} ${r.bankName} ${r.accountNumber}`.toLowerCase().includes(q))
-    );
-  }, [ledgerIndex, partyGroup, partySearch, hideZero]);
 
   const ledgerAccounts = postingAccounts;
 
@@ -1364,7 +1318,7 @@ export default function AccountingPage() {
       </div>
       ) : null}
 
-      {needsPeriodControls ? (
+      {needsPeriodControls && navNode !== "party-ledger" ? (
       <div className="period-bar no-print">
         <label>
           <span>Branch</span>
@@ -1427,7 +1381,7 @@ export default function AccountingPage() {
       </div>
       ) : null}
 
-      {needsPeriodControls ? (
+      {needsPeriodControls && navNode !== "party-ledger" ? (
       <ReportHeading
         title={reportHeadingTitle}
         branch={branches.find((b) => b.code === branch)?.name || "All branches (consolidated)"}
@@ -1748,18 +1702,15 @@ export default function AccountingPage() {
         </Panel>
       ) : null}
 
-      {activeTab === "ledger" ? (
+      {activeTab === "ledger" && navNode === "party-ledger" ? (
+        <PartyLedger branches={branches} defaultBranch={branch} />
+      ) : null}
+
+      {activeTab === "ledger" && navNode !== "party-ledger" ? (
         <Panel
-          title={navNode === "party-ledger" ? "Party Ledger" : "General Ledger"}
-          meta={navNode === "party-ledger" && !ledgerCode ? `${partyRows.length} ACCOUNTS` : ledger?.account ? `${ledger.account.code} · ${ledger.account.name}` : "SELECT ACCOUNT"}
+          title="General Ledger"
+          meta={ledger?.account ? `${ledger.account.code} · ${ledger.account.name}` : "SELECT ACCOUNT"}
         >
-          {navNode === "party-ledger" && ledgerCode ? (
-            <div className="chips no-print" style={{ marginBottom: 14 }}>
-              <button type="button" className="btn-ghost" onClick={() => setLedgerCode("")}>← All accounts</button>
-              <button type="button" className="btn-dark" onClick={() => printStatement(ledgerCode)}>Print statement</button>
-            </div>
-          ) : null}
-          {navNode !== "party-ledger" ? (
           <div className="chips no-print" style={{ marginBottom: 14 }}>
             <select
               className={inputClass}
@@ -1773,73 +1724,11 @@ export default function AccountingPage() {
                 </option>
               ))}
             </select>
+            {ledger?.account ? (
+              <button type="button" className="btn-dark" onClick={() => printStatement(ledgerCode)}>Print statement</button>
+            ) : null}
           </div>
-          ) : null}
-          {navNode === "party-ledger" && !ledgerCode ? (
-            <>
-              <div className="chips no-print" style={{ marginBottom: 10 }}>
-                <button type="button" className={`filter-chip${!partyGroup ? " active" : ""}`} onClick={() => setPartyGroup("")}>All</button>
-                {partyGroups.map((g) => (
-                  <button key={g} type="button" className={`filter-chip${partyGroup === g ? " active" : ""}`} onClick={() => setPartyGroup(g)}>{g}</button>
-                ))}
-              </div>
-              <div className="chips no-print" style={{ marginBottom: 14, alignItems: "center" }}>
-                <input
-                  className={inputClass}
-                  style={{ maxWidth: 320 }}
-                  placeholder="Search supplier, customer, bank, account no…"
-                  value={partySearch}
-                  onChange={(e) => setPartySearch(e.target.value)}
-                />
-                <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>
-                  <input type="checkbox" checked={hideZero} onChange={(e) => setHideZero(e.target.checked)} />
-                  Hide accounts with no balance or activity
-                </label>
-              </div>
-              {!partyRows.length ? (
-                <EmptyState message="No accounts match. Untick “Hide accounts with no balance” to see every account." />
-              ) : (
-                <div className="table-scroll">
-                  <table className="reg report-table">
-                    <thead>
-                      <tr>
-                        <th>Account</th>
-                        <th>Group</th>
-                        <th className="right">Opening</th>
-                        <th className="right">Debit</th>
-                        <th className="right">Credit</th>
-                        <th className="right">Closing balance</th>
-                        <th className="no-print" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {partyRows.map((r) => (
-                        <tr key={r.code} style={{ cursor: "pointer" }} onClick={() => setLedgerCode(r.code)}>
-                          <td>
-                            <div><strong>{r.name}</strong></div>
-                            <div style={{ fontSize: 10.5, color: "var(--text-dim)" }}>
-                              {r.code}
-                              {r.bankName ? ` · ${r.bankName}` : ""}
-                              {r.accountNumber ? ` · A/C ${r.accountNumber}` : ""}
-                            </div>
-                          </td>
-                          <td>{r.group}</td>
-                          <td className="num">{signedBalance(r.opening)}</td>
-                          <td className="num">{amount(r.debit)}</td>
-                          <td className="num">{amount(r.credit)}</td>
-                          <td className="num"><strong>{signedBalance(r.closing)}</strong></td>
-                          <td className="no-print" style={{ whiteSpace: "nowrap" }}>
-                            <button type="button" className="filter-chip" onClick={(e) => { e.stopPropagation(); setLedgerCode(r.code); }}>View</button>{" "}
-                            <button type="button" className="filter-chip" onClick={(e) => { e.stopPropagation(); printStatement(r.code); }}>Print</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          ) : !ledger ? (
+          {!ledger ? (
             <EmptyState
               message="Choose a posting account to view its ledger with running balance."
             />

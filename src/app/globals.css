@@ -2870,3 +2870,13 @@ table.qbp-je { width: 100%; border-collapse: collapse; margin-top: 22px; font-si
 .qbp-je th { color: #6b6c72; font-weight: 600; }
 .qbp .signs { margin-top: auto; padding-top: 50px; }
 .qb-warn { margin-top: 5px; font-size: 12px; color: #9a5b00; background: #fff4e0; border-radius: 4px; padding: 4px 8px; max-width: 360px; }
+
+/* ================= PARTY LEDGER (khata) ================= */
+.pl-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 16px; }
+.pl-filters label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: 600; color: var(--text-dim); }
+.pl-filters .pl-account { flex: 1 1 280px; min-width: 240px; }
+.pl-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; padding: 8px 0 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.pl-head b { font-size: 16px; }
+.pl-head span { font-size: 12px; color: var(--text-dim); }
+.pl-table td a { color: var(--jade-dark); text-decoration: none; }
+.pl-table td a:hover { text-decoration: underline; }
