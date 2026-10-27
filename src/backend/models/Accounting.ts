@@ -21,6 +21,9 @@ export interface IAccount {
   /** Bank accounts: which bank and which account number money moves through. */
   bankName?: string;
   accountNumber?: string;
+  /** Set when this account is a supplier's or customer's own ledger. */
+  partyType?: "supplier" | "customer";
+  partyId?: string;
   isActive: boolean;
   systemKey?: string;
   openingBalance: number;
@@ -46,6 +49,8 @@ const AccountSchema = new Schema<IAccount>(
     isCashBank: { type: Boolean, default: false },
     bankName: { type: String, trim: true },
     accountNumber: { type: String, trim: true },
+    partyType: { type: String, enum: ["supplier", "customer"] },
+    partyId: { type: String, index: true, sparse: true },
     isActive: { type: Boolean, default: true },
     systemKey: { type: String, sparse: true, unique: true },
     openingBalance: { type: Number, default: 0, min: 0 },

@@ -14,6 +14,7 @@ import {
   inputClass,
 } from "@/components/ui";
 import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
+import { QbStockVoucher, type StockType } from "@/components/inventory/QbStockVoucher";
 
 type Item = {
   _id: string;
@@ -193,7 +194,7 @@ const voucherBlank = {
 };
 
 export default function InventoryPage() {
-  const { currency: cur, name: schoolName } = useSchoolProfile();
+  const { currency: cur } = useSchoolProfile();
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
   const [tab, setTab] = useState<"vouchers" | "products">("vouchers");
@@ -206,6 +207,8 @@ export default function InventoryPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [itemOpen, setItemOpen] = useState(false);
   const [voucherOpen, setVoucherOpen] = useState(false);
+  // QuickBooks-style entry screen for every stock voucher type.
+  const [qbStock, setQbStock] = useState<StockType | null>(null);
   const [editing, setEditing] = useState<Item | null>(null);
   const [itemForm, setItemForm] = useState(itemBlank);
   const [voucherForm, setVoucherForm] = useState(voucherBlank);
@@ -554,29 +557,7 @@ export default function InventoryPage() {
   }
 
   function printVoucher(voucher: StockVoucher) {
-    const popup = window.open("", "_blank", "noopener,noreferrer,width=960,height=760");
-    if (!popup) {
-      alert("Allow pop-ups to open the printable stock voucher.");
-      return;
-    }
-    const escapeHtml = (value: unknown) =>
-      String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    const config = VOUCHERS[voucher.voucherType];
-    const branchName = branches.find((branch) => branch.code === voucher.branchCode)?.name || voucher.branchCode;
-    const items = voucher.items
-      .map(
-        (item) => `<tr><td><strong>${escapeHtml(item.sku || "-")}</strong><br><span>${escapeHtml(item.name)}</span></td><td>${escapeHtml(item.unit || "pcs")}</td><td class="amount">${formatNumber(item.quantity)}</td><td class="amount">${formatNumber(item.rate)}</td><td class="amount">${formatNumber(item.amount || item.quantity * item.rate)}</td></tr>`
-      )
-      .join("");
-    popup.document.write(`<!doctype html><html><head><title>${escapeHtml(voucher.number)} - Print</title><style>
-      @page { size: A4; margin: 14mm; } * { box-sizing:border-box; } body { margin:0; color:#17241d; font:12px Arial,sans-serif; } .document { max-width:190mm; margin:0 auto; } .header { display:flex; justify-content:space-between; gap:20px; padding-bottom:16px; border-bottom:3px solid #157a5c; } h1 { margin:0; font:700 25px Georgia,serif; } h2 { margin:0; font:700 17px Georgia,serif; text-align:right; } h3 { margin:23px 0 8px; color:#157a5c; font-size:11px; letter-spacing:.08em; text-transform:uppercase; } .muted { color:#627369; margin-top:5px; } .number { font:700 13px 'Courier New',monospace; margin-top:6px; } .meta { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:18px 0; padding:12px; background:#f3f7f3; border:1px solid #dce7dd; } .meta span { display:block; color:#64746b; font-size:9px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:3px; } .meta b { font-size:12px; } .narration { padding:10px 12px; border-left:3px solid #e8992e; background:#fffaf1; line-height:1.5; } table { width:100%; border-collapse:collapse; margin-top:8px; } th { background:#15332a; color:#fff; padding:9px 8px; font-size:9px; text-align:left; letter-spacing:.06em; text-transform:uppercase; } td { padding:9px 8px; border-bottom:1px solid #dfe7df; vertical-align:top; } td span { color:#64746b; font-size:10px; } .amount { text-align:right; font-family:'Courier New',monospace; } .summary { margin-left:auto; width:310px; margin-top:16px; border:1px solid #dce7dd; } .summary div { display:flex; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #e5ece5; } .summary div:last-child { border:0; background:#e3f2ec; font-weight:700; font-size:13px; } .signatures { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-top:70px; } .signatures div { border-top:1px solid #44534a; padding-top:7px; text-align:center; font-size:10px; color:#4e5e55; }
-      </style></head><body><main class="document"><header class="header"><div><h1>${escapeHtml(schoolName || "School")}</h1><p class="muted">${escapeHtml(branchName)}</p></div><div><h2>${escapeHtml(config.label)}</h2><div class="number">${escapeHtml(voucher.number)}</div></div></header><section class="meta"><div><span>Date</span><b>${escapeHtml(prettyDate(voucher.date))}</b></div><div><span>Party</span><b>${escapeHtml(voucher.partyName || "-")}</b></div><div><span>Status</span><b>${escapeHtml(voucher.status.toUpperCase())}</b></div><div><span>Movement</span><b>${escapeHtml(config.effect)}</b></div><div><span>Campus</span><b>${escapeHtml(voucher.toBranchCode ? `${voucher.branchCode} to ${voucher.toBranchCode}` : voucher.branchCode)}</b></div><div><span>Reference</span><b>${escapeHtml(voucher.reference || "-")}</b></div></section><div class="narration"><strong>Narration:</strong> ${escapeHtml(voucher.narration)}</div><h3>Stock Items</h3><table><thead><tr><th>Item</th><th>Unit</th><th class="amount">Quantity</th><th class="amount">Rate</th><th class="amount">Amount</th></tr></thead><tbody>${items}</tbody></table><section class="summary"><div><span>Subtotal</span><strong>${formatNumber(voucher.subtotal)}</strong></div><div><span>Discount</span><strong>${formatNumber(voucher.discountAmount)}</strong></div><div><span>Tax</span><strong>${formatNumber(voucher.taxAmount)}</strong></div><div><span>Grand Total</span><strong>${escapeHtml(cur)} ${formatNumber(voucher.grandTotal)}</strong></div></section><footer class="signatures"><div>Prepared by</div><div>Checked by</div><div>Approved by</div><div>Received by</div></footer></main><script>window.onload=()=>window.print();</script></body></html>`);
-    popup.document.close();
+    window.open(`/print/stock-voucher?id=${voucher._id}`, "_blank", "noopener");
   }
 
   function openCreateItem() {
@@ -642,27 +623,27 @@ export default function InventoryPage() {
         actionLabel={actionLabel || undefined}
         onAction={() => {
           if (navNode === "purchase") {
-            openVoucher("purchase");
+            setQbStock("purchase");
             return;
           }
           if (navNode === "purchase-return") {
-            openVoucher("purchase_return");
+            setQbStock("purchase_return");
             return;
           }
           if (navNode === "sales") {
-            openVoucher("sales");
+            setQbStock("sales");
             return;
           }
           if (navNode === "sales-return") {
-            openVoucher("sales_return");
+            setQbStock("sales_return");
             return;
           }
           if (navNode === "stock-transfer") {
-            openVoucher("transfer");
+            setQbStock("transfer");
             return;
           }
           if (navNode === "stock-adjustment") {
-            openVoucher("adjustment");
+            setQbStock("adjustment");
             return;
           }
           if (navNode === "products") {
@@ -670,9 +651,19 @@ export default function InventoryPage() {
             return;
           }
           if (!actionLabel) return;
-          openVoucher("purchase");
+          setQbStock("purchase");
         }}
       />
+
+      {qbStock ? (
+        <QbStockVoucher
+          key={qbStock}
+          type={qbStock}
+          branch={branch || "MAIN"}
+          onClose={() => setQbStock(null)}
+          onSaved={() => load()}
+        />
+      ) : null}
 
       <div className="chips" style={{ marginBottom: 10 }}>
         <span className="filter-chip active">Inventory</span>

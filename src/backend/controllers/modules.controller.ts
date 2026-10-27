@@ -345,6 +345,18 @@ export const inventoryController = {
     try {
       const params = new URL(req.url).searchParams;
       const branchCode = params.get("branch");
+      if (params.get("view") === "voucher") {
+        return jsonOk(await inventoryService.voucherForPrint(params.get("id") || ""));
+      }
+      if (params.get("view") === "stock-ledger") {
+        return jsonOk(
+          await inventoryService.stockLedger(params.get("item") || "", {
+            branchCode: params.get("branch"),
+            from: params.get("from"),
+            to: params.get("to"),
+          })
+        );
+      }
       if (params.get("view") === "audit-log") {
         const voucherId = params.get("voucherId");
         if (!voucherId) return jsonError("Select a voucher to view its audit history");

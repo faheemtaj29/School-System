@@ -553,6 +553,141 @@ export const accountingService = {
       .lean();
   },
 
+  /**
+   * Make sure an account exists (by system key or name) and return it. Used for accounts that
+   * older databases were seeded without, e.g. customer receivables or sales of goods.
+   */
+  async ensureAccount(spec: {
+    systemKey?: string;
+    code: string;
+    name: string;
+    type: "asset" | "liability" | "equity" | "income" | "expense";
+    level: number;
+    parentCode?: string;
+    isPosting: boolean;
+  }) {
+    await ensureSeeded();
+    const found = await Account.findOne(spec.systemKey ? { systemKey: spec.systemKey } : { code: spec.code }).lean();
+    if (found) return found;
+    const byCode = await Account.findOne({ code: spec.code }).lean();
+    if (byCode) return byCode;
+    return (
+      await Account.create({
+        code: spec.code,
+        name: spec.name,
+        type: spec.type,
+        nature: spec.type === "asset" || spec.type === "expense" ? "debit" : "credit",
+        level: spec.level,
+        parentCode: spec.parentCode,
+        isControl: !spec.isPosting,
+        isPosting: spec.isPosting,
+        isCashBank: false,
+        isActive: true,
+        systemKey: spec.systemKey,
+      })
+    ).toObject();
+  },
+
+  /**
+   * Each supplier and customer has its own ledger account (Tally/QuickBooks style):
+   * suppliers under Suppliers Control (2103 01), customers under Customers Control (1103 02).
+   */
+  async ensurePartyAccount(partyType: "supplier" | "customer", partyId: string, name: string) {
+    await ensureSeeded();
+    const existing = await Account.findOne({ partyType, partyId }).lean();
+    if (existing) {
+      if (existing.name !== name) await Account.updateOne({ _id: existing._id }, { $set: { name } });
+      return { ...existing, name };
+    }
+    let parentCode = "210301";
+    let type: "asset" | "liability" = "liability";
+    if (partyType === "customer") {
+      parentCode = "110302";
+      type = "asset";
+      await this.ensureAccount({ code: "110302", name: "Customers Control", type: "asset", level: 4, parentCode: "1103", isPosting: false });
+    }
+    const siblings = await Account.find({ parentCode }).select("code").lean();
+    const max = siblings.reduce(
+      (m: number, a: { code: string }) => Math.max(m, Number(a.code) || 0),
+      Number(`${parentCode}00`)
+    );
+    return (
+      await Account.create({
+        code: String(max + 1),
+        name,
+        type,
+        nature: type === "asset" ? "debit" : "credit",
+        level: 5,
+        parentCode,
+        isControl: false,
+        isPosting: true,
+        isCashBank: false,
+        isActive: true,
+        partyType,
+        partyId,
+      })
+    ).toObject();
+  },
+
+  /**
+   * Post (or re-post) a balanced journal that belongs to another module's document,
+   * e.g. a stock purchase. Re-posting the same source updates the same voucher.
+   */
+  async postLinkedJournal(post: {
+    sourceType: LedgerSource;
+    sourceId: string;
+    date: Date;
+    branchCode: string;
+    narration: string;
+    reference?: string;
+    partyName?: string;
+    lines: { accountCode: string; debit: number; credit: number; narration?: string }[];
+    actorId?: string;
+  }) {
+    await dbConnect();
+    const lines = post.lines.filter((l) => round(l.debit) > 0 || round(l.credit) > 0);
+    if (lines.length < 2) {
+      await this.removeBySource(post.sourceType, post.sourceId);
+      return null;
+    }
+    const checked = await enrichAndValidateLines(lines, "journal");
+    const settings = await loadFinanceSettings();
+    const branchCode = post.branchCode.toUpperCase();
+    const payload = {
+      voucherType: "journal",
+      status: "posted",
+      date: post.date,
+      branchCode,
+      narration: post.narration,
+      reference: post.reference,
+      partyName: post.partyName,
+      currency: settings.currency || "PKR",
+      subtotal: checked.total,
+      discountAmount: 0,
+      taxAmount: 0,
+      grandTotal: checked.total,
+      items: [],
+      lines: checked.lines,
+      sourceType: post.sourceType,
+      sourceId: post.sourceId,
+      postedBy: post.actorId || undefined,
+      postedAt: new Date(),
+      voidedAt: undefined,
+      voidReason: undefined,
+    };
+    const existing = await Voucher.findOne({ sourceType: post.sourceType, sourceId: post.sourceId });
+    if (existing) {
+      await Voucher.findByIdAndUpdate(existing._id, payload);
+      return existing._id;
+    }
+    const created = await Voucher.create({
+      ...payload,
+      number: await nextVoucherNumber("journal", branchCode, post.date),
+      createdBy: post.actorId || undefined,
+    });
+    return created._id;
+  },
+
   /** One voucher with its school header — used by the printable voucher page. */
   async voucherForPrint(id: string) {
     await ensureSeeded();

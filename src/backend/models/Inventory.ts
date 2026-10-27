@@ -78,7 +78,12 @@ export interface IStockVoucherItem {
   quantity: number;
   rate: number;
   amount: number;
+  /** Average cost per unit when the voucher was made — used for cost of goods sold. */
+  unitCost?: number;
+  description?: string;
 }
+
+export type StockPaymentMode = "cash" | "bank" | "credit";
 
 export interface IStockVoucher {
   number: string;
@@ -89,6 +94,12 @@ export interface IStockVoucher {
   /** Destination campus for stock transfers. */
   toBranchCode?: string;
   partyName?: string;
+  /** Supplier (purchases / returns) or customer (sales / returns) this voucher is with. */
+  partyType?: "supplier" | "customer";
+  partyId?: string;
+  /** How it was settled: paid/received in cash, through a bank account, or on credit. */
+  paymentMode?: StockPaymentMode;
+  settlementAccount?: string;
   reference?: string;
   narration: string;
   items: IStockVoucherItem[];
@@ -115,6 +126,8 @@ const StockVoucherItemSchema = new Schema<IStockVoucherItem>(
     quantity: { type: Number, required: true },
     rate: { type: Number, default: 0, min: 0 },
     amount: { type: Number, default: 0 },
+    unitCost: { type: Number, default: 0, min: 0 },
+    description: String,
   },
   { _id: false }
 );
@@ -132,6 +145,10 @@ const StockVoucherSchema = new Schema<IStockVoucher>(
     branchCode: { type: String, required: true, uppercase: true, trim: true },
     toBranchCode: { type: String, uppercase: true, trim: true },
     partyName: String,
+    partyType: { type: String, enum: ["supplier", "customer"] },
+    partyId: String,
+    paymentMode: { type: String, enum: ["cash", "bank", "credit"] },
+    settlementAccount: String,
     reference: String,
     narration: { type: String, required: true, trim: true },
     items: { type: [StockVoucherItemSchema], required: true },

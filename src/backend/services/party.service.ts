@@ -4,6 +4,20 @@
 import { dbConnect } from "@/backend/config/database";
 import { Customer, Supplier } from "@/backend/models/AiModels";
 import { ServiceError } from "@/backend/types";
+import { Account } from "@/backend/models/Accounting";
+import { accountingService } from "@/backend/services/accounting.service";
+
+/** Attach each party's own ledger account code (created on first use for older parties). */
+async function withAccounts<T extends { _id: unknown; name: string }>(
+  list: T[],
+  partyType: "supplier" | "customer"
+) {
+  const accounts = await Account.find({ partyType, partyId: { $in: list.map((p) => String(p._id)) } })
+    .select("code partyId")
+    .lean();
+  const byParty = new Map(accounts.map((a: { partyId?: string; code: string }) => [a.partyId, a.code]));
+  return list.map((p) => ({ ...p, accountCode: byParty.get(String(p._id)) || null }));
+}
 
 function normalize(name: string): string {
   return name
@@ -33,6 +47,16 @@ function similarity(a: string, b: string): number {
 }
 
 export const partyService = {
+  /** The party's own ledger account code, creating it on first use. */
+  async accountFor(partyType: "supplier" | "customer", partyId: string) {
+    await dbConnect();
+    const Model = partyType === "supplier" ? Supplier : Customer;
+    const party = await Model.findById(partyId).select("name").lean();
+    if (!party) throw new ServiceError("NOT_FOUND", `${partyType === "supplier" ? "Supplier" : "Customer"} not found`, 404);
+    const account = await accountingService.ensurePartyAccount(partyType, partyId, party.name);
+    return { code: account.code as string, name: party.name as string };
+  },
+
   async customers(filters?: { branchCode?: string; search?: string }) {
     await dbConnect();
     const query: Record<string, unknown> = {};
@@ -41,7 +65,7 @@ export const partyService = {
       const re = new RegExp(filters.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
       query.$or = [{ name: re }, { code: re }, { email: re }, { phone: re }];
     }
-    return Customer.find(query).sort({ name: 1 }).lean();
+    return withAccounts(await Customer.find(query).sort({ name: 1 }).lean(), "customer");
   },
 
   async createCustomer(data: {
@@ -61,13 +85,15 @@ export const partyService = {
     if (exists) {
       throw new ServiceError("CONFLICT", "Customer code already exists", 409);
     }
-    return Customer.create({
+    const party = await Customer.create({
       ...data,
       code: data.code.toUpperCase(),
       branchCode: data.branchCode.toUpperCase(),
       openingBalance: data.openingBalance || 0,
       openingBalanceSide: data.openingBalanceSide || "debit",
     });
+    const account = await accountingService.ensurePartyAccount("customer", String(party._id), party.name);
+    return { ...party.toObject(), accountCode: account.code };
   },
 
   async suppliers(filters?: { branchCode?: string; search?: string }) {
@@ -78,7 +104,7 @@ export const partyService = {
       const re = new RegExp(filters.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
       query.$or = [{ name: re }, { code: re }, { email: re }, { phone: re }];
     }
-    return Supplier.find(query).sort({ name: 1 }).lean();
+    return withAccounts(await Supplier.find(query).sort({ name: 1 }).lean(), "supplier");
   },
 
   async createSupplier(data: {
@@ -98,13 +124,15 @@ export const partyService = {
     if (exists) {
       throw new ServiceError("CONFLICT", "Supplier code already exists", 409);
     }
-    return Supplier.create({
+    const party = await Supplier.create({
       ...data,
       code: data.code.toUpperCase(),
       branchCode: data.branchCode.toUpperCase(),
       openingBalance: data.openingBalance || 0,
       openingBalanceSide: data.openingBalanceSide || "credit",
     });
+    const account = await accountingService.ensurePartyAccount("supplier", String(party._id), party.name);
+    return { ...party.toObject(), accountCode: account.code };
   },
 
   async matchParty(name: string, type: "customer" | "supplier", branchCode?: string) {

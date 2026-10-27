@@ -51,11 +51,11 @@ const blankLine = (): Line => ({ key: nextKey(), code: "", description: "", amou
 const blankJLine = (): JLine => ({ key: nextKey(), code: "", description: "", debit: "", credit: "" });
 const today = () => new Date().toISOString().slice(0, 10);
 
-function money(n: number) {
+export function money(n: number) {
   return new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 }
 
-function num(v: string) {
+export function num(v: string) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
@@ -70,9 +70,9 @@ export function bankLabel(a: Account) {
 
 /* ---------- searchable picker with "+ Add new" ---------- */
 
-type Option = { value: string; label: string; group?: string; hint?: string };
+export type Option = { value: string; label: string; group?: string; hint?: string };
 
-function Picker({
+export function Picker({
   value,
   options,
   placeholder,

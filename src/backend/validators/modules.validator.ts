@@ -215,6 +215,7 @@ const stockVoucherItemSchema = z.object({
   itemId: z.string().min(1),
   quantity: z.coerce.number(),
   rate: z.coerce.number().min(0).default(0),
+  description: z.string().max(200).optional(),
 });
 
 export const stockVoucherSchema = z.object({
@@ -230,6 +231,10 @@ export const stockVoucherSchema = z.object({
   branchCode: z.string().min(1),
   toBranchCode: z.string().optional().nullable(),
   partyName: z.string().optional(),
+  partyType: z.enum(["supplier", "customer"]).optional().nullable(),
+  partyId: z.string().regex(/^[a-f0-9]{24}$/i).optional().nullable(),
+  paymentMode: z.enum(["cash", "bank", "credit"]).optional().nullable(),
+  settlementAccount: z.string().optional().nullable(),
   reference: z.string().optional(),
   narration: z.string().min(2),
   discountAmount: z.coerce.number().min(0).default(0),

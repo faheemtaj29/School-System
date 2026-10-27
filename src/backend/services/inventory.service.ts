@@ -3,6 +3,7 @@ import {
   InventoryItem,
   StockVoucher,
   type IStockVoucher,
+  type IStockVoucherItem,
   type StockVoucherType,
 } from "@/backend/models/Inventory";
 import { AccountingCounter } from "@/backend/models/Accounting";
@@ -16,6 +17,8 @@ import type {
   stockVoucherSchema,
 } from "@/backend/validators/modules.validator";
 import { accountingService } from "@/backend/services/accounting.service";
+import { partyService } from "@/backend/services/party.service";
+import { Account, Voucher as AccountingVoucher } from "@/backend/models/Accounting";
 
 type InventoryInput = z.infer<typeof inventorySchema>;
 type StockVoucherInput = z.infer<typeof stockVoucherSchema>;
@@ -55,12 +58,6 @@ function stockVoucherSnapshot(v: Record<string, unknown>) {
 }
 
 /** How each posted stock voucher hits the ledger; transfers/adjustments stay off-book. */
-const GL: Partial<Record<StockVoucherType, { type: "income" | "expense"; accountKey: string; category: string }>> = {
-  purchase: { type: "expense", accountKey: "inventoryAsset", category: "Inventory / Purchase" },
-  purchase_return: { type: "income", accountKey: "inventoryAsset", category: "Inventory / Purchase Return" },
-  sales: { type: "income", accountKey: "miscIncome", category: "Inventory / Sales" },
-  sales_return: { type: "expense", accountKey: "miscIncome", category: "Inventory / Sales Return" },
-};
 
 function round(value: number) {
   return Math.round(value * 100) / 100;
@@ -157,23 +154,122 @@ async function applyStock(voucher: IStockVoucher, sign: 1 | -1) {
   }
 }
 
-async function syncVoucherLedger(voucher: IStockVoucher) {
-  const map = GL[voucher.voucherType];
-  if (!map || voucher.grandTotal <= 0) return;
-  await accountingService.upsertLinked({
-    type: map.type,
-    accountKey: map.accountKey,
-    category: map.category,
-    title: `${voucher.number} — ${voucher.narration}`,
-    amount: voucher.grandTotal,
-    date: voucher.date,
-    method: "cash",
-    reference: voucher.reference || voucher.number,
-    notes: voucher.partyName ? `Party: ${voucher.partyName}` : undefined,
-    branchCode: voucher.branchCode,
+/** Cash / bank / party account the voucher is settled against. */
+async function settlementCode(voucher: IStockVoucher) {
+  const mode = voucher.paymentMode || "cash";
+  if (mode === "credit") {
+    if (!voucher.partyId || !voucher.partyType) {
+      throw new ServiceError("VALIDATION", "Pick the supplier or customer for a credit voucher", 400);
+    }
+    return (await partyService.accountFor(voucher.partyType, voucher.partyId)).code;
+  }
+  if (voucher.settlementAccount) return voucher.settlementAccount;
+  const acc = await Account.findOne({ systemKey: mode === "bank" ? "bank" : "cash" }).select("code").lean();
+  if (!acc) throw new ServiceError("INTERNAL", "Cash/bank account is missing", 500);
+  return acc.code as string;
+}
+
+async function systemCode(key: string) {
+  const acc = await Account.findOne({ systemKey: key }).select("code").lean();
+  if (!acc) throw new ServiceError("INTERNAL", `System account '${key}' is missing`, 500);
+  return acc.code as string;
+}
+
+/**
+ * Real double entry for stock documents:
+ *  purchase        Dr Inventory (+ Input tax)          Cr Cash / Bank / Supplier
+ *  purchase_return Dr Cash / Bank / Supplier           Cr Inventory (+ Input tax)
+ *  sales           Dr Cash / Bank / Customer           Cr Sales of goods (+ Output tax)
+ *                  Dr Cost of goods sold               Cr Inventory            (at cost)
+ *  sales_return    the reverse of a sale
+ *  adjustment      loss: Dr Supplies consumed, Cr Inventory — gain: the reverse
+ *  transfer        no accounting entry (stock only moves between campuses)
+ */
+async function syncVoucherLedger(voucher: IStockVoucher, actorId?: string) {
+  const id = String((voucher as unknown as { _id: unknown })._id);
+  if (voucher.voucherType === "transfer") return;
+  const inventory = await systemCode("inventoryAsset");
+  const cogs = await systemCode("inventoryExpense");
+  const net = round(Math.max(0, voucher.subtotal - (voucher.discountAmount || 0)));
+  const tax = round(voucher.taxAmount || 0);
+  const total = round(voucher.grandTotal);
+  const cost = round(
+    voucher.items.reduce((sum, it) => sum + Math.abs(it.quantity) * (it.unitCost || it.rate || 0), 0)
+  );
+  type L = { accountCode: string; debit: number; credit: number; narration?: string };
+  const lines: L[] = [];
+  const dr = (accountCode: string, amount: number, narration?: string) =>
+    amount > 0 && lines.push({ accountCode, debit: round(amount), credit: 0, narration });
+  const cr = (accountCode: string, amount: number, narration?: string) =>
+    amount > 0 && lines.push({ accountCode, debit: 0, credit: round(amount), narration });
+
+  if (voucher.voucherType === "purchase" || voucher.voucherType === "purchase_return") {
+    const settle = await settlementCode(voucher);
+    const taxCode = tax > 0 ? await systemCode("taxInput") : "";
+    if (voucher.voucherType === "purchase") {
+      dr(inventory, net, "Stock purchased");
+      if (tax > 0) dr(taxCode, tax, "Input tax");
+      cr(settle, total);
+    } else {
+      dr(settle, total);
+      cr(inventory, net, "Stock returned to supplier");
+      if (tax > 0) cr(taxCode, tax, "Input tax reversed");
+    }
+  } else if (voucher.voucherType === "sales" || voucher.voucherType === "sales_return") {
+    const settle = await settlementCode(voucher);
+    const sales = (
+      await accountingService.ensureAccount({
+        systemKey: "goodsSales",
+        code: "42010102",
+        name: "Sales of Goods (Store / Canteen)",
+        type: "income",
+        level: 5,
+        parentCode: "420101",
+        isPosting: true,
+      })
+    ).code as string;
+    const taxCode = tax > 0 ? await systemCode("taxPayable") : "";
+    if (voucher.voucherType === "sales") {
+      dr(settle, total);
+      cr(sales, net, "Goods sold");
+      if (tax > 0) cr(taxCode, tax, "Output tax");
+      dr(cogs, cost, "Cost of goods sold");
+      cr(inventory, cost, "Stock issued at cost");
+    } else {
+      dr(sales, net, "Goods returned by customer");
+      if (tax > 0) dr(taxCode, tax, "Output tax reversed");
+      cr(settle, total);
+      dr(inventory, cost, "Stock returned at cost");
+      cr(cogs, cost, "Cost of goods sold reversed");
+    }
+  } else if (voucher.voucherType === "adjustment") {
+    let gain = 0;
+    let loss = 0;
+    for (const it of voucher.items) {
+      const value = Math.abs(it.quantity) * (it.unitCost || it.rate || 0);
+      if (it.quantity > 0) gain += value;
+      else loss += value;
+    }
+    if (loss > 0) {
+      dr(cogs, loss, "Stock written off");
+      cr(inventory, loss);
+    }
+    if (gain > 0) {
+      dr(inventory, gain, "Stock found / added");
+      cr(cogs, gain);
+    }
+  }
+
+  await accountingService.postLinkedJournal({
     sourceType: "inventory",
-    sourceId: String((voucher as unknown as { _id: unknown })._id),
-    skipTax: true,
+    sourceId: id,
+    date: voucher.date,
+    branchCode: voucher.branchCode,
+    narration: `${voucher.number} — ${voucher.narration}`,
+    reference: voucher.reference || voucher.number,
+    partyName: voucher.partyName,
+    lines,
+    actorId,
   });
 }
 
@@ -198,6 +294,8 @@ async function buildVoucherItems(data: StockVoucherInput) {
       quantity,
       rate,
       amount: round(Math.abs(quantity) * rate),
+      unitCost: item.unitCost || 0,
+      description: (line as { description?: string }).description?.trim() || undefined,
     };
   });
 }
@@ -220,20 +318,27 @@ export const inventoryService = {
     });
     const opening = round(Math.max(0, data.quantity * data.unitCost));
     if (opening > 0) {
-      await accountingService.upsertLinked({
-        type: "expense",
-        accountKey: "inventoryAsset",
-        category: "Inventory / Opening Stock",
-        title: `Opening stock: ${item.name} (${item.sku})`,
-        amount: opening,
-        date: new Date(),
-        method: "cash",
-        reference: item.sku,
-        notes: data.supplier ? `Supplier: ${data.supplier}` : "Opening stock valuation",
-        branchCode,
+      // Opening stock is something the school already owned: Dr Inventory, Cr Opening Balance Equity.
+      const equity = await accountingService.ensureAccount({
+        systemKey: "openingEquity",
+        code: "31010102",
+        name: "Opening Balance Equity",
+        type: "equity",
+        level: 5,
+        parentCode: "310101",
+        isPosting: true,
+      });
+      await accountingService.postLinkedJournal({
         sourceType: "inventory",
         sourceId: String(item._id),
-        skipTax: true,
+        date: new Date(),
+        branchCode,
+        narration: `Opening stock: ${item.name} (${item.sku})`,
+        reference: item.sku,
+        lines: [
+          { accountCode: await systemCode("inventoryAsset"), debit: opening, credit: 0 },
+          { accountCode: equity.code as string, debit: 0, credit: opening },
+        ],
       });
     }
     return item;
@@ -312,6 +417,15 @@ export const inventoryService = {
     ) {
       throw new ServiceError("VALIDATION", "Supplier is required on this voucher", 400);
     }
+    if (data.paymentMode === "credit" && !data.partyId) {
+      throw new ServiceError(
+        "VALIDATION",
+        data.voucherType.startsWith("sales")
+          ? "Pick the customer — a credit sale is recorded on their account"
+          : "Pick the supplier — a credit purchase is recorded on their account",
+        400
+      );
+    }
     const items = await buildVoucherItems(data);
     const subtotal = round(items.reduce((sum, item) => sum + item.amount, 0));
     const grandTotal = round(Math.max(0, subtotal - data.discountAmount) + data.taxAmount);
@@ -325,6 +439,13 @@ export const inventoryService = {
       branchCode,
       toBranchCode,
       partyName: data.partyName?.trim() || undefined,
+      partyType: data.partyType || undefined,
+      partyId: data.partyId || undefined,
+      paymentMode:
+        data.voucherType === "transfer" || data.voucherType === "adjustment"
+          ? undefined
+          : data.paymentMode || "cash",
+      settlementAccount: data.settlementAccount || undefined,
       reference: data.reference,
       narration: data.narration,
       items,
@@ -367,7 +488,7 @@ export const inventoryService = {
     voucher.postedAt = new Date();
     voucher.postedBy = actor?.id as never;
     await voucher.save();
-    await syncVoucherLedger(voucher);
+    await syncVoucherLedger(voucher, actor?.id);
     await recordAudit({
       module: "inventory",
       action: "posted",
@@ -453,6 +574,132 @@ export const inventoryService = {
       actor,
     });
     return { ok: true, voucher: reversed };
+  },
+
+  /** One stock voucher with school header and campus names — for the printable invoice. */
+  async voucherForPrint(id: string) {
+    await dbConnect();
+    if (!/^[a-f0-9]{24}$/i.test(id)) throw new ServiceError("VALIDATION", "Invalid voucher ID", 400);
+    const voucher = await StockVoucher.findById(id).populate("createdBy", "name").lean();
+    if (!voucher) throw new ServiceError("NOT_FOUND", "Voucher not found", 404);
+    const s = await Settings.findOne()
+      .select("schoolName address phone email currency logoUpdatedAt branches")
+      .lean();
+    const branchName = (code?: string) =>
+      (s?.branches || []).find((b: { code: string; name: string }) => b.code === code)?.name || code || "";
+    const settle = voucher.settlementAccount
+      ? await Account.findOne({ code: voucher.settlementAccount }).select("name bankName accountNumber").lean()
+      : null;
+    const journal = await AccountingVoucher.findOne({
+      sourceType: "inventory",
+      sourceId: id,
+      status: "posted",
+    })
+      .select("number lines")
+      .lean();
+    return {
+      voucher,
+      fromCampus: branchName(voucher.branchCode),
+      toCampus: branchName(voucher.toBranchCode),
+      settlement: settle,
+      journal,
+      school: {
+        name: s?.schoolName || "School",
+        address: s?.address || "",
+        phone: s?.phone || "",
+        email: s?.email || "",
+        currency: s?.currency || "PKR",
+        logoUrl: s?.logoUpdatedAt ? `/api/settings/logo?v=${new Date(s.logoUpdatedAt).getTime()}` : null,
+      },
+    };
+  },
+
+  /**
+   * Item-wise stock ledger: every posted voucher that moved the item, with quantity in / out
+   * and the running balance. With a campus selected, transfers count as out / in for that campus.
+   */
+  async stockLedger(itemId: string, opts: { branchCode?: string | null; from?: string | null; to?: string | null }) {
+    await dbConnect();
+    if (!/^[a-f0-9]{24}$/i.test(itemId)) throw new ServiceError("VALIDATION", "Pick an item", 400);
+    const item = await InventoryItem.findById(itemId).lean();
+    if (!item) throw new ServiceError("NOT_FOUND", "Item not found", 404);
+    const branch = opts.branchCode ? opts.branchCode.toUpperCase() : null;
+    const vouchers = await StockVoucher.find({ status: "posted", "items.itemId": item._id })
+      .sort({ date: 1, createdAt: 1 })
+      .lean();
+
+    const movement = (v: IStockVoucher, qty: number) => {
+      const q = Math.abs(qty);
+      switch (v.voucherType) {
+        case "purchase":
+        case "sales_return":
+          return !branch || v.branchCode === branch ? q : 0;
+        case "sales":
+        case "purchase_return":
+          return !branch || v.branchCode === branch ? -q : 0;
+        case "adjustment":
+          return !branch || v.branchCode === branch ? qty : 0;
+        case "transfer":
+          if (!branch) return 0;
+          if (v.branchCode === branch) return -q;
+          if (v.toBranchCode === branch) return q;
+          return 0;
+        default:
+          return 0;
+      }
+    };
+
+    const current = branch
+      ? (item.stock || []).find((b: { branchCode: string }) => b.branchCode === branch)?.quantity ?? 0
+      : item.quantity;
+    const allMoves = vouchers.flatMap((v) =>
+      v.items.filter((it: { itemId: unknown }) => String(it.itemId) === String(item._id)).map((it: IStockVoucherItem) => ({ v, it, qty: movement(v as unknown as IStockVoucher, it.quantity) }))
+    );
+    const net = allMoves.reduce((s2, m) => s2 + m.qty, 0);
+    // Opening stock entered on the product itself (not through a voucher).
+    let balance = round(current - net);
+    const from = opts.from ? new Date(opts.from) : null;
+    const to = opts.to ? new Date(`${opts.to}T23:59:59`) : null;
+    const rows = [];
+    let opening = balance;
+    for (const m of allMoves) {
+      const d = new Date(m.v.date);
+      if (from && d < from) {
+        balance = round(balance + m.qty);
+        opening = balance;
+        continue;
+      }
+      if (to && d > to) break;
+      if (!m.qty && m.v.voucherType !== "transfer") continue;
+      balance = round(balance + m.qty);
+      rows.push({
+        voucherId: String(m.v._id),
+        date: m.v.date,
+        number: m.v.number,
+        type: m.v.voucherType,
+        party:
+          m.v.voucherType === "transfer"
+            ? `${m.v.branchCode} → ${m.v.toBranchCode}`
+            : m.v.partyName || "",
+        qtyIn: m.qty > 0 ? m.qty : 0,
+        qtyOut: m.qty < 0 ? -m.qty : 0,
+        rate: m.it.rate,
+        amount: round(Math.abs(m.qty) * m.it.rate),
+        balance,
+      });
+    }
+    return {
+      item: { _id: String(item._id), sku: item.sku, name: item.name, unit: item.unit, unitCost: item.unitCost, salePrice: item.salePrice },
+      branch,
+      opening,
+      rows,
+      closing: balance,
+      closingValue: round(balance * (item.unitCost || 0)),
+      totals: {
+        qtyIn: round(rows.reduce((t, r) => t + r.qtyIn, 0)),
+        qtyOut: round(rows.reduce((t, r) => t + r.qtyOut, 0)),
+      },
+    };
   },
 
   async auditTrail(voucherId: string) {
