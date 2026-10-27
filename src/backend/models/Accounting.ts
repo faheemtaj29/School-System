@@ -8,6 +8,20 @@ import type { LedgerSource } from "./Ledger";
 export type AccountType = "asset" | "liability" | "equity" | "income" | "expense";
 export type AccountNature = "debit" | "credit";
 
+export type AccountDetails = {
+  provider?: string;
+  consumerNumber?: string;
+  meterNumber?: string;
+  iban?: string;
+  bankBranch?: string;
+  contactPerson?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  taxNumber?: string;
+  notes?: string;
+};
+
 export interface IAccount {
   code: string;
   name: string;
@@ -24,6 +38,8 @@ export interface IAccount {
   /** Set when this account is a supplier's or customer's own ledger. */
   partyType?: "supplier" | "customer";
   partyId?: string;
+  /** Extra details asked for by the kind of account, e.g. a utility's consumer number or a bank's IBAN. */
+  details?: AccountDetails;
   isActive: boolean;
   systemKey?: string;
   openingBalance: number;
@@ -51,6 +67,19 @@ const AccountSchema = new Schema<IAccount>(
     accountNumber: { type: String, trim: true },
     partyType: { type: String, enum: ["supplier", "customer"] },
     partyId: { type: String, index: true, sparse: true },
+    details: {
+      provider: String,
+      consumerNumber: String,
+      meterNumber: String,
+      iban: String,
+      bankBranch: String,
+      contactPerson: String,
+      phone: String,
+      email: String,
+      address: String,
+      taxNumber: String,
+      notes: String,
+    },
     isActive: { type: Boolean, default: true },
     systemKey: { type: String, sparse: true, unique: true },
     openingBalance: { type: Number, default: 0, min: 0 },

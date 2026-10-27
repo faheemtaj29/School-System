@@ -2880,3 +2880,25 @@ table.qbp-je { width: 100%; border-collapse: collapse; margin-top: 22px; font-si
 .pl-head span { font-size: 12px; color: var(--text-dim); }
 .pl-table td a { color: var(--jade-dark); text-decoration: none; }
 .pl-table td a:hover { text-decoration: underline; }
+.qb-opt { gap: 10px; align-items: center; }
+.qb-opt-main { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.qb-opt-side { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.qb-code { font-family: var(--font-mono), monospace; font-size: 11.5px; color: #157a5c; background: #eef7ec; border-radius: 4px; padding: 1px 5px; }
+.qb-tag { font-style: normal; font-size: 10.5px; font-weight: 600; color: #6b6c72; border: 1px solid #d4d7dc; border-radius: 10px; padding: 1px 7px; }
+
+/* ================= CHART OF ACCOUNTS / SHARED ACCOUNT FORMS ================= */
+.coa-steps { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.coa-step { display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: 600; color: var(--text-dim, #6b6c72); }
+.coa-step small { font-weight: 500; font-size: 10.5px; }
+.coa-path { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12.5px; color: var(--text-dim, #6b6c72); margin: 6px 0; }
+.coa-path b { color: #157a5c; }
+.coa-hint { font-size: 12.5px; color: var(--text-dim, #6b6c72); margin: 4px 0 10px; }
+.coa-new { border-top: 1px dashed #d4d7dc; padding-top: 10px; }
+.coa-existing { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; margin: 4px 0 10px; color: var(--text-dim, #6b6c72); }
+.coa-existing em { font-style: normal; background: #eef7ec; color: #157a5c; border-radius: 10px; padding: 2px 8px; }
+.af-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px 12px; margin-bottom: 8px; }
+.af-grid label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: 600; color: var(--text-dim, #6b6c72); }
+.af-grid .af-wide { grid-column: span 2; }
+@media (max-width: 560px) { .af-grid .af-wide { grid-column: auto; } }
+.qb-dialog.wide { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; }
+.af-grid label, .coa-step { margin: 0 !important; }

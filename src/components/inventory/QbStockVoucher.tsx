@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { NewAccountForm, PartyForm, type ChartAccount } from "@/components/accounting/AccountForms";
 import { Picker, bankLabel, isCashAccount, money, num } from "@/components/accounting/QbVoucher";
 
 /**
@@ -15,6 +16,7 @@ type Item = {
   sku: string;
   name: string;
   unit: string;
+  category?: string;
   quantity: number;
   unitCost: number;
   salePrice: number;
@@ -34,7 +36,7 @@ type Account = {
   accountNumber?: string;
 };
 
-type Party = { _id: string; name: string };
+type Party = { _id: string; name: string; accountCode?: string | null };
 type Row = { key: number; itemId: string; description: string; qty: string; rate: string };
 
 const TITLES: Record<StockType, string> = {
@@ -142,82 +144,55 @@ function AddItemDialog({
   );
 }
 
+/** Supplier / customer and bank dialogs use the same forms as the Chart of Accounts screen. */
 function AddPartyDialog({
   typed,
   partyType,
+  chart,
   onCancel,
   onCreated,
 }: {
   typed: string;
   partyType: "supplier" | "customer";
+  chart: ChartAccount[];
   onCancel: () => void;
   onCreated: (p: Party) => void;
 }) {
-  const [name, setName] = useState(typed);
-  const [phone, setPhone] = useState("");
-  const [err, setErr] = useState("");
-  async function save() {
-    setErr("");
-    const res = await fetch(`/api/parties?type=${partyType}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        phone,
-        code: `${partyType === "supplier" ? "SUP" : "CUS"}-${Date.now().toString(36).toUpperCase()}`,
-      }),
-    });
-    const d = await res.json();
-    if (!res.ok) return setErr(d.error || "Could not add");
-    onCreated(d.party);
-  }
+  const groups = chart.filter((a) => a.level === 4 && (partyType === "supplier" ? a.code.startsWith("2103") : a.code === "110302"));
   return (
     <div className="qb-dialog-bg" onMouseDown={onCancel}>
-      <div className="qb-dialog" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="qb-dialog wide" onMouseDown={(e) => e.stopPropagation()}>
         <h3>Add {partyType}</h3>
-        {err ? <div className="alert err">{err}</div> : null}
-        <label>Name</label>
-        <input className="qb-in" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-        <label>Phone</label>
-        <input className="qb-in" value={phone} onChange={(e) => setPhone(e.target.value)} />
-        <p className="qb-note">Their own ledger account is created in the chart of accounts automatically.</p>
-        <div className="qb-dialog-actions">
-          <button type="button" className="qb-btn" onClick={onCancel}>Cancel</button>
-          <button type="button" className="qb-btn green" disabled={name.trim().length < 2} onClick={save}>Save</button>
-        </div>
+        <PartyForm partyType={partyType} initialName={typed} groups={groups} onSaved={onCreated} onCancel={onCancel} />
       </div>
     </div>
   );
 }
 
-function AddBankDialog({ typed, onCancel, onCreated }: { typed: string; onCancel: () => void; onCreated: (a: Account) => void }) {
-  const [f, setF] = useState({ bankName: "", name: typed, accountNumber: "" });
-  const [err, setErr] = useState("");
-  async function save() {
-    const res = await fetch("/api/accounting", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "category", type: "bank", ...f }),
-    });
-    const d = await res.json();
-    if (!res.ok) return setErr(d.error || "Could not add");
-    onCreated(d.account);
-  }
+function AddBankDialog({
+  typed,
+  chart,
+  onCancel,
+  onCreated,
+}: {
+  typed: string;
+  chart: ChartAccount[];
+  onCancel: () => void;
+  onCreated: (a: Account) => void;
+}) {
+  const path = chart.some((a) => a.code === "110102") ? ["1", "11", "1101", "110102"] : ["1", "11", "1101", "110101"];
   return (
     <div className="qb-dialog-bg" onMouseDown={onCancel}>
-      <div className="qb-dialog" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="qb-dialog wide" onMouseDown={(e) => e.stopPropagation()}>
         <h3>Add bank account</h3>
-        {err ? <div className="alert err">{err}</div> : null}
-        <label>Bank name</label>
-        <input className="qb-in" value={f.bankName} onChange={(e) => setF({ ...f, bankName: e.target.value })} autoFocus />
-        <label>Account title</label>
-        <input className="qb-in" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
-        <label>Account number</label>
-        <input className="qb-in" value={f.accountNumber} onChange={(e) => setF({ ...f, accountNumber: e.target.value })} />
-        <div className="qb-dialog-actions">
-          <button type="button" className="qb-btn" onClick={onCancel}>Cancel</button>
-          <button type="button" className="qb-btn green" disabled={f.name.trim().length < 2 || !f.accountNumber.trim()} onClick={save}>Save</button>
-        </div>
+        <NewAccountForm
+          accounts={chart}
+          initialPath={path}
+          initialName={typed}
+          postingOnly
+          onCreated={(r) => r.account && onCreated(r.account as unknown as Account)}
+          onCancel={onCancel}
+        />
       </div>
     </div>
   );
@@ -241,6 +216,7 @@ export function QbStockVoucher({
   const stockLeaves = type === "sales" || type === "purchase_return" || type === "transfer";
 
   const [items, setItems] = useState<Item[]>([]);
+  const [chart, setChart] = useState<ChartAccount[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
   const [branches, setBranches] = useState<{ code: string; name: string }[]>([]);
@@ -275,7 +251,10 @@ export function QbStockVoucher({
     loadItems();
     fetch("/api/accounting?view=accounts")
       .then((r) => r.json())
-      .then((d) => setAccounts((d.accounts || []).filter((a: Account) => a.isPosting && a.isActive !== false)))
+      .then((d) => {
+        setChart(d.accounts || []);
+        setAccounts((d.accounts || []).filter((a: Account) => a.isPosting && a.isActive !== false));
+      })
       .catch(() => {});
     fetch("/api/settings")
       .then((r) => r.json())
@@ -432,7 +411,7 @@ export function QbStockVoucher({
                   value={partyId || partyName}
                   allowFree
                   placeholder={isPurchaseSide ? "Choose supplier" : "Customer (or walk-in)"}
-                  options={parties.map((p) => ({ value: p._id, label: p.name }))}
+                  options={parties.map((p) => ({ value: p._id, label: p.name, code: p.accountCode || undefined, tag: isPurchaseSide ? "Supplier" : "Customer" }))}
                   onChange={(v, label) => {
                     const hit = parties.find((p) => p._id === v);
                     setPartyId(hit ? hit._id : "");
@@ -458,7 +437,7 @@ export function QbStockVoucher({
                 <label>{mode === "bank" ? "Bank account" : "Cash account"}</label>
                 <Picker
                   value={settle}
-                  options={settleOptions.map((a) => ({ value: a.code, label: a.accountNumber ? bankLabel(a) : a.name }))}
+                  options={settleOptions.map((a) => ({ value: a.code, code: a.code, label: a.accountNumber ? bankLabel(a) : a.name, tag: mode === "bank" ? "Bank" : "Cash" }))}
                   onChange={(v) => setSettle(v)}
                   onAdd={mode === "bank" ? (typed) => setAdding({ kind: "bank", typed }) : undefined}
                   addLabel="Add bank account"
@@ -527,7 +506,7 @@ export function QbStockVoucher({
                   <td>
                     <Picker
                       value={r.itemId}
-                      options={items.map((x) => ({ value: x._id, label: x.name, hint: x.sku }))}
+                      options={items.map((x) => ({ value: x._id, label: x.name, code: x.sku, tag: x.category || undefined }))}
                       placeholder="Choose an item"
                       onChange={(v) => pickItem(r.key, v)}
                       onAdd={(typed) => setAdding({ kind: "item", typed, rowKey: r.key })}
@@ -616,6 +595,7 @@ export function QbStockVoucher({
         <AddPartyDialog
           typed={adding.typed}
           partyType={partyType}
+          chart={chart}
           onCancel={() => setAdding(null)}
           onCreated={(p) => {
             setAdding(null);
@@ -628,6 +608,7 @@ export function QbStockVoucher({
       {adding?.kind === "bank" ? (
         <AddBankDialog
           typed={adding.typed}
+          chart={chart}
           onCancel={() => setAdding(null)}
           onCreated={(a) => {
             setAdding(null);

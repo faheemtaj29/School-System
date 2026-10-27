@@ -136,8 +136,26 @@ export const ledgerSchema = z.object({
 });
 
 export const accountSchema = z.object({
-  code: z.string().regex(/^\d+$/, "Account code must contain digits only"),
-  name: z.string().min(2),
+  /** Leave empty to get the next free code under the parent automatically. */
+  code: z.union([z.literal(""), z.string().regex(/^\d+$/, "Account code must contain digits only")]).optional(),
+  name: z.string().trim().min(2),
+  bankName: z.string().trim().optional(),
+  accountNumber: z.string().trim().optional(),
+  details: z
+    .object({
+      provider: z.string().trim().optional(),
+      consumerNumber: z.string().trim().optional(),
+      meterNumber: z.string().trim().optional(),
+      iban: z.string().trim().optional(),
+      bankBranch: z.string().trim().optional(),
+      contactPerson: z.string().trim().optional(),
+      phone: z.string().trim().optional(),
+      email: z.string().trim().optional(),
+      address: z.string().trim().optional(),
+      taxNumber: z.string().trim().optional(),
+      notes: z.string().trim().optional(),
+    })
+    .optional(),
   type: z.enum(["asset", "liability", "equity", "income", "expense"]),
   level: z.coerce.number().int().min(1).max(5),
   parentCode: z.string().optional().nullable(),

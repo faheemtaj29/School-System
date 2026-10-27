@@ -46,9 +46,11 @@ export function PartyLedger({ branches, defaultBranch }: { branches: Branch[]; d
     () =>
       accounts.map((a) => ({
         value: a.code,
+        code: a.code,
         label: a.name,
         group: a.group,
-        hint: a.accountNumber ? `A/C ${a.accountNumber}` : a.code,
+        tag: a.group,
+        hint: a.accountNumber ? `A/C ${a.accountNumber}` : undefined,
       })),
     [accounts]
   );

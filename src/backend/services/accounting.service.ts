@@ -64,6 +64,10 @@ type SeedAccount = {
   systemKey?: string;
 };
 
+/**
+ * Default chart: six main heads with levels 1–4 laid out (plus the few posting accounts the
+ * system posts to). People add their own level-5 accounts under any level-4 group.
+ */
 const COA_SEED: SeedAccount[] = [
   { code: "1", name: "Assets", type: "asset", level: 1 },
   { code: "11", name: "Current Assets", type: "asset", level: 2, parentCode: "1" },
@@ -71,12 +75,29 @@ const COA_SEED: SeedAccount[] = [
   { code: "110101", name: "Cash Accounts", type: "asset", level: 4, parentCode: "1101" },
   { code: "11010101", name: "Cash in Hand", type: "asset", level: 5, parentCode: "110101", posting: true, cashBank: true, systemKey: "cash" },
   { code: "11010102", name: "Main Bank Account", type: "asset", level: 5, parentCode: "110101", posting: true, cashBank: true, systemKey: "bank" },
+  { code: "110102", name: "Bank Accounts", type: "asset", level: 4, parentCode: "1101" },
+  { code: "1102", name: "Advances & Prepayments", type: "asset", level: 3, parentCode: "11" },
+  { code: "110201", name: "Staff Advances", type: "asset", level: 4, parentCode: "1102" },
+  { code: "11020101", name: "Advance to Staff", type: "asset", level: 5, parentCode: "110201", posting: true },
+  { code: "110202", name: "Advances to Suppliers", type: "asset", level: 4, parentCode: "1102" },
+  { code: "11020201", name: "Advance to Suppliers", type: "asset", level: 5, parentCode: "110202", posting: true },
+  { code: "110203", name: "Prepaid Expenses", type: "asset", level: 4, parentCode: "1102" },
+  { code: "11020301", name: "Prepaid Rent", type: "asset", level: 5, parentCode: "110203", posting: true },
+  { code: "11020302", name: "Prepaid Insurance", type: "asset", level: 5, parentCode: "110203", posting: true },
   { code: "1103", name: "Receivables", type: "asset", level: 3, parentCode: "11" },
   { code: "110301", name: "Student Receivables", type: "asset", level: 4, parentCode: "1103" },
   { code: "11030101", name: "Fees Receivable", type: "asset", level: 5, parentCode: "110301", posting: true, systemKey: "feesReceivable" },
+  { code: "110302", name: "Customers Control", type: "asset", level: 4, parentCode: "1103" },
+  { code: "110303", name: "Other Receivables", type: "asset", level: 4, parentCode: "1103" },
+  { code: "11030301", name: "Other Receivables", type: "asset", level: 5, parentCode: "110303", posting: true },
   { code: "1104", name: "Inventory", type: "asset", level: 3, parentCode: "11" },
   { code: "110401", name: "School Stores", type: "asset", level: 4, parentCode: "1104" },
   { code: "11040101", name: "Inventory / Stores Asset", type: "asset", level: 5, parentCode: "110401", posting: true, systemKey: "inventoryAsset" },
+  { code: "110402", name: "Books & Uniforms Stock", type: "asset", level: 4, parentCode: "1104" },
+  { code: "11040201", name: "Books Stock", type: "asset", level: 5, parentCode: "110402", posting: true },
+  { code: "11040202", name: "Uniforms Stock", type: "asset", level: 5, parentCode: "110402", posting: true },
+  { code: "110403", name: "Trading Goods / Finished Goods", type: "asset", level: 4, parentCode: "1104" },
+  { code: "110404", name: "Raw Materials", type: "asset", level: 4, parentCode: "1104" },
   { code: "1105", name: "Tax Assets", type: "asset", level: 3, parentCode: "11" },
   { code: "110501", name: "Input Tax", type: "asset", level: 4, parentCode: "1105" },
   { code: "11050101", name: "Input GST / VAT", type: "asset", level: 5, parentCode: "110501", posting: true, systemKey: "taxInput" },
@@ -84,6 +105,24 @@ const COA_SEED: SeedAccount[] = [
   { code: "1201", name: "Property & Equipment", type: "asset", level: 3, parentCode: "12" },
   { code: "120101", name: "Equipment", type: "asset", level: 4, parentCode: "1201" },
   { code: "12010101", name: "Furniture & Equipment", type: "asset", level: 5, parentCode: "120101", posting: true },
+  { code: "120102", name: "Furniture & Fixtures", type: "asset", level: 4, parentCode: "1201" },
+  { code: "12010201", name: "Furniture & Fixtures", type: "asset", level: 5, parentCode: "120102", posting: true },
+  { code: "120103", name: "Vehicles", type: "asset", level: 4, parentCode: "1201" },
+  { code: "12010301", name: "School Buses & Vans", type: "asset", level: 5, parentCode: "120103", posting: true },
+  { code: "120104", name: "Computers & IT", type: "asset", level: 4, parentCode: "1201" },
+  { code: "12010401", name: "Computers & Laptops", type: "asset", level: 5, parentCode: "120104", posting: true },
+  { code: "12010402", name: "Networking Equipment", type: "asset", level: 5, parentCode: "120104", posting: true },
+  { code: "120105", name: "Land & Buildings", type: "asset", level: 4, parentCode: "1201" },
+  { code: "12010501", name: "Land", type: "asset", level: 5, parentCode: "120105", posting: true },
+  { code: "12010502", name: "School Building", type: "asset", level: 5, parentCode: "120105", posting: true },
+  { code: "1202", name: "Long-term Deposits", type: "asset", level: 3, parentCode: "12" },
+  { code: "120201", name: "Security Deposits Paid", type: "asset", level: 4, parentCode: "1202" },
+  { code: "12020101", name: "Rent Security Deposit", type: "asset", level: 5, parentCode: "120201", posting: true },
+  { code: "12020102", name: "Utility Security Deposits", type: "asset", level: 5, parentCode: "120201", posting: true },
+  { code: "1203", name: "Intangible Assets", type: "asset", level: 3, parentCode: "12" },
+  { code: "120301", name: "Software & Licences", type: "asset", level: 4, parentCode: "1203" },
+  { code: "1204", name: "Long-term Investments", type: "asset", level: 3, parentCode: "12" },
+  { code: "120401", name: "Investments", type: "asset", level: 4, parentCode: "1204" },
 
   { code: "2", name: "Liabilities", type: "liability", level: 1 },
   { code: "21", name: "Current Liabilities", type: "liability", level: 2, parentCode: "2" },
@@ -96,12 +135,36 @@ const COA_SEED: SeedAccount[] = [
   { code: "2103", name: "Trade Payables", type: "liability", level: 3, parentCode: "21" },
   { code: "210301", name: "Suppliers Control", type: "liability", level: 4, parentCode: "2103" },
   { code: "21030101", name: "Suppliers Payable", type: "liability", level: 5, parentCode: "210301", posting: true, systemKey: "suppliersPayable" },
+  { code: "210302", name: "Contractors", type: "liability", level: 4, parentCode: "2103" },
+  { code: "2104", name: "Accrued Expenses", type: "liability", level: 3, parentCode: "21" },
+  { code: "210401", name: "Utilities Payable", type: "liability", level: 4, parentCode: "2104" },
+  { code: "21040101", name: "Electricity Payable", type: "liability", level: 5, parentCode: "210401", posting: true },
+  { code: "21040102", name: "Gas Payable", type: "liability", level: 5, parentCode: "210401", posting: true },
+  { code: "21040103", name: "Water Payable", type: "liability", level: 5, parentCode: "210401", posting: true },
+  { code: "210402", name: "Other Accrued Expenses", type: "liability", level: 4, parentCode: "2104" },
+  { code: "21040201", name: "Accrued Expenses Payable", type: "liability", level: 5, parentCode: "210402", posting: true },
+  { code: "2105", name: "Advances Received", type: "liability", level: 3, parentCode: "21" },
+  { code: "210501", name: "Advance Fees from Students", type: "liability", level: 4, parentCode: "2105" },
+  { code: "21050101", name: "Advance Fees Received", type: "liability", level: 5, parentCode: "210501", posting: true },
+  { code: "210502", name: "Security Deposits Received", type: "liability", level: 4, parentCode: "2105" },
+  { code: "21050201", name: "Student Security Deposits", type: "liability", level: 5, parentCode: "210502", posting: true },
+  { code: "22", name: "Non-current Liabilities", type: "liability", level: 2, parentCode: "2" },
+  { code: "2201", name: "Long-term Loans", type: "liability", level: 3, parentCode: "22" },
+  { code: "220101", name: "Bank Loans", type: "liability", level: 4, parentCode: "2201" },
+  { code: "22010101", name: "Bank Loan", type: "liability", level: 5, parentCode: "220101", posting: true },
+  { code: "220102", name: "Loans from Owners / Directors", type: "liability", level: 4, parentCode: "2201" },
+  { code: "22010201", name: "Loan from Owners / Directors", type: "liability", level: 5, parentCode: "220102", posting: true },
 
   { code: "3", name: "Equity", type: "equity", level: 1 },
   { code: "31", name: "Capital / Corpus", type: "equity", level: 2, parentCode: "3" },
   { code: "3101", name: "Capital Funds", type: "equity", level: 3, parentCode: "31" },
   { code: "310101", name: "Capital Control", type: "equity", level: 4, parentCode: "3101" },
   { code: "31010101", name: "Capital / Corpus Fund", type: "equity", level: 5, parentCode: "310101", posting: true },
+  { code: "310102", name: "Partners' Capital", type: "equity", level: 4, parentCode: "3101" },
+  { code: "31010201", name: "Partners' Capital Account", type: "equity", level: 5, parentCode: "310102", posting: true },
+  { code: "3102", name: "Drawings", type: "equity", level: 3, parentCode: "31" },
+  { code: "310201", name: "Owner / Partner Drawings", type: "equity", level: 4, parentCode: "3102" },
+  { code: "31020101", name: "Owner / Partner Drawings", type: "equity", level: 5, parentCode: "310201", posting: true },
   { code: "32", name: "Retained Surplus", type: "equity", level: 2, parentCode: "3" },
   { code: "3201", name: "Accumulated Results", type: "equity", level: 3, parentCode: "32" },
   { code: "320101", name: "Retained Earnings Control", type: "equity", level: 4, parentCode: "3201" },
@@ -115,30 +178,112 @@ const COA_SEED: SeedAccount[] = [
   { code: "4102", name: "Online Program Income", type: "income", level: 3, parentCode: "41" },
   { code: "410201", name: "Distance Learning Control", type: "income", level: 4, parentCode: "4102" },
   { code: "41020101", name: "Distance / Online Courses", type: "income", level: 5, parentCode: "410201", posting: true, systemKey: "distanceIncome" },
+  { code: "4103", name: "Academic Charges", type: "income", level: 3, parentCode: "41" },
+  { code: "410301", name: "Admission & Registration", type: "income", level: 4, parentCode: "4103" },
+  { code: "41030101", name: "Admission Fee", type: "income", level: 5, parentCode: "410301", posting: true },
+  { code: "41030102", name: "Registration Fee", type: "income", level: 5, parentCode: "410301", posting: true },
+  { code: "410302", name: "Exam & Certificate Charges", type: "income", level: 4, parentCode: "4103" },
+  { code: "41030201", name: "Exam Fee", type: "income", level: 5, parentCode: "410302", posting: true },
+  { code: "41030202", name: "Certificate & Document Fee", type: "income", level: 5, parentCode: "410302", posting: true },
+  { code: "410303", name: "Transport Fees", type: "income", level: 4, parentCode: "4103" },
+  { code: "41030301", name: "Transport Fee", type: "income", level: 5, parentCode: "410303", posting: true },
+  { code: "4104", name: "Sales & Service Revenue", type: "income", level: 3, parentCode: "41" },
+  { code: "410401", name: "Sales of Goods", type: "income", level: 4, parentCode: "4104" },
+  { code: "41040101", name: "Sales of Goods", type: "income", level: 5, parentCode: "410401", posting: true },
+  { code: "410402", name: "Service Revenue", type: "income", level: 4, parentCode: "4104" },
+  { code: "41040201", name: "Service Revenue", type: "income", level: 5, parentCode: "410402", posting: true },
+  { code: "410403", name: "Sales Returns & Discounts", type: "income", level: 4, parentCode: "4104" },
   { code: "42", name: "Other Income", type: "income", level: 2, parentCode: "4" },
   { code: "4201", name: "Miscellaneous Income", type: "income", level: 3, parentCode: "42" },
   { code: "420101", name: "Other Income Control", type: "income", level: 4, parentCode: "4201" },
   { code: "42010101", name: "Donations & Misc Income", type: "income", level: 5, parentCode: "420101", posting: true, systemKey: "miscIncome" },
+  { code: "4202", name: "Grants & Donations", type: "income", level: 3, parentCode: "42" },
+  { code: "420201", name: "Grants Received", type: "income", level: 4, parentCode: "4202" },
+  { code: "42020101", name: "Government Grants", type: "income", level: 5, parentCode: "420201", posting: true },
+  { code: "42020102", name: "Donations Received", type: "income", level: 5, parentCode: "420201", posting: true },
 
   { code: "5", name: "Expenses", type: "expense", level: 1 },
   { code: "51", name: "Personnel Expenses", type: "expense", level: 2, parentCode: "5" },
   { code: "5101", name: "Payroll Expense", type: "expense", level: 3, parentCode: "51" },
   { code: "510101", name: "Payroll Control", type: "expense", level: 4, parentCode: "5101" },
   { code: "51010101", name: "Salaries & Wages", type: "expense", level: 5, parentCode: "510101", posting: true, systemKey: "payrollExpense" },
+  { code: "510102", name: "Staff Welfare & Benefits", type: "expense", level: 4, parentCode: "5101" },
+  { code: "51010201", name: "Staff Medical", type: "expense", level: 5, parentCode: "510102", posting: true },
+  { code: "51010202", name: "Staff Training", type: "expense", level: 5, parentCode: "510102", posting: true },
+  { code: "51010203", name: "EOBI / Social Security", type: "expense", level: 5, parentCode: "510102", posting: true },
   { code: "52", name: "Academic & Operating Expenses", type: "expense", level: 2, parentCode: "5" },
   { code: "5201", name: "School Supplies", type: "expense", level: 3, parentCode: "52" },
   { code: "520101", name: "Supplies Control", type: "expense", level: 4, parentCode: "5201" },
   { code: "52010101", name: "Inventory / Supplies Consumed", type: "expense", level: 5, parentCode: "520101", posting: true, systemKey: "inventoryExpense" },
+  { code: "520102", name: "Teaching Aids & Lab Material", type: "expense", level: 4, parentCode: "5201" },
+  { code: "52010201", name: "Teaching Aids", type: "expense", level: 5, parentCode: "520102", posting: true },
+  { code: "52010202", name: "Lab Material & Chemicals", type: "expense", level: 5, parentCode: "520102", posting: true },
+  { code: "52010203", name: "Sports Material", type: "expense", level: 5, parentCode: "520102", posting: true },
   { code: "5202", name: "Utilities", type: "expense", level: 3, parentCode: "52" },
   { code: "520201", name: "Utilities Control", type: "expense", level: 4, parentCode: "5202" },
   { code: "52020101", name: "Electricity, Gas & Internet", type: "expense", level: 5, parentCode: "520201", posting: true },
+  { code: "520202", name: "Electricity", type: "expense", level: 4, parentCode: "5202" },
+  { code: "52020201", name: "Electricity Bill", type: "expense", level: 5, parentCode: "520202", posting: true },
+  { code: "520203", name: "Gas", type: "expense", level: 4, parentCode: "5202" },
+  { code: "52020301", name: "Gas Bill", type: "expense", level: 5, parentCode: "520203", posting: true },
+  { code: "520204", name: "Water", type: "expense", level: 4, parentCode: "5202" },
+  { code: "52020401", name: "Water Bill", type: "expense", level: 5, parentCode: "520204", posting: true },
+  { code: "520205", name: "Internet & Telephone", type: "expense", level: 4, parentCode: "5202" },
+  { code: "52020501", name: "Internet Charges", type: "expense", level: 5, parentCode: "520205", posting: true },
+  { code: "52020502", name: "Telephone & Mobile Charges", type: "expense", level: 5, parentCode: "520205", posting: true },
   { code: "5203", name: "Repairs & Maintenance", type: "expense", level: 3, parentCode: "52" },
   { code: "520301", name: "Maintenance Control", type: "expense", level: 4, parentCode: "5203" },
   { code: "52030101", name: "Repairs & Maintenance", type: "expense", level: 5, parentCode: "520301", posting: true },
-  { code: "53", name: "General Expenses", type: "expense", level: 2, parentCode: "5" },
-  { code: "5301", name: "Administrative Expenses", type: "expense", level: 3, parentCode: "53" },
+  { code: "5204", name: "Transport", type: "expense", level: 3, parentCode: "52" },
+  { code: "520401", name: "Vehicle Fuel", type: "expense", level: 4, parentCode: "5204" },
+  { code: "52040101", name: "Vehicle Fuel", type: "expense", level: 5, parentCode: "520401", posting: true },
+  { code: "520402", name: "Vehicle Repairs", type: "expense", level: 4, parentCode: "5204" },
+  { code: "52040201", name: "Vehicle Repairs & Maintenance", type: "expense", level: 5, parentCode: "520402", posting: true },
+  { code: "53", name: "Administrative Expenses", type: "expense", level: 2, parentCode: "5" },
+  { code: "5301", name: "Office & Admin", type: "expense", level: 3, parentCode: "53" },
   { code: "530101", name: "General Expense Control", type: "expense", level: 4, parentCode: "5301" },
   { code: "53010101", name: "General Expense", type: "expense", level: 5, parentCode: "530101", posting: true, systemKey: "generalExpense" },
+  { code: "530102", name: "Printing & Stationery", type: "expense", level: 4, parentCode: "5301" },
+  { code: "53010201", name: "Printing & Stationery", type: "expense", level: 5, parentCode: "530102", posting: true },
+  { code: "530103", name: "Rent", type: "expense", level: 4, parentCode: "5301" },
+  { code: "53010301", name: "Building Rent", type: "expense", level: 5, parentCode: "530103", posting: true },
+  { code: "530104", name: "Travelling & Conveyance", type: "expense", level: 4, parentCode: "5301" },
+  { code: "53010401", name: "Travelling & Conveyance", type: "expense", level: 5, parentCode: "530104", posting: true },
+  { code: "530105", name: "Advertising & Marketing", type: "expense", level: 4, parentCode: "5301" },
+  { code: "53010501", name: "Advertising & Marketing", type: "expense", level: 5, parentCode: "530105", posting: true },
+  { code: "530106", name: "Legal & Professional", type: "expense", level: 4, parentCode: "5301" },
+  { code: "53010601", name: "Legal & Professional Fees", type: "expense", level: 5, parentCode: "530106", posting: true },
+  { code: "53010602", name: "Audit Fee", type: "expense", level: 5, parentCode: "530106", posting: true },
+  { code: "5302", name: "Financial Charges", type: "expense", level: 3, parentCode: "53" },
+  { code: "530201", name: "Bank Charges", type: "expense", level: 4, parentCode: "5302" },
+  { code: "53020101", name: "Bank Charges", type: "expense", level: 5, parentCode: "530201", posting: true },
+  { code: "5303", name: "Depreciation", type: "expense", level: 3, parentCode: "53" },
+  { code: "530301", name: "Depreciation Expense", type: "expense", level: 4, parentCode: "5303" },
+  { code: "53030101", name: "Depreciation – Property & Equipment", type: "expense", level: 5, parentCode: "530301", posting: true },
+  { code: "54", name: "Selling & Distribution Expenses", type: "expense", level: 2, parentCode: "5" },
+  { code: "5401", name: "Selling Expenses", type: "expense", level: 3, parentCode: "54" },
+  { code: "540101", name: "Sales Commission", type: "expense", level: 4, parentCode: "5401" },
+  { code: "540102", name: "Delivery & Distribution", type: "expense", level: 4, parentCode: "5401" },
+
+  { code: "6", name: "Cost of Goods Sold", type: "expense", level: 1 },
+  { code: "61", name: "Direct Costs", type: "expense", level: 2, parentCode: "6" },
+  { code: "6101", name: "Cost of Goods Sold", type: "expense", level: 3, parentCode: "61" },
+  { code: "610101", name: "COGS Control", type: "expense", level: 4, parentCode: "6101" },
+  { code: "61010101", name: "Cost of Goods Sold (Store / Canteen)", type: "expense", level: 5, parentCode: "610101", posting: true, systemKey: "cogs" },
+  { code: "6102", name: "Direct Materials", type: "expense", level: 3, parentCode: "61" },
+  { code: "610201", name: "Materials", type: "expense", level: 4, parentCode: "6102" },
+  { code: "61020101", name: "Raw Materials", type: "expense", level: 5, parentCode: "610201", posting: true },
+  { code: "61020102", name: "Books & Uniform Purchases", type: "expense", level: 5, parentCode: "610201", posting: true },
+  { code: "6103", name: "Direct Labour & Contractors", type: "expense", level: 3, parentCode: "61" },
+  { code: "610301", name: "Contractor Charges", type: "expense", level: 4, parentCode: "6103" },
+  { code: "61030101", name: "Contractor Charges", type: "expense", level: 5, parentCode: "610301", posting: true },
+  { code: "61030102", name: "Direct Labour", type: "expense", level: 5, parentCode: "610301", posting: true },
+  { code: "62", name: "Indirect Costs", type: "expense", level: 2, parentCode: "6" },
+  { code: "6201", name: "Indirect Costs", type: "expense", level: 3, parentCode: "62" },
+  { code: "620101", name: "Freight & Carriage", type: "expense", level: 4, parentCode: "6201" },
+  { code: "62010101", name: "Freight & Carriage Inward", type: "expense", level: 5, parentCode: "620101", posting: true },
+  { code: "620102", name: "Packing & Handling", type: "expense", level: 4, parentCode: "6201" },
+  { code: "62010201", name: "Packing & Handling", type: "expense", level: 5, parentCode: "620102", posting: true },
 ];
 
 const PREFIX: Record<string, string> = {
@@ -189,11 +334,24 @@ function mapMethod(method?: string): "cash" | "bank" | "online" | "cheque" | und
   return "cash";
 }
 
+let laterSeedChecked = false;
+
 async function ensureSeeded() {
   await dbConnect();
-  if ((await Account.countDocuments()) > 0) return;
+  if ((await Account.countDocuments()) > 0) {
+    // Older databases: add any default groups they don't have yet (never renames or removes).
+    if (!laterSeedChecked) {
+      laterSeedChecked = true;
+      await seedAccountsFrom(COA_SEED);
+    }
+    return;
+  }
+  await seedAccountsFrom(COA_SEED);
+}
+
+async function seedAccountsFrom(list: SeedAccount[]) {
   await Account.bulkWrite(
-    COA_SEED.map((a) => ({
+    list.map((a) => ({
       updateOne: {
         filter: { code: a.code },
         update: {
@@ -491,6 +649,32 @@ export const accountingService = {
     return Account.find().sort({ code: 1 }).lean();
   },
 
+  /**
+   * Next free code under a parent: main heads are 1–9, level 2 adds one digit (11, 12…),
+   * levels 3–5 add two digits (1101, 110101, 11010101).
+   */
+  async nextAccountCode(parentCode?: string | null) {
+    await ensureSeeded();
+    if (!parentCode) {
+      const heads = await Account.find({ level: 1 }).select("code").lean();
+      const used = new Set(heads.map((h) => h.code));
+      for (let n = 1; n <= 9; n++) if (!used.has(String(n))) return String(n);
+      throw new ServiceError("VALIDATION", "All main heads 1–9 are already used", 400);
+    }
+    const parent = await Account.findOne({ code: parentCode }).lean();
+    if (!parent) throw new ServiceError("NOT_FOUND", "Parent account not found", 404);
+    if (parent.level >= 5) throw new ServiceError("VALIDATION", "Level 5 is the last level", 400);
+    const width = parent.level === 1 ? 1 : 2;
+    const kids = await Account.find({ parentCode }).select("code").lean();
+    const used = new Set(kids.map((k) => k.code));
+    const max = width === 1 ? 9 : 99;
+    for (let n = 1; n <= max; n++) {
+      const code = `${parentCode}${String(n).padStart(width, "0")}`;
+      if (!used.has(code) && !(await Account.exists({ code }))) return code;
+    }
+    throw new ServiceError("VALIDATION", "No free code left under this parent", 400);
+  },
+
   async createAccount(data: AccountInput) {
     await ensureSeeded();
     const parentCode = data.parentCode || undefined;
@@ -512,9 +696,24 @@ export const accountingService = {
     if (data.level === 5 && !data.isPosting) {
       throw new ServiceError("VALIDATION", "Level 5 account must be a posting account", 400);
     }
+    const code = data.code?.trim() || (await this.nextAccountCode(parentCode));
+    if (parentCode && !code.startsWith(parentCode)) {
+      throw new ServiceError("VALIDATION", `Code must start with the parent code ${parentCode}`, 400);
+    }
+    if (await Account.exists({ code })) {
+      throw new ServiceError("CONFLICT", `Account code ${code} is already used`, 409);
+    }
+    const name = data.name.trim();
+    if (await Account.exists({ parentCode: parentCode ?? null, name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") })) {
+      throw new ServiceError("CONFLICT", `“${name}” already exists at this place in the chart`, 409);
+    }
     return Account.create({
       ...data,
+      code,
+      name,
       parentCode,
+      bankName: data.isCashBank ? data.bankName || undefined : undefined,
+      accountNumber: data.isCashBank ? data.accountNumber || undefined : undefined,
       nature: data.type === "asset" || data.type === "expense" ? "debit" : "credit",
     });
   },
@@ -593,7 +792,12 @@ export const accountingService = {
    * Each supplier and customer has its own ledger account (Tally/QuickBooks style):
    * suppliers under Suppliers Control (2103 01), customers under Customers Control (1103 02).
    */
-  async ensurePartyAccount(partyType: "supplier" | "customer", partyId: string, name: string) {
+  async ensurePartyAccount(
+    partyType: "supplier" | "customer",
+    partyId: string,
+    name: string,
+    opts: { groupCode?: string; openingBalance?: number; openingBalanceSide?: "debit" | "credit" } = {}
+  ) {
     await ensureSeeded();
     const existing = await Account.findOne({ partyType, partyId }).lean();
     if (existing) {
@@ -606,6 +810,13 @@ export const accountingService = {
       parentCode = "110302";
       type = "asset";
       await this.ensureAccount({ code: "110302", name: "Customers Control", type: "asset", level: 4, parentCode: "1103", isPosting: false });
+    }
+    if (opts.groupCode) {
+      const group = await Account.findOne({ code: opts.groupCode, level: 4 }).lean();
+      if (!group || group.type !== type) {
+        throw new ServiceError("VALIDATION", `Pick a ${type === "asset" ? "receivable" : "payable"} group for this ${partyType}`, 400);
+      }
+      parentCode = group.code;
     }
     const siblings = await Account.find({ parentCode }).select("code").lean();
     const max = siblings.reduce(
@@ -626,6 +837,8 @@ export const accountingService = {
         isActive: true,
         partyType,
         partyId,
+        openingBalance: opts.openingBalance || 0,
+        openingBalanceSide: opts.openingBalanceSide || (type === "asset" ? "debit" : "credit"),
       })
     ).toObject();
   },
@@ -744,7 +957,8 @@ export const accountingService = {
   async createCategory(
     name: string,
     kind: "expense" | "income" | "asset" | "liability" | "bank" | "cash",
-    bank?: { bankName?: string; accountNumber?: string }
+    bank?: { bankName?: string; accountNumber?: string },
+    groupCode?: string
   ) {
     const type = kind === "bank" || kind === "cash" ? "asset" : kind;
     await ensureSeeded();
@@ -755,10 +969,15 @@ export const accountingService = {
       isPosting: true,
     }).lean();
     if (existing) return existing;
+    // A chosen level-4 group wins; otherwise a sensible default group for the kind.
+    const chosen = groupCode ? await Account.findOne({ code: groupCode, level: 4 }).lean() : null;
+    if (groupCode && (!chosen || chosen.type !== type)) {
+      throw new ServiceError("VALIDATION", "That group does not fit this kind of account", 400);
+    }
+    const bankGroup = (await Account.exists({ code: "110102" })) ? "110102" : "110101";
     const parentCode =
-      kind === "bank" || kind === "cash"
-        ? "110101"
-        : { expense: "530101", income: "420101", asset: "120101", liability: "210301" }[type];
+      chosen?.code ||
+      (kind === "bank" ? bankGroup : kind === "cash" ? "110101" : { expense: "530101", income: "420101", asset: "120101", liability: "210301" }[type]);
     const parent = await Account.findOne({ code: parentCode }).lean();
     if (!parent) throw new ServiceError("NOT_FOUND", "Chart of accounts is not set up", 404);
     const siblings = await Account.find({ parentCode }).select("code").lean();

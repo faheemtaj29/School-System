@@ -46,6 +46,16 @@ function similarity(a: string, b: string): number {
   return Math.round((matches / Math.max(words1.length, words2.length)) * 100);
 }
 
+/** Next free party code like SUP-0007 / CUS-0012. */
+async function nextPartyCode(Model: typeof Supplier, prefix: string) {
+  const count = await Model.countDocuments();
+  for (let n = count + 1; n < count + 1000; n++) {
+    const code = `${prefix}-${String(n).padStart(4, "0")}`;
+    if (!(await Model.exists({ code }))) return code;
+  }
+  return `${prefix}-${Date.now().toString(36).toUpperCase()}`;
+}
+
 export const partyService = {
   /** The party's own ledger account code, creating it on first use. */
   async accountFor(partyType: "supplier" | "customer", partyId: string) {
@@ -69,8 +79,12 @@ export const partyService = {
   },
 
   async createCustomer(data: {
-    code: string;
+    code?: string;
     name: string;
+    contactPerson?: string;
+    cnic?: string;
+    notes?: string;
+    groupCode?: string;
     email?: string;
     phone?: string;
     address?: string;
@@ -81,18 +95,29 @@ export const partyService = {
     openingBalanceSide?: "debit" | "credit";
   }) {
     await dbConnect();
-    const exists = await Customer.findOne({ code: data.code.toUpperCase() });
+    const name = data.name.trim();
+    if (name.length < 2) throw new ServiceError("VALIDATION", "Name is too short", 400);
+    const same = await Customer.findOne({ name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }).lean();
+    if (same) throw new ServiceError("CONFLICT", `A customer named “${name}” already exists`, 409);
+    const code = (data.code?.trim() || (await nextPartyCode(Customer, "CUS"))).toUpperCase();
+    const exists = await Customer.findOne({ code });
     if (exists) {
       throw new ServiceError("CONFLICT", "Customer code already exists", 409);
     }
+    const { groupCode, ...fields } = data;
     const party = await Customer.create({
-      ...data,
-      code: data.code.toUpperCase(),
+      ...fields,
+      name,
+      code,
       branchCode: data.branchCode.toUpperCase(),
       openingBalance: data.openingBalance || 0,
       openingBalanceSide: data.openingBalanceSide || "debit",
     });
-    const account = await accountingService.ensurePartyAccount("customer", String(party._id), party.name);
+    const account = await accountingService.ensurePartyAccount("customer", String(party._id), party.name, {
+      groupCode,
+      openingBalance: data.openingBalance || 0,
+      openingBalanceSide: data.openingBalanceSide || "debit",
+    });
     return { ...party.toObject(), accountCode: account.code };
   },
 
@@ -108,8 +133,12 @@ export const partyService = {
   },
 
   async createSupplier(data: {
-    code: string;
+    code?: string;
     name: string;
+    contactPerson?: string;
+    cnic?: string;
+    notes?: string;
+    groupCode?: string;
     email?: string;
     phone?: string;
     address?: string;
@@ -120,18 +149,29 @@ export const partyService = {
     openingBalanceSide?: "debit" | "credit";
   }) {
     await dbConnect();
-    const exists = await Supplier.findOne({ code: data.code.toUpperCase() });
+    const name = data.name.trim();
+    if (name.length < 2) throw new ServiceError("VALIDATION", "Name is too short", 400);
+    const same = await Supplier.findOne({ name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }).lean();
+    if (same) throw new ServiceError("CONFLICT", `A supplier named “${name}” already exists`, 409);
+    const code = (data.code?.trim() || (await nextPartyCode(Supplier, "SUP"))).toUpperCase();
+    const exists = await Supplier.findOne({ code });
     if (exists) {
       throw new ServiceError("CONFLICT", "Supplier code already exists", 409);
     }
+    const { groupCode, ...fields } = data;
     const party = await Supplier.create({
-      ...data,
-      code: data.code.toUpperCase(),
+      ...fields,
+      name,
+      code,
       branchCode: data.branchCode.toUpperCase(),
       openingBalance: data.openingBalance || 0,
       openingBalanceSide: data.openingBalanceSide || "credit",
     });
-    const account = await accountingService.ensurePartyAccount("supplier", String(party._id), party.name);
+    const account = await accountingService.ensurePartyAccount("supplier", String(party._id), party.name, {
+      groupCode,
+      openingBalance: data.openingBalance || 0,
+      openingBalanceSide: data.openingBalanceSide || "credit",
+    });
     return { ...party.toObject(), accountCode: account.code };
   },
 

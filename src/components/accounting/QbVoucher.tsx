@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { NewAccountForm, PartyForm, type ChartAccount } from "./AccountForms";
 
 /**
  * QuickBooks-style voucher entry: payments, receipts, journal entries and contra transfers.
@@ -20,9 +21,10 @@ type Account = {
   systemKey?: string;
   bankName?: string;
   accountNumber?: string;
+  partyType?: "supplier" | "customer";
 };
 
-type Party = { _id: string; name: string; code?: string };
+type Party = { _id: string; name: string; code?: string; accountCode?: string | null };
 
 type Line = { key: number; code: string; description: string; amount: string };
 type JLine = { key: number; code: string; description: string; debit: string; credit: string };
@@ -70,7 +72,16 @@ export function bankLabel(a: Account) {
 
 /* ---------- searchable picker with "+ Add new" ---------- */
 
-export type Option = { value: string; label: string; group?: string; hint?: string };
+/** `code` is the chart-of-accounts code (or SKU) shown before the name; `tag` says what it is, e.g. "Supplier". */
+export type Option = { value: string; label: string; group?: string; hint?: string; code?: string; tag?: string };
+
+/** Short label for what kind of account this is — shown next to the name in every account dropdown. */
+export function tagOf(a: { type: string; isCashBank?: boolean; partyType?: string; bankName?: string; accountNumber?: string; name: string }) {
+  if (a.partyType === "supplier") return "Supplier";
+  if (a.partyType === "customer") return "Customer";
+  if (a.isCashBank) return a.bankName || a.accountNumber || !/cash/i.test(a.name) ? "Bank" : "Cash";
+  return { asset: "Asset", liability: "Liability", equity: "Equity", income: "Income", expense: "Expense" }[a.type] || a.type;
+}
 
 export function Picker({
   value,
@@ -103,14 +114,19 @@ export function Picker({
   }, []);
 
   const q = query.trim().toLowerCase();
-  const filtered = q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
+  const filtered = q
+    ? options.filter((o) =>
+        `${o.code || ""} ${o.label} ${o.hint || ""} ${o.tag || ""} ${o.group || ""}`.toLowerCase().includes(q)
+      )
+    : options;
+  const shown = (o?: Option) => (o ? (o.code ? `${o.code} · ${o.label}` : o.label) : "");
   const groups = Array.from(new Set(filtered.map((o) => o.group || "")));
 
   return (
     <div className="qb-picker" ref={ref}>
       <input
         className="qb-in"
-        value={open ? query : current?.label || (allowFree ? value : "")}
+        value={open ? query : shown(current) || (allowFree ? value : "")}
         placeholder={placeholder}
         onFocus={() => {
           setOpen(true);
@@ -154,8 +170,14 @@ export function Picker({
                       setOpen(false);
                     }}
                   >
-                    <span>{o.label}</span>
-                    {o.hint ? <small>{o.hint}</small> : null}
+                    <span className="qb-opt-main">
+                      {o.code ? <code className="qb-code">{o.code}</code> : null}
+                      <span>{o.label}</span>
+                    </span>
+                    <span className="qb-opt-side">
+                      {o.tag ? <em className="qb-tag">{o.tag}</em> : null}
+                      {o.hint ? <small>{o.hint}</small> : null}
+                    </span>
                   </button>
                 ))}
             </div>
@@ -177,109 +199,54 @@ type AddKind =
 function AddDialog({
   spec,
   mode,
+  chart,
   onCancel,
   onCreated,
 }: {
   spec: AddKind;
   mode: QbMode;
+  chart: ChartAccount[];
   onCancel: () => void;
   onCreated: (result: { account?: Account; party?: Party }) => void;
 }) {
   const receipt = mode === "crv" || mode === "brv";
-  const [name, setName] = useState(spec.typed);
-  const [catType, setCatType] = useState<"expense" | "income" | "asset" | "liability">(receipt ? "income" : "expense");
-  const [bankName, setBankName] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
-  const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function save() {
-    setErr("");
-    setBusy(true);
-    try {
-      if (spec.kind === "payee") {
-        const type = receipt ? "customer" : "supplier";
-        const res = await fetch(`/api/parties?type=${type}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name,
-            code: `${type === "supplier" ? "SUP" : "CUS"}-${Date.now().toString(36).toUpperCase()}`,
-          }),
-        });
-        const d = await res.json();
-        if (!res.ok) throw new Error(d.error || "Could not add");
-        onCreated({ party: d.party });
-      } else {
-        const res = await fetch("/api/accounting", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(
-            spec.kind === "bank"
-              ? { kind: "category", type: "bank", name, bankName, accountNumber }
-              : { kind: "category", type: catType, name }
-          ),
-        });
-        const d = await res.json();
-        if (!res.ok) throw new Error(d.error || "Could not add");
-        onCreated({ account: d.account });
-      }
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
+  const has = (code: string) => chart.some((a) => a.code === code);
+  const partyType = receipt ? "customer" : "supplier";
+  // Same forms as Chart of Accounts: suppliers/customers get the full party form,
+  // banks and categories are placed step by step with the code filled in.
+  const partyGroups = chart.filter((a) => a.level === 4 && (partyType === "supplier" ? a.code.startsWith("2103") : a.code === "110302"));
+  const bankPath = has("110102") ? ["1", "11", "1101", "110102"] : ["1", "11", "1101", "110101"];
+  const catPath = receipt ? ["4"] : mode === "jv" ? [] : ["5"];
   const title =
-    spec.kind === "bank" ? "Add bank account" : spec.kind === "payee" ? (receipt ? "Add customer / payer" : "Add supplier / payee") : "Add category";
+    spec.kind === "bank" ? "Add bank account" : spec.kind === "payee" ? (receipt ? "Add customer / payer" : "Add supplier / payee") : "Add account";
 
   return (
     <div className="qb-dialog-bg" onMouseDown={onCancel}>
-      <div className="qb-dialog" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="qb-dialog wide" onMouseDown={(e) => e.stopPropagation()}>
         <h3>{title}</h3>
-        {err ? <div className="alert err">{err}</div> : null}
-        {spec.kind === "bank" ? (
-          <>
-            <label>Bank name</label>
-            <input className="qb-in" value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="e.g. HBL, Meezan, SBI" autoFocus />
-            <label>Account title</label>
-            <input className="qb-in" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. HBL Current Account" />
-            <label>Account number</label>
-            <input className="qb-in" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="e.g. 0123-4567890" />
-            <p className="qb-note">It is added to the chart of accounts under Cash &amp; Bank automatically.</p>
-          </>
+        {spec.kind === "payee" ? (
+          <PartyForm
+            partyType={partyType}
+            initialName={spec.typed}
+            groups={partyGroups}
+            onSaved={(party) => onCreated({ party })}
+            onCancel={onCancel}
+          />
         ) : (
-          <>
-            <label>Name</label>
-            <input className="qb-in" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-            {spec.kind === "category" ? (
-              <>
-                <label>This is</label>
-                <select className="qb-in" value={catType} onChange={(e) => setCatType(e.target.value as typeof catType)}>
-                  <option value="expense">An expense (e.g. fuel, printing, rent)</option>
-                  <option value="income">Income (e.g. donation, canteen sale)</option>
-                  <option value="asset">Something we own (e.g. furniture, computer)</option>
-                  <option value="liability">Something we owe (e.g. loan, payable)</option>
-                </select>
-                <p className="qb-note">The account code is chosen for you in the chart of accounts.</p>
-              </>
-            ) : (
-              <p className="qb-note">Saved to {receipt ? "customers" : "suppliers"} so you can pick it next time.</p>
-            )}
-          </>
+          <NewAccountForm
+            accounts={chart}
+            initialPath={spec.kind === "bank" ? bankPath : catPath}
+            initialName={spec.typed}
+            postingOnly
+            onCreated={(r) =>
+              onCreated({
+                account: r.account as Account | undefined,
+                party: r.party ? { ...r.party } : undefined,
+              })
+            }
+            onCancel={onCancel}
+          />
         )}
-        <div className="qb-dialog-actions">
-          <button type="button" className="qb-btn" onClick={onCancel}>Cancel</button>
-          <button
-            type="button"
-            className="qb-btn green"
-            disabled={busy || name.trim().length < 2 || (spec.kind === "bank" && !accountNumber.trim())}
-            onClick={save}
-          >
-            {busy ? "Saving…" : "Save"}
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -303,6 +270,7 @@ export function QbVoucher({
   const usesBank = mode === "bpv" || mode === "brv";
 
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [chart, setChart] = useState<ChartAccount[]>([]);
   const [balances, setBalances] = useState<Record<string, number>>({});
   const [parties, setParties] = useState<Party[]>([]);
   const [branches, setBranches] = useState<{ code: string; name: string }[]>([]);
@@ -332,6 +300,7 @@ export function QbVoucher({
       fetch("/api/accounting?view=accounts").then((r) => r.json()),
       fetch("/api/accounting?view=trial-balance").then((r) => r.json()),
     ]);
+    setChart(a.accounts || []);
     setAccounts((a.accounts || []).filter((x: Account) => x.isPosting && x.isActive !== false));
     const bal: Record<string, number> = {};
     for (const row of tb.rows || []) bal[row.code] = (row.debit || 0) - (row.credit || 0);
@@ -395,7 +364,7 @@ export function QbVoucher({
     const order = isPayment ? ["expense", "liability", "asset", "equity", "income"] : ["income", "liability", "asset", "equity", "expense"];
     return nonCash
       .sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type) || a.name.localeCompare(b.name))
-      .map((a) => ({ value: a.code, label: a.name, group: groupOf(a) }));
+      .map((a) => ({ value: a.code, code: a.code, label: a.name, group: groupOf(a), tag: tagOf(a) }));
   }, [accounts, isPayment]);
 
   const allAccountOptions: Option[] = useMemo(
@@ -405,8 +374,10 @@ export function QbVoucher({
         .sort((a, b) => a.code.localeCompare(b.code))
         .map((a) => ({
           value: a.code,
+          code: a.code,
           label: a.isCashBank && a.accountNumber ? bankLabel(a) : a.name,
           group: { asset: "Assets", liability: "Liabilities", equity: "Equity", income: "Income", expense: "Expenses" }[a.type],
+          tag: tagOf(a),
         })),
     [accounts]
   );
@@ -540,10 +511,17 @@ export function QbVoucher({
   function created(result: { account?: Account; party?: Party }) {
     const spec = adding;
     setAdding(null);
-    if (result.party) {
+    loadAccounts();
+    if (result.party && spec?.kind === "payee") {
       setParties((p) => [...p, result.party!]);
       setPayee(result.party.name);
       setPayeeId(result.party._id);
+    }
+    // A supplier/customer made from the category picker: use its own ledger account on the line.
+    if (result.party?.accountCode && spec?.kind === "category" && spec.lineKey) {
+      const code = result.party.accountCode;
+      setLines((ls) => ls.map((l) => (l.key === spec.lineKey ? { ...l, code } : l)));
+      setJLines((ls) => ls.map((l) => (l.key === spec.lineKey ? { ...l, code } : l)));
     }
     if (result.account) {
       setAccounts((list) => [...list.filter((a) => a.code !== result.account!.code), result.account!]);
@@ -581,7 +559,7 @@ export function QbVoucher({
                   value={payeeId || payee}
                   allowFree
                   placeholder={isPayment ? "Who are you paying?" : "Who paid you?"}
-                  options={parties.map((p) => ({ value: p._id, label: p.name }))}
+                  options={parties.map((p) => ({ value: p._id, label: p.name, code: p.accountCode || undefined, tag: isReceipt ? "Customer" : "Supplier" }))}
                   onChange={(v, label) => {
                     const hit = parties.find((p) => p._id === v);
                     setPayeeId(hit ? hit._id : "");
@@ -600,8 +578,10 @@ export function QbVoucher({
                   value={settle}
                   options={(mode === "cv" ? [...cashAccounts, ...bankAccounts] : settleOptions).map((a) => ({
                     value: a.code,
+                    code: a.code,
                     label: a.isCashBank && a.accountNumber ? bankLabel(a) : a.name,
                     group: mode === "cv" ? (isCashAccount(a) ? "Cash" : "Bank") : undefined,
+                    tag: isCashAccount(a) ? "Cash" : "Bank",
                   }))}
                   placeholder={usesBank ? "Choose bank account" : "Choose cash account"}
                   onChange={(v) => setSettle(v)}
@@ -630,7 +610,7 @@ export function QbVoucher({
                   value={contraTo}
                   options={[...cashAccounts, ...bankAccounts]
                     .filter((a) => a.code !== settle)
-                    .map((a) => ({ value: a.code, label: a.isCashBank && a.accountNumber ? bankLabel(a) : a.name, group: isCashAccount(a) ? "Cash" : "Bank" }))}
+                    .map((a) => ({ value: a.code, code: a.code, label: a.isCashBank && a.accountNumber ? bankLabel(a) : a.name, group: isCashAccount(a) ? "Cash" : "Bank", tag: isCashAccount(a) ? "Cash" : "Bank" }))}
                   placeholder="Choose account"
                   onChange={(v) => setContraTo(v)}
                   onAdd={(typed) => setAdding({ kind: "bank", typed })}
@@ -838,7 +818,7 @@ export function QbVoucher({
         </div>
       </footer>
 
-      {adding ? <AddDialog spec={adding} mode={mode} onCancel={() => setAdding(null)} onCreated={created} /> : null}
+      {adding ? <AddDialog spec={adding} mode={mode} chart={chart} onCancel={() => setAdding(null)} onCreated={created} /> : null}
     </div>
   );
 }

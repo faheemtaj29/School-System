@@ -235,7 +235,7 @@ export const accountingController = {
             account: await accountingService.createCategory(String(body.name || ""), type, {
               bankName: body.bankName ? String(body.bankName) : undefined,
               accountNumber: body.accountNumber ? String(body.accountNumber) : undefined,
-            }),
+            }, body.groupCode ? String(body.groupCode) : undefined),
           },
           201
         );

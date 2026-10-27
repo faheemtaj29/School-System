@@ -189,7 +189,19 @@ async function syncVoucherLedger(voucher: IStockVoucher, actorId?: string) {
   const id = String((voucher as unknown as { _id: unknown })._id);
   if (voucher.voucherType === "transfer") return;
   const inventory = await systemCode("inventoryAsset");
+  // Write-offs / adjustments go to supplies consumed; goods sold go to Cost of Goods Sold (head 6).
   const cogs = await systemCode("inventoryExpense");
+  const cogsSold = (
+    await accountingService.ensureAccount({
+      systemKey: "cogs",
+      code: "61010101",
+      name: "Cost of Goods Sold (Store / Canteen)",
+      type: "expense",
+      level: 5,
+      parentCode: "610101",
+      isPosting: true,
+    })
+  ).code as string;
   const net = round(Math.max(0, voucher.subtotal - (voucher.discountAmount || 0)));
   const tax = round(voucher.taxAmount || 0);
   const total = round(voucher.grandTotal);
@@ -243,14 +255,14 @@ async function syncVoucherLedger(voucher: IStockVoucher, actorId?: string) {
       dr(settle, total, detail);
       cr(sales, net, "Goods sold");
       if (tax > 0) cr(taxCode, tax, "Output tax");
-      dr(cogs, cost, "Cost of goods sold");
+      dr(cogsSold, cost, "Cost of goods sold");
       cr(inventory, cost, "Stock issued at cost");
     } else {
       dr(sales, net, "Goods returned by customer");
       if (tax > 0) dr(taxCode, tax, "Output tax reversed");
       cr(settle, total, detail);
       dr(inventory, cost, "Stock returned at cost");
-      cr(cogs, cost, "Cost of goods sold reversed");
+      cr(cogsSold, cost, "Cost of goods sold reversed");
     }
   } else if (voucher.voucherType === "adjustment") {
     let gain = 0;

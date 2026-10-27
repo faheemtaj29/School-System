@@ -173,6 +173,9 @@ export const StockLedger =
 export interface ICustomer {
   code: string;
   name: string;
+  contactPerson?: string;
+  cnic?: string;
+  notes?: string;
   email?: string;
   phone?: string;
   address?: string;
@@ -189,6 +192,9 @@ export interface ICustomer {
 const CustomerSchema = new Schema<ICustomer>({
   code: { type: String, required: true, unique: true, uppercase: true, trim: true },
   name: { type: String, required: true, trim: true },
+  contactPerson: String,
+  cnic: String,
+  notes: String,
   email: String,
   phone: String,
   address: String,
@@ -208,6 +214,9 @@ export const Customer =
 export interface ISupplier {
   code: string;
   name: string;
+  contactPerson?: string;
+  cnic?: string;
+  notes?: string;
   email?: string;
   phone?: string;
   address?: string;
@@ -224,6 +233,9 @@ export interface ISupplier {
 const SupplierSchema = new Schema<ISupplier>({
   code: { type: String, required: true, unique: true, uppercase: true, trim: true },
   name: { type: String, required: true, trim: true },
+  contactPerson: String,
+  cnic: String,
+  notes: String,
   email: String,
   phone: String,
   address: String,

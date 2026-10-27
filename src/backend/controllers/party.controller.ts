@@ -42,6 +42,10 @@ export const partyController = {
         const parsed = {
           code: body.code,
           name: body.name,
+          contactPerson: body.contactPerson,
+          cnic: body.cnic,
+          notes: body.notes,
+          groupCode: body.groupCode,
           email: body.email,
           phone: body.phone,
           address: body.address,
@@ -57,6 +61,10 @@ export const partyController = {
       const parsed = {
         code: body.code,
         name: body.name,
+        contactPerson: body.contactPerson,
+        cnic: body.cnic,
+        notes: body.notes,
+        groupCode: body.groupCode,
         email: body.email,
         phone: body.phone,
         address: body.address,
