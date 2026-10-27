@@ -120,6 +120,7 @@ const navGroups: NavGroup[] = [
                 { href: "/accounting?tab=pnl&node=income-statement", label: "Income Statement" },
                 { href: "/accounting?tab=balance&node=balance-sheet", label: "Balance Sheet" },
                 { href: "/accounting?tab=cashflow&node=cash-flow", label: "Cash Flow Statement" },
+                { href: "/accounting?tab=equity&node=changes-in-equity", label: "Changes in Equity" },
                 { href: "/accounting?tab=bank&node=bank-reconciliation", label: "Bank Reconciliation" },
                 { href: "/accounting?tab=overview&node=accounting-reports", label: "Accounting Reports" },
               ],

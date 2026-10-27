@@ -290,6 +290,7 @@ export function QbVoucher({
   const [lines, setLines] = useState<Line[]>([blankLine(), blankLine()]);
   const [jlines, setJLines] = useState<JLine[]>([blankJLine(), blankJLine()]);
   const [memo, setMemo] = useState("");
+  const [adjusting, setAdjusting] = useState(false);
   const [adding, setAdding] = useState<AddKind | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -394,6 +395,7 @@ export function QbVoucher({
     setRef("");
     setCheque("");
     setMemo("");
+    setAdjusting(false);
     setContraAmount("");
     setLines([blankLine(), blankLine()]);
     setJLines([blankJLine(), blankJLine()]);
@@ -466,6 +468,7 @@ export function QbVoucher({
       taxAmount: 0,
       items: [],
       lines: voucherLines,
+      isAdjusting: mode === "jv" ? adjusting : undefined,
       postNow: true,
     };
   }
@@ -791,6 +794,12 @@ export function QbVoucher({
           <div className="qb-memo">
             <label>Memo / Narration</label>
             <textarea className="qb-in" rows={3} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="What was this for?" />
+            {mode === "jv" ? (
+              <label className="check-row" style={{ marginTop: 8 }}>
+                <input type="checkbox" checked={adjusting} onChange={(e) => setAdjusting(e.target.checked)} />
+                Adjusting entry (period-end: accruals, prepayments, depreciation) — shown in the Adjusted Trial Balance
+              </label>
+            ) : null}
           </div>
           {mode !== "jv" ? (
             <div className="qb-totals">

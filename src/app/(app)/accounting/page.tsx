@@ -15,6 +15,7 @@ import {
 import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
 import { PartyLedger } from "@/components/accounting/PartyLedger";
 import { CoaSetup, type CoaAccount } from "@/components/accounting/CoaSetup";
+import { AdjustedTrialBalance, EquityStatement, FullLedgerReport, ProfitDistribution, type Distribution } from "@/components/accounting/Reports";
 import { QbVoucher, type QbMode } from "@/components/accounting/QbVoucher";
 
 type Account = {
@@ -97,6 +98,7 @@ type Tab =
   | "pnl"
   | "balance"
   | "cashflow"
+  | "equity"
   | "bank";
 
 type ReportGroup = {
@@ -108,18 +110,6 @@ type ReportGroup = {
 
 type Section = { groups: ReportGroup[]; total: number };
 
-type LedgerRow = {
-  voucherId: string;
-  number: string;
-  voucherType: string;
-  date: string;
-  narration: string;
-  partyName?: string;
-  contra: string;
-  debit: number;
-  credit: number;
-  balance: number;
-};
 
 type AuditEventItem = {
   _id: string;
@@ -197,17 +187,17 @@ export default function AccountingPage() {
   const [branch, setBranch] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [ledgerCode, setLedgerCode] = useState("");
-  const [ledger, setLedger] = useState<{
-    account?: { code: string; name: string; type: string };
-    openingBalance: number;
-    rows: LedgerRow[];
-    totalDebit: number;
-    totalCredit: number;
-    closingBalance: number;
-  } | null>(null);
+  const [adjustedTb, setAdjustedTb] = useState(false);
   const [dayBook, setDayBook] = useState<Voucher[]>([]);
-  const [pnl, setPnl] = useState<{ income: Section; expense: Section; surplus: number } | null>(
+  const [pnl, setPnl] = useState<{
+    income: Section;
+    expense: Section;
+    cogs?: Section;
+    operating?: Section;
+    grossProfit: number;
+    surplus: number;
+    distribution?: Distribution;
+  } | null>(
     null
   );
   const [cashFlow, setCashFlow] = useState<{
@@ -279,6 +269,7 @@ export default function AccountingPage() {
       "income-statement": { section: "Reports", leaf: "Income Statement" },
       "balance-sheet": { section: "Reports", leaf: "Balance Sheet" },
       "cash-flow": { section: "Reports", leaf: "Cash Flow Statement" },
+      "changes-in-equity": { section: "Reports", leaf: "Changes in Equity" },
       "bank-reconciliation": { section: "Reports", leaf: "Bank Reconciliation" },
       "accounting-reports": { section: "Reports", leaf: "Accounting Reports" },
     };
@@ -303,6 +294,7 @@ export default function AccountingPage() {
     if (navNode === "income-statement") return "Income Statement";
     if (navNode === "balance-sheet") return "Balance Sheet";
     if (navNode === "cash-flow") return "Cash Flow Statement";
+    if (navNode === "changes-in-equity") return "Statement of Changes in Equity";
     if (navNode === "bank-reconciliation") return "Bank Reconciliation";
     if (navNode === "accounting-reports") return "Accounting Reports";
     return "Accounting & Finance";
@@ -321,13 +313,14 @@ export default function AccountingPage() {
     }
     if (navNode === "chart-of-accounts") return "Six main heads, five levels — choose step by step and the code is filled in for you.";
     if (navNode === "party-ledger") return "Khata of any account — supplier, customer, bank, cash or expense — between two dates.";
-    if (navNode === "general-ledger") return "View account-wise ledger movement and balances.";
+    if (navNode === "general-ledger") return "Whole ledger — every account with opening, each posting date-wise and closing. Pick one account to narrow it.";
     if (navNode === "cash-book") return "Daily cash movement with opening and closing position.";
     if (navNode === "bank-book") return "Daily bank movement and reconciliation-ready balances.";
     if (navNode === "trial-balance") return "Debit and credit position across all posting accounts.";
     if (navNode === "income-statement") return "Income and expense statement for selected period.";
     if (navNode === "balance-sheet") return "Assets, liabilities and equity position for selected period.";
     if (navNode === "cash-flow") return "Cash received and paid, split into operating, investing and financing activities.";
+    if (navNode === "changes-in-equity") return "Each owner's capital: opening, money introduced, share of profit by %, drawings and closing.";
     if (navNode === "bank-reconciliation") return "Unreconciled bank entries and WHT monitoring.";
     if (navNode === "accounting-reports") return "Summary reporting view across core accounting books.";
     return "5-level chart of accounts · double-entry vouchers · invoices · branch books";
@@ -366,6 +359,7 @@ export default function AccountingPage() {
       "income-statement": "pnl",
       "balance-sheet": "balance",
       "cash-flow": "cashflow",
+      "changes-in-equity": "equity",
       "bank-reconciliation": "bank",
     };
     return byNode[navNode] || tab;
@@ -374,7 +368,7 @@ export default function AccountingPage() {
   const isDashboardNode = navNode === "accounting-dashboard";
 
   const needsPeriodControls = useMemo(
-    () => ["party-ledger", "general-ledger", "cash-book", "bank-book", "trial-balance", "income-statement", "balance-sheet", "cash-flow", "bank-reconciliation", "accounting-reports"].includes(navNode),
+    () => ["party-ledger", "general-ledger", "cash-book", "bank-book", "trial-balance", "income-statement", "balance-sheet", "cash-flow", "changes-in-equity", "bank-reconciliation", "accounting-reports"].includes(navNode),
     [navNode]
   );
 
@@ -545,32 +539,6 @@ export default function AccountingPage() {
     load();
   }, [load]);
 
-  const loadLedger = useCallback(async () => {
-    if (!ledgerCode) {
-      setLedger(null);
-      return;
-    }
-    const params = new URLSearchParams({ view: "general-ledger", account: ledgerCode });
-    if (branch) params.set("branch", branch);
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
-    const data = await fetch(`/api/accounting?${params}`).then((r) => r.json());
-    setLedger(data.account ? data : null);
-  }, [ledgerCode, branch, from, to]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadLedger();
-  }, [loadLedger]);
-
-  const printStatement = (code: string) => {
-    const params = new URLSearchParams({ account: code });
-    if (branch) params.set("branch", branch);
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
-    window.open(`/print/ledger?${params}`, "_blank");
-  };
-
   useEffect(() => {
     const requestedTab = searchParams.get("tab") as Tab | null;
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -583,8 +551,6 @@ export default function AccountingPage() {
     () => accounts.filter((account) => account.isPosting && account.isActive),
     [accounts]
   );
-
-  const ledgerAccounts = postingAccounts;
 
   const reportHeadingTitle = useMemo(() => {
     if (navNode === "party-ledger") return "Party Ledger";
@@ -1541,6 +1507,15 @@ export default function AccountingPage() {
       ) : null}
 
       {activeTab === "trial" ? (
+        <div className="chips no-print" style={{ marginBottom: 12 }}>
+          <button type="button" className={`filter-chip${!adjustedTb ? " active" : ""}`} onClick={() => setAdjustedTb(false)}>Trial balance</button>
+          <button type="button" className={`filter-chip${adjustedTb ? " active" : ""}`} onClick={() => setAdjustedTb(true)}>Adjusted trial balance</button>
+        </div>
+      ) : null}
+
+      {activeTab === "trial" && adjustedTb ? <AdjustedTrialBalance period={{ branch, from, to }} /> : null}
+
+      {activeTab === "trial" && !adjustedTb ? (
         <Panel
           title="Trial Balance"
           meta={`${trial.rows.length} ACCOUNTS · ${trial.totalDebit === trial.totalCredit ? "BALANCED" : "OUT OF BALANCE"}`}
@@ -1606,83 +1581,7 @@ export default function AccountingPage() {
       ) : null}
 
       {activeTab === "ledger" && navNode !== "party-ledger" ? (
-        <Panel
-          title="General Ledger"
-          meta={ledger?.account ? `${ledger.account.code} · ${ledger.account.name}` : "SELECT ACCOUNT"}
-        >
-          <div className="chips no-print" style={{ marginBottom: 14 }}>
-            <select
-              className={inputClass}
-              value={ledgerCode}
-              onChange={(e) => setLedgerCode(e.target.value)}
-            >
-              <option value="">Select a posting account…</option>
-              {ledgerAccounts.map((a) => (
-                <option key={a.code} value={a.code}>
-                  {a.code} — {a.name}
-                </option>
-              ))}
-            </select>
-            {ledger?.account ? (
-              <button type="button" className="btn-dark" onClick={() => printStatement(ledgerCode)}>Print statement</button>
-            ) : null}
-          </div>
-          {!ledger ? (
-            <EmptyState
-              message="Choose a posting account to view its ledger with running balance."
-            />
-          ) : (
-            <div className="table-scroll">
-              <table className="reg report-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Voucher</th>
-                    <th>Particulars</th>
-                    <th className="right">Debit</th>
-                    <th className="right">Credit</th>
-                    <th className="right">Balance</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td colSpan={3}><strong>Opening balance b/f</strong></td>
-                    <td className="num">—</td>
-                    <td className="num">—</td>
-                    <td className="num"><strong>{signedBalance(ledger.openingBalance)}</strong></td>
-                  </tr>
-                  {ledger.rows.map((row, index) => (
-                    <tr key={`${row.voucherId}-${index}`}>
-                      <td className="num">{prettyDate(row.date)}</td>
-                      <td>
-                        <div className="num">{row.number}</div>
-                        <div style={{ fontSize: 10.5, color: "var(--text-dim)" }}>
-                          {voucherLabels[row.voucherType]}
-                        </div>
-                      </td>
-                      <td>
-                        <div>{row.narration}</div>
-                        <div style={{ fontSize: 10.5, color: "var(--text-dim)" }}>
-                          To: {row.contra || "—"}
-                          {row.partyName ? ` · ${row.partyName}` : ""}
-                        </div>
-                      </td>
-                      <td className="num">{amount(row.debit)}</td>
-                      <td className="num">{amount(row.credit)}</td>
-                      <td className="num">{signedBalance(row.balance)}</td>
-                    </tr>
-                  ))}
-                  <tr className="total-row">
-                    <td colSpan={3}><strong>TOTAL / CLOSING</strong></td>
-                    <td className="num"><strong>{formatNumber(ledger.totalDebit)}</strong></td>
-                    <td className="num"><strong>{formatNumber(ledger.totalCredit)}</strong></td>
-                    <td className="num"><strong>{signedBalance(ledger.closingBalance)}</strong></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Panel>
+        <FullLedgerReport period={{ branch, from, to }} accounts={accounts} />
       ) : null}
 
       {activeTab === "daybook" ? (
@@ -1736,21 +1635,33 @@ export default function AccountingPage() {
       ) : null}
 
       {activeTab === "pnl" ? (
-        <Panel title="Income & Expenditure Statement" meta={pnl ? (pnl.surplus >= 0 ? "SURPLUS" : "DEFICIT") : ""}>
+        <Panel title="Income Statement (Profit & Loss)" meta={pnl ? (pnl.surplus >= 0 ? "NET PROFIT" : "NET LOSS") : ""}>
           {!pnl ? (
             <EmptyState message="No posted income or expenditure in this period." />
           ) : (
             <>
-              <SectionTable title="Income" section={pnl.income} />
-              <SectionTable title="Expenditure" section={pnl.expense} />
+              <SectionTable title="Revenue" section={pnl.income} />
+              {pnl.cogs?.groups.length ? (
+                <>
+                  <SectionTable title="Cost of Goods Sold" section={pnl.cogs} />
+                  <div className={`statement-result${pnl.grossProfit >= 0 ? " ok" : " bad"}`}>
+                    <span>Gross {pnl.grossProfit >= 0 ? "profit" : "loss"}</span>
+                    <strong>{formatNumber(Math.abs(pnl.grossProfit))}</strong>
+                  </div>
+                </>
+              ) : null}
+              <SectionTable title="Operating Expenses" section={pnl.operating || pnl.expense} />
               <div className={`statement-result${pnl.surplus >= 0 ? " ok" : " bad"}`}>
-                <span>{pnl.surplus >= 0 ? "Surplus for the period" : "Deficit for the period"}</span>
+                <span>{pnl.surplus >= 0 ? "Net profit for the period" : "Net loss for the period"}</span>
                 <strong>{formatNumber(Math.abs(pnl.surplus))}</strong>
               </div>
+              {pnl.distribution ? <ProfitDistribution distribution={pnl.distribution} /> : null}
             </>
           )}
         </Panel>
       ) : null}
+
+      {activeTab === "equity" ? <EquityStatement period={{ branch, from, to }} /> : null}
 
       {activeTab === "cashflow" ? (
         <Panel
@@ -2254,9 +2165,10 @@ const REPORT_TITLES: Record<Tab, string> = {
   ledger: "General Ledger",
   daybook: "Day Book",
   trial: "Trial Balance",
-  pnl: "Income & Expenditure Statement",
+  pnl: "Income Statement (Profit & Loss)",
   balance: "Statement of Financial Position",
   cashflow: "Statement of Cash Flows",
+  equity: "Statement of Changes in Equity",
   bank: "Bank Reconciliation & WHT",
 };
 
@@ -2299,10 +2211,6 @@ function amount(value: number) {
   return value ? formatNumber(value) : "—";
 }
 
-function signedBalance(value: number) {
-  if (!value) return "0.00";
-  return `${formatNumber(Math.abs(value))} ${value > 0 ? "Dr" : "Cr"}`;
-}
 
 function ReportHeading({
   title,

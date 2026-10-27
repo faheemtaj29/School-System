@@ -334,7 +334,69 @@ function mapMethod(method?: string): "cash" | "bank" | "online" | "cheque" | und
   return "cash";
 }
 
+/** Postings made by stock vouchers show the bill / invoice number people know, not the JV number. */
+async function stockDocNumbers(vouchers: { sourceType?: string; sourceId?: unknown }[]) {
+  const ids = vouchers
+    .filter((v) => v.sourceType === "inventory" && v.sourceId && /^[a-f0-9]{24}$/i.test(String(v.sourceId)))
+    .map((v) => String(v.sourceId));
+  const docs = ids.length ? await StockVoucher.find({ _id: { $in: ids } }).select("number").lean() : [];
+  return new Map(docs.map((d) => [String(d._id), d.number as string]));
+}
+
+/** School letterhead for printed reports, and the campus name for a branch code. */
+async function printHeader(branchCode?: string | null) {
+  const s = await Settings.findOne().select("schoolName address phone email currency logoUpdatedAt branches").lean();
+  const code = branchCode ? branchCode.toUpperCase() : "";
+  const branch = code ? (s?.branches || []).find((b: { code: string; name: string }) => b.code === code) : null;
+  return {
+    branchName: branch?.name || code || "All campuses",
+    school: {
+      name: s?.schoolName || "School",
+      address: s?.address || "",
+      phone: s?.phone || "",
+      email: s?.email || "",
+      currency: s?.currency || "PKR",
+      logoUrl: s?.logoUpdatedAt ? `/api/settings/logo?v=${new Date(s.logoUpdatedAt).getTime()}` : null,
+    },
+  };
+}
+
+/**
+ * Opening balances typed on accounts (debit positive). Whatever they don't balance by goes to
+ * Opening Balance Equity — as QuickBooks does — so the trial balance always agrees.
+ */
+async function typedOpenings() {
+  const list = await Account.find({ openingBalance: { $gt: 0 } }).select("code openingBalance openingBalanceSide").lean();
+  const map = new Map<string, number>();
+  let net = 0;
+  for (const a of list) {
+    const v = a.openingBalanceSide === "debit" ? a.openingBalance : -a.openingBalance;
+    map.set(a.code, v);
+    net += v;
+  }
+  if (Math.abs(net) > 0.004) {
+    const obe = await accountingService.ensureAccount({
+      systemKey: "openingEquity",
+      code: "31010102",
+      name: "Opening Balance Equity",
+      type: "equity",
+      level: 5,
+      parentCode: "310101",
+      isPosting: true,
+    });
+    map.set(obe.code, round((map.get(obe.code) || 0) - net));
+  }
+  return map;
+}
+
+/** Main head holding cost of goods sold; it is reported above gross profit. */
+const COGS_HEAD = "6";
+
 let laterSeedChecked = false;
+
+/** Partners' capital accounts live here (level 4); their drawings under DRAWINGS_GROUP. */
+const PARTNER_GROUP = "310102";
+const DRAWINGS_GROUP = "310201";
 
 async function ensureSeeded() {
   await dbConnect();
@@ -619,6 +681,7 @@ async function createDoubleEntryVoucher(
     partyName: data.partyName || undefined,
     narration: data.narration,
     reference: data.reference,
+    isAdjusting: data.voucherType === "journal" && Boolean(data.isAdjusting),
     currency: settings.currency || "PKR",
     subtotal: invoice?.subtotal || checked.total,
     discountAmount: data.discountAmount,
@@ -707,7 +770,18 @@ export const accountingService = {
     if (await Account.exists({ parentCode: parentCode ?? null, name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") })) {
       throw new ServiceError("CONFLICT", `“${name}” already exists at this place in the chart`, 409);
     }
-    return Account.create({
+    // Partners: shares can't add up to more than 100%, and each partner gets a drawings account.
+    const isPartner = parentCode === PARTNER_GROUP && data.level === 5;
+    if (isPartner) {
+      const share = Number(data.details?.sharePercent || 0);
+      if (share <= 0) throw new ServiceError("VALIDATION", "Enter the partner's profit share %", 400);
+      const others = await Account.find({ parentCode: PARTNER_GROUP, isActive: true }).select("details").lean();
+      const used = others.reduce((t, a) => t + Number(a.details?.sharePercent || 0), 0);
+      if (used + share > 100.0001) {
+        throw new ServiceError("VALIDATION", `Shares would total ${round(used + share)}% — only ${round(100 - used)}% is left`, 400);
+      }
+    }
+    const created = await Account.create({
       ...data,
       code,
       name,
@@ -716,6 +790,22 @@ export const accountingService = {
       accountNumber: data.isCashBank ? data.accountNumber || undefined : undefined,
       nature: data.type === "asset" || data.type === "expense" ? "debit" : "credit",
     });
+    if (isPartner && (await Account.exists({ code: DRAWINGS_GROUP }))) {
+      await Account.create({
+        code: await this.nextAccountCode(DRAWINGS_GROUP),
+        name: `${name} – Drawings`,
+        type: "equity",
+        nature: "credit",
+        level: 5,
+        parentCode: DRAWINGS_GROUP,
+        isControl: false,
+        isPosting: true,
+        isCashBank: false,
+        isActive: true,
+        details: { partnerOf: code },
+      });
+    }
+    return created;
   },
 
   async setAccountActive(id: string, isActive: boolean) {
@@ -911,12 +1001,7 @@ export const accountingService = {
       .populate("postedBy", "name")
       .lean();
     if (!voucher) throw new ServiceError("NOT_FOUND", "Voucher not found", 404);
-    const s = await Settings.findOne()
-      .select("schoolName address phone email currency logoUpdatedAt branches")
-      .lean();
-    const branch = (s?.branches || []).find(
-      (b: { code: string; name: string }) => b.code === voucher.branchCode
-    );
+    const header = await printHeader(voucher.branchCode);
     const codes = (voucher.lines || []).map((l: { accountCode: string }) => l.accountCode);
     const accs = await Account.find({ code: { $in: codes } })
       .select("code name isCashBank bankName accountNumber type")
@@ -938,15 +1023,7 @@ export const accountingService = {
           };
         }),
       },
-      branchName: branch?.name || voucher.branchCode,
-      school: {
-        name: s?.schoolName || "School",
-        address: s?.address || "",
-        phone: s?.phone || "",
-        email: s?.email || "",
-        currency: s?.currency || "PKR",
-        logoUrl: s?.logoUpdatedAt ? `/api/settings/logo?v=${new Date(s.logoUpdatedAt).getTime()}` : null,
-      },
+      ...header,
     };
   },
 
@@ -1291,6 +1368,7 @@ export const accountingService = {
       };
     }
 
+    const typed = await typedOpenings();
     const [openingMovement, periodMovement, accounts] = await Promise.all([
       from ? movementsByAccount({ ...base, date: { $lt: from } }) : emptyMovements(),
       movementsByAccount(periodMatch),
@@ -1301,13 +1379,7 @@ export const accountingService = {
       .map((account) => {
         const opened = openingMovement.get(account.code) || { debit: 0, credit: 0 };
         const moved = periodMovement.get(account.code) || { debit: 0, credit: 0 };
-        let openingNet = opened.debit - opened.credit;
-        if (account.openingBalance) {
-          openingNet +=
-            account.openingBalanceSide === "debit"
-              ? account.openingBalance
-              : -account.openingBalance;
-        }
+        const openingNet = opened.debit - opened.credit + (typed.get(account.code) || 0);
         const periodDebit = round(moved.debit);
         const periodCredit = round(moved.credit);
         const closingNet = round(openingNet + periodDebit - periodCredit);
@@ -1405,10 +1477,238 @@ export const accountingService = {
 
     const income = buildSection("income");
     const expense = buildSection("expense");
+    // Main head 6 (cost of goods sold) is shown above gross profit; other expenses below it.
+    const isCogs = (g: ReportGroup) => g.code.startsWith(COGS_HEAD);
+    const cogsGroups = expense.groups.filter(isCogs);
+    const opGroups = expense.groups.filter((g) => !isCogs(g));
+    const cogs = { groups: cogsGroups, total: round(cogsGroups.reduce((t, g) => t + g.total, 0)) };
+    const operating = { groups: opGroups, total: round(opGroups.reduce((t, g) => t + g.total, 0)) };
+    const surplus = round(income.total - expense.total);
     return {
       income,
       expense,
-      surplus: round(income.total - expense.total),
+      cogs,
+      operating,
+      grossProfit: round(income.total - cogs.total),
+      surplus,
+      distribution: await this.profitDistribution(surplus),
+    };
+  },
+
+  /** Partners with their profit-share %, from the chart of accounts. */
+  async partners() {
+    await ensureSeeded();
+    const capital = await Account.find({ parentCode: PARTNER_GROUP, level: 5, isActive: true })
+      .sort({ code: 1 })
+      .lean();
+    const withShare = capital.filter((a) => Number(a.details?.sharePercent || 0) > 0);
+    const drawings = await Account.find({ "details.partnerOf": { $in: withShare.map((a) => a.code) } })
+      .select("code details")
+      .lean();
+    return withShare.map((a) => ({
+      code: a.code,
+      name: a.name,
+      sharePercent: Number(a.details?.sharePercent || 0),
+      drawingsCode: drawings.find((d) => d.details?.partnerOf === a.code)?.code || null,
+    }));
+  },
+
+  /** Splits a profit (or loss) between partners by share; anything not shared stays as retained. */
+  async profitDistribution(profit: number) {
+    const partners = await this.partners();
+    const rows = partners.map((p) => ({
+      code: p.code,
+      name: p.name,
+      sharePercent: p.sharePercent,
+      amount: round((profit * p.sharePercent) / 100),
+    }));
+    const shared = round(rows.reduce((t, r) => t + r.amount, 0));
+    return {
+      profit,
+      partners: rows,
+      totalShare: round(partners.reduce((t, p) => t + p.sharePercent, 0)),
+      retained: round(profit - shared),
+    };
+  },
+
+  /**
+   * Statement of changes in equity: for each partner — opening capital, capital introduced,
+   * share of profit, drawings and closing; other equity (retained surplus etc.) on its own line.
+   */
+  async equityStatement(range: ReportRange = {}) {
+    await ensureSeeded();
+    const { from, to } = rangeDates(range);
+    const base = baseMatch(range.branchCode);
+    const periodMatch: Record<string, unknown> = { ...base };
+    if (from || to) periodMatch.date = { ...(from ? { $gte: from } : {}), ...(to ? { $lte: to } : {}) };
+    const [before, during, equityAccounts, pnl, partners] = await Promise.all([
+      from ? movementsByAccount({ ...base, date: { $lt: from } }) : emptyMovements(),
+      movementsByAccount(periodMatch),
+      Account.find({ type: "equity", isPosting: true }).lean(),
+      this.profitAndLoss(range),
+      this.partners(),
+    ]);
+    const typed = await typedOpenings();
+    const credit = (m: Map<string, Movement>, code?: string | null) => {
+      if (!code) return 0;
+      const v = m.get(code);
+      return v ? v.credit - v.debit : 0;
+    };
+    const openingOf = (code?: string | null) => {
+      if (!code) return 0;
+      return -(typed.get(code) || 0) + credit(before, code);
+    };
+    const profit = pnl.surplus;
+    const partnerCodes = new Set(partners.flatMap((p) => [p.code, p.drawingsCode || ""]));
+    const rows = partners.map((p) => {
+      const opening = round(openingOf(p.code) + openingOf(p.drawingsCode));
+      const introduced = round(credit(during, p.code));
+      const drawings = round(-credit(during, p.drawingsCode));
+      const share = round((profit * p.sharePercent) / 100);
+      return {
+        code: p.code,
+        name: p.name,
+        sharePercent: p.sharePercent,
+        opening,
+        introduced,
+        profit: share,
+        drawings,
+        closing: round(opening + introduced + share - drawings),
+      };
+    });
+    const others = equityAccounts.filter((a) => !partnerCodes.has(a.code));
+    const otherOpening = round(others.reduce((t, a) => t + openingOf(a.code), 0));
+    const otherMoves = round(others.reduce((t, a) => t + credit(during, a.code), 0));
+    const retainedProfit = round(profit - rows.reduce((t, r) => t + r.profit, 0));
+    rows.push({
+      code: "",
+      name: partners.length ? "Retained / other equity" : "Capital, reserves & retained surplus",
+      sharePercent: round(Math.max(0, 100 - partners.reduce((t, p) => t + p.sharePercent, 0))),
+      opening: otherOpening,
+      introduced: otherMoves,
+      profit: retainedProfit,
+      drawings: 0,
+      closing: round(otherOpening + otherMoves + retainedProfit),
+    });
+    const sum = (k: "opening" | "introduced" | "profit" | "drawings" | "closing") => round(rows.reduce((t, r) => t + r[k], 0));
+    return {
+      profit,
+      rows,
+      totals: { opening: sum("opening"), introduced: sum("introduced"), profit: sum("profit"), drawings: sum("drawings"), closing: sum("closing") },
+    };
+  },
+
+  /**
+   * Adjusted trial balance: unadjusted balances, the period's adjusting entries,
+   * and the adjusted balances side by side.
+   */
+  async adjustedTrialBalance(range: ReportRange = {}) {
+    const tb = await this.trialBalance(range);
+    const { from, to } = rangeDates(range);
+    const match: Record<string, unknown> = { ...baseMatch(range.branchCode), isAdjusting: true };
+    if (from || to) match.date = { ...(from ? { $gte: from } : {}), ...(to ? { $lte: to } : {}) };
+    const adj = await movementsByAccount(match);
+    const rows = tb.rows.map((r) => {
+      const a = adj.get(r.code) || { debit: 0, credit: 0 };
+      const adjustedNet = r.debit - r.credit;
+      const unadjustedNet = round(adjustedNet - (a.debit - a.credit));
+      return {
+        code: r.code,
+        name: r.name,
+        type: r.type,
+        unadjustedDebit: unadjustedNet > 0 ? unadjustedNet : 0,
+        unadjustedCredit: unadjustedNet < 0 ? -unadjustedNet : 0,
+        adjDebit: round(a.debit),
+        adjCredit: round(a.credit),
+        debit: r.debit,
+        credit: r.credit,
+      };
+    });
+    const sum = (k: keyof (typeof rows)[number]) => round(rows.reduce((t, r) => t + Number(r[k] || 0), 0));
+    return {
+      rows,
+      totals: {
+        unadjustedDebit: sum("unadjustedDebit"),
+        unadjustedCredit: sum("unadjustedCredit"),
+        adjDebit: sum("adjDebit"),
+        adjCredit: sum("adjCredit"),
+        debit: sum("debit"),
+        credit: sum("credit"),
+      },
+    };
+  },
+
+  /**
+   * Whole general ledger (QuickBooks-style): every account with activity, each with its
+   * opening balance, every posting date-wise with running balance, and closing balance.
+   */
+  async fullLedger(range: ReportRange & { accountCode?: string | null; head?: string | null } = {}) {
+    await ensureSeeded();
+    const { from, to } = rangeDates(range);
+    const base = baseMatch(range.branchCode);
+    const query: Record<string, unknown> = { ...base };
+    if (from || to) query.date = { ...(from ? { $gte: from } : {}), ...(to ? { $lte: to } : {}) };
+    const [before, accounts, vouchers] = await Promise.all([
+      from ? movementsByAccount({ ...base, date: { $lt: from } }) : emptyMovements(),
+      Account.find({ isPosting: true }).sort({ code: 1 }).lean(),
+      Voucher.find(query).sort({ date: 1, number: 1 }).limit(10000).lean(),
+    ]);
+    const docNumber = await stockDocNumbers(vouchers);
+    const typed = await typedOpenings();
+    type Row = { voucherId: string; number: string; docLink: string; date: Date; narration: string; contra: string; debit: number; credit: number; balance: number };
+    const byAccount = new Map<string, Row[]>();
+    for (const v of vouchers) {
+      for (const line of v.lines as { accountCode: string; accountName?: string; debit: number; credit: number; narration?: string }[]) {
+        const list = byAccount.get(line.accountCode) || [];
+        const doc = docNumber.get(String(v.sourceId));
+        list.push({
+          voucherId: String(v._id),
+          number: doc || v.number,
+          docLink: doc ? `/print/stock-voucher?id=${v.sourceId}` : `/print/voucher?id=${v._id}`,
+          date: v.date,
+          narration: line.narration || v.narration,
+          contra: (v.lines as { accountCode: string; accountName?: string }[])
+            .filter((l) => l.accountCode !== line.accountCode)
+            .map((l) => l.accountName || l.accountCode)
+            .join(", "),
+          debit: round(line.debit || 0),
+          credit: round(line.credit || 0),
+          balance: 0,
+        });
+        byAccount.set(line.accountCode, list);
+      }
+    }
+    const result = [];
+    for (const a of accounts) {
+      if (range.accountCode && a.code !== range.accountCode) continue;
+      if (range.head && !a.code.startsWith(range.head)) continue;
+      const opened = before.get(a.code) || { debit: 0, credit: 0 };
+      let balance = opened.debit - opened.credit + (typed.get(a.code) || 0);
+      const opening = round(balance);
+      const rows = byAccount.get(a.code) || [];
+      if (!rows.length && !opening) continue;
+      for (const r of rows) {
+        balance = round(balance + r.debit - r.credit);
+        r.balance = balance;
+      }
+      result.push({
+        code: a.code,
+        name: a.name,
+        type: a.type,
+        opening,
+        rows,
+        totalDebit: round(rows.reduce((t, r) => t + r.debit, 0)),
+        totalCredit: round(rows.reduce((t, r) => t + r.credit, 0)),
+        closing: round(balance),
+      });
+    }
+    return {
+      ...(await printHeader(range.branchCode)),
+      from: range.from || null,
+      to: range.to || null,
+      accounts: result,
+      totalDebit: round(result.reduce((t, a) => t + a.totalDebit, 0)),
+      totalCredit: round(result.reduce((t, a) => t + a.totalCredit, 0)),
     };
   },
 
@@ -1566,13 +1866,7 @@ export const accountingService = {
     const opened = from
       ? (await movementsByAccount({ ...base, date: { $lt: from } })).get(account.code)
       : undefined;
-    let balance = (opened?.debit || 0) - (opened?.credit || 0);
-    if (account.openingBalance) {
-      balance +=
-        account.openingBalanceSide === "debit"
-          ? account.openingBalance
-          : -account.openingBalance;
-    }
+    let balance = (opened?.debit || 0) - (opened?.credit || 0) + ((await typedOpenings()).get(account.code) || 0);
     const openingBalance = round(balance);
 
     const query: Record<string, unknown> = {
@@ -1587,14 +1881,7 @@ export const accountingService = {
       .limit(1000)
       .lean();
 
-    // Postings made by stock vouchers show the bill / invoice number people know, not the JV number.
-    const stockIds = vouchers
-      .filter((v) => v.sourceType === "inventory" && v.sourceId && /^[a-f0-9]{24}$/i.test(String(v.sourceId)))
-      .map((v) => String(v.sourceId));
-    const stockDocs = stockIds.length
-      ? await StockVoucher.find({ _id: { $in: stockIds } }).select("number").lean()
-      : [];
-    const stockNumber = new Map(stockDocs.map((d) => [String(d._id), d.number as string]));
+    const stockNumber = await stockDocNumbers(vouchers);
 
     const rows: {
       voucherId: string;
@@ -1655,14 +1942,11 @@ export const accountingService = {
 
   /** Account statement for printing: the ledger plus school letterhead details. */
   async ledgerStatement(range: ReportRange & { accountCode: string }) {
-    const [ledger, s, acc] = await Promise.all([
+    const [ledger, header, acc] = await Promise.all([
       this.generalLedger(range),
-      Settings.findOne().select("schoolName address phone email currency logoUpdatedAt branches").lean(),
+      printHeader(range.branchCode),
       Account.findOne({ code: range.accountCode }).select("bankName accountNumber partyType").lean(),
     ]);
-    const branch = range.branchCode
-      ? (s?.branches || []).find((b: { code: string; name: string }) => b.code === range.branchCode?.toUpperCase())
-      : null;
     return {
       ...ledger,
       account: {
@@ -1673,15 +1957,7 @@ export const accountingService = {
       },
       from: range.from || null,
       to: range.to || null,
-      branchName: branch?.name || (range.branchCode ? range.branchCode : "All campuses"),
-      school: {
-        name: s?.schoolName || "School",
-        address: s?.address || "",
-        phone: s?.phone || "",
-        email: s?.email || "",
-        currency: s?.currency || "PKR",
-        logoUrl: s?.logoUpdatedAt ? `/api/settings/logo?v=${new Date(s.logoUpdatedAt).getTime()}` : null,
-      },
+      ...header,
     };
   },
 
@@ -1698,6 +1974,7 @@ export const accountingService = {
     if (from || to) {
       periodMatch.date = { ...(from ? { $gte: from } : {}), ...(to ? { $lte: to } : {}) };
     }
+    const typed = await typedOpenings();
     const [openingMovement, periodMovement, accounts] = await Promise.all([
       from ? movementsByAccount({ ...base, date: { $lt: from } }) : emptyMovements(),
       movementsByAccount(periodMatch),
@@ -1720,10 +1997,7 @@ export const accountingService = {
     const rows = accounts.map((a) => {
       const opened = openingMovement.get(a.code) || { debit: 0, credit: 0 };
       const moved = periodMovement.get(a.code) || { debit: 0, credit: 0 };
-      let opening = opened.debit - opened.credit;
-      if (a.openingBalance) {
-        opening += a.openingBalanceSide === "debit" ? a.openingBalance : -a.openingBalance;
-      }
+      const opening = opened.debit - opened.credit + (typed.get(a.code) || 0);
       const debit = round(moved.debit);
       const credit = round(moved.credit);
       return {

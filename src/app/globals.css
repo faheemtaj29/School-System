@@ -2902,3 +2902,13 @@ table.qbp-je { width: 100%; border-collapse: collapse; margin-top: 22px; font-si
 @media (max-width: 560px) { .af-grid .af-wide { grid-column: auto; } }
 .qb-dialog.wide { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; }
 .af-grid label, .coa-step { margin: 0 !important; }
+
+/* ================= GENERAL LEDGER REPORT ================= */
+.gl-table .gl-head td { background: var(--paper, #f4f2ea); padding-top: 12px; }
+.gl-table .gl-head span { margin-left: 10px; font-size: 10.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; }
+.gl-table .gl-open td { color: var(--text-dim); font-style: italic; }
+.gl-table .gl-dim { color: var(--text-dim); font-size: 11.5px; }
+.gl-table td a { color: var(--jade-dark); text-decoration: none; }
+.gl-print .gl-head td { background: #f3f6f4; padding-top: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.gl-print .gl-total td { border-top: 1px solid #393a3d; }
+.gl-print td { font-size: 11.5px; padding: 5px 8px; }

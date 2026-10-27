@@ -154,6 +154,8 @@ export const accountSchema = z.object({
       address: z.string().trim().optional(),
       taxNumber: z.string().trim().optional(),
       notes: z.string().trim().optional(),
+      sharePercent: z.coerce.number().min(0).max(100).optional(),
+      cnic: z.string().trim().optional(),
     })
     .optional(),
   type: z.enum(["asset", "liability", "equity", "income", "expense"]),
@@ -202,6 +204,7 @@ export const voucherSchema = z.object({
   partyName: z.string().optional(),
   narration: z.string().min(2),
   reference: z.string().optional(),
+  isAdjusting: z.boolean().optional(),
   discountAmount: z.coerce.number().min(0).default(0),
   taxAmount: z.coerce.number().min(0).default(0),
   items: z.array(invoiceItemSchema).default([]),

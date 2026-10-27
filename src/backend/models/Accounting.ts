@@ -20,6 +20,11 @@ export type AccountDetails = {
   address?: string;
   taxNumber?: string;
   notes?: string;
+  /** Partners / owners: profit-sharing percentage and identity. */
+  sharePercent?: number;
+  cnic?: string;
+  /** A partner's drawings account points back to their capital account code. */
+  partnerOf?: string;
 };
 
 export interface IAccount {
@@ -79,6 +84,9 @@ const AccountSchema = new Schema<IAccount>(
       address: String,
       taxNumber: String,
       notes: String,
+      sharePercent: Number,
+      cnic: String,
+      partnerOf: String,
     },
     isActive: { type: Boolean, default: true },
     systemKey: { type: String, sparse: true, unique: true },
@@ -141,6 +149,8 @@ export interface IVoucher {
   partyName?: string;
   narration: string;
   reference?: string;
+  /** Period-end adjusting entry (accruals, depreciation…) — shown separately in the adjusted trial balance. */
+  isAdjusting?: boolean;
   currency: string;
   subtotal: number;
   discountAmount: number;
@@ -217,6 +227,7 @@ const VoucherSchema = new Schema<IVoucher>(
     partyName: String,
     narration: { type: String, required: true, trim: true },
     reference: String,
+    isAdjusting: { type: Boolean, default: false },
     currency: { type: String, default: "PKR" },
     subtotal: { type: Number, default: 0, min: 0 },
     discountAmount: { type: Number, default: 0, min: 0 },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 /**
  * One set of "new account" forms used everywhere — the Chart of Accounts screen and the "+ Add"
@@ -28,7 +28,7 @@ export type ChartAccount = {
 
 export type CreatedParty = { _id: string; name: string; code?: string; accountCode?: string | null };
 
-export type AccountKind = "bank" | "cash" | "supplier" | "customer" | "utility" | "general";
+export type AccountKind = "bank" | "cash" | "supplier" | "customer" | "utility" | "partner" | "general";
 
 export const LEVEL_NAME = ["", "Main head", "Category", "Group", "Sub-group", "Account"];
 export const TYPE_LABEL: Record<AccountType, string> = {
@@ -47,6 +47,7 @@ export function kindForGroup(groupCode?: string | null): AccountKind {
   if (c.startsWith("110302")) return "customer";
   if (c.startsWith("2103")) return "supplier";
   if (c.startsWith("5202") || c.startsWith("2104")) return "utility";
+  if (c === "310102") return "partner";
   return "general";
 }
 
@@ -64,6 +65,10 @@ export function nextCode(accounts: { code: string }[], parent: { code: string; l
     if (!used.has(code)) return code;
   }
   return "";
+}
+
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
 }
 
 async function postJson(url: string, body: unknown) {
@@ -209,11 +214,12 @@ export function NewAccountForm({
   const [manual, setManual] = useState(false);
   const [code, setCode] = useState("");
   const [opening, setOpening] = useState("");
-  const [openingSide, setOpeningSide] = useState<"debit" | "credit">("debit");
+  const [sideChoice, setOpeningSide] = useState<"debit" | "credit" | null>(null);
   const [details, setDetails] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  const [partners, setPartners] = useState<{ name: string; sharePercent: number }[] | null>(null);
   const byCode = useMemo(() => new Map(accounts.map((a) => [a.code, a])), [accounts]);
   const childrenOf = (parentCode: string | null) =>
     accounts
@@ -228,6 +234,21 @@ export function NewAccountForm({
   const isPostingNew = newLevel === 5;
   const kind: AccountKind = isPostingNew ? kindForGroup(parent?.code) : "general";
   const autoCode = nextCode(accounts, parent);
+  // Opening balance side follows the account's normal side unless the user picks one.
+  const openingSide = sideChoice || (newType === "asset" || newType === "expense" ? "debit" : "credit");
+
+  // Partners: show how much of the 100% profit share is already given out.
+  useEffect(() => {
+    if (kind !== "partner") return;
+    let live = true;
+    fetch("/api/accounting?view=partners")
+      .then((r) => r.json())
+      .then((d) => live && setPartners(d.partners || []));
+    return () => {
+      live = false;
+    };
+  }, [kind, accounts]);
+  const shareUsed = (partners || []).reduce((t, p) => t + p.sharePercent, 0);
   const ready = newHead || (parent && (!postingOnly || parent.level === 4));
 
   function choose(levelIndex: number, value: string) {
@@ -267,6 +288,11 @@ export function NewAccountForm({
     if (kind === "bank" && (!d("bankName") || !d("accountNumber"))) {
       return setMsg({ ok: false, text: "Enter the bank name and account number." });
     }
+    if (kind === "partner") {
+      const share = Number(d("sharePercent"));
+      if (!(share > 0)) return setMsg({ ok: false, text: "Enter the partner's profit share %." });
+      if (shareUsed + share > 100.0001) return setMsg({ ok: false, text: `Only ${100 - shareUsed}% is left to give.` });
+    }
     if (kind === "utility" && !d("consumerNumber")) {
       return setMsg({ ok: false, text: "Enter the consumer / reference number from the bill." });
     }
@@ -286,7 +312,9 @@ export function NewAccountForm({
           isCashBank: kind === "bank" || kind === "cash",
           bankName: kind === "bank" ? bankName : undefined,
           accountNumber: kind === "bank" ? accountNumber : undefined,
-          details: Object.keys(rest).length ? rest : undefined,
+          details: Object.keys(rest).length
+            ? { ...rest, ...(rest.sharePercent ? { sharePercent: Number(rest.sharePercent) } : {}) }
+            : undefined,
           openingBalance: isPostingNew ? Number(opening) || 0 : 0,
           openingBalanceSide: openingSide,
         },
@@ -338,6 +366,14 @@ export function NewAccountForm({
         ))}
       </div>
 
+      {kind === "partner" && partners?.length ? (
+        <div className="coa-existing">
+          <span>Partners now:</span>
+          {partners.map((p) => (
+            <em key={p.name}>{p.name} · {p.sharePercent}%</em>
+          ))}
+        </div>
+      ) : null}
       {parent && parent.level >= 4 && accounts.some((a) => a.parentCode === parent.code) ? (
         <div className="coa-existing">
           <span>Already under {parent.name}:</span>
@@ -386,6 +422,7 @@ export function NewAccountForm({
             {isPostingNew
               ? "Posting account — this is what you pick in vouchers."
               : "Group heading — it holds other accounts below it. Vouchers post to level-5 accounts."}
+            {kind === "partner" ? " A drawings account for this partner is created too. Opening capital is normally a Credit." : ""}
           </p>
           <div className="af-grid">
             <label className="af-wide">
@@ -437,6 +474,16 @@ export function NewAccountForm({
                 <label><span>Consumer / reference no. *</span><input className="qb-in" value={d("consumerNumber")} onChange={setD("consumerNumber")} /></label>
                 <label><span>Meter no.</span><input className="qb-in" value={d("meterNumber")} onChange={setD("meterNumber")} /></label>
                 <label className="af-wide"><span>Connection address</span><input className="qb-in" value={d("address")} onChange={setD("address")} /></label>
+              </>
+            ) : null}
+            {kind === "partner" ? (
+              <>
+                <label>
+                  <span>Profit share % * {partners ? `(${round2(100 - shareUsed)}% left)` : ""}</span>
+                  <input type="number" min={0} max={100} step="0.01" className="qb-in qb-r" value={d("sharePercent")} onChange={setD("sharePercent")} placeholder="e.g. 25" />
+                </label>
+                <label><span>CNIC</span><input className="qb-in" value={d("cnic")} onChange={setD("cnic")} /></label>
+                <label><span>Phone</span><input className="qb-in" value={d("phone")} onChange={setD("phone")} /></label>
               </>
             ) : null}
             {kind === "general" && isPostingNew ? (

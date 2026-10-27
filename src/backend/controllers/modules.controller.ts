@@ -195,6 +195,24 @@ export const accountingController = {
         if (!accountCode) return jsonError("Select an account");
         return jsonOk(await accountingService.ledgerStatement({ ...range, accountCode }));
       }
+      if (view === "equity-statement") {
+        return jsonOk(await accountingService.equityStatement(range));
+      }
+      if (view === "adjusted-trial-balance") {
+        return jsonOk(await accountingService.adjustedTrialBalance(range));
+      }
+      if (view === "full-ledger") {
+        return jsonOk(
+          await accountingService.fullLedger({
+            ...range,
+            accountCode: url.searchParams.get("account"),
+            head: url.searchParams.get("head"),
+          })
+        );
+      }
+      if (view === "partners") {
+        return jsonOk({ partners: await accountingService.partners() });
+      }
       if (view === "ledger-index") {
         return jsonOk(await accountingService.ledgerIndex(range));
       }
