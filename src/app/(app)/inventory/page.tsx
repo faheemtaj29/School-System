@@ -15,6 +15,7 @@ import {
 } from "@/components/ui";
 import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
 import { QbStockVoucher, type StockType } from "@/components/inventory/QbStockVoucher";
+import { StockLedger } from "@/components/inventory/StockLedger";
 
 type Item = {
   _id: string;
@@ -271,7 +272,7 @@ export default function InventoryPage() {
     if (navNode === "warehouses") return "Warehouse and campus stock availability summary.";
     if (navNode === "barcode") return "Printable barcode register for stock items.";
     if (navNode === "product-ledger") return "Item-wise current stock by branch and valuation.";
-    if (navNode === "stock-ledger") return "Voucher-wise stock ledger with movement value.";
+    if (navNode === "stock-ledger") return "Item-wise stock card: purchases, sales, returns, transfers and adjustments with running balance.";
     if (navNode === "stock-movement") return "Track stock in/out movement by transaction date.";
     if (navNode === "inventory-reports") return "Branch-level reports for stock, low quantity, and value.";
     return "Products · purchase & sales invoices · returns · campus transfers";
@@ -1064,36 +1065,12 @@ export default function InventoryPage() {
       ) : null}
 
       {activeTab === "vouchers" && navNode === "stock-ledger" ? (
-        <Panel title="Stock Ledger" meta={`${vouchers.length} VOUCHERS`}>
-          {!vouchers.length ? (
-            <EmptyState message="No stock ledger entries yet." />
-          ) : (
-            <div className="table-scroll">
-              <table className="reg">
-                <thead>
-                  <tr>
-                    <th>Voucher No.</th>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Narration</th>
-                    <th className="right">Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {vouchers.map((v) => (
-                    <tr key={v._id}>
-                      <td className="num">{v.number}</td>
-                      <td>{prettyDate(v.date)}</td>
-                      <td>{VOUCHERS[v.voucherType]?.label}</td>
-                      <td>{v.narration}</td>
-                      <td className="num">{formatNumber(v.grandTotal)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Panel>
+        <StockLedger
+          items={items}
+          branches={branches}
+          branch={branch}
+          onOpenVoucher={(id) => window.open(`/print/stock-voucher?id=${id}`, "_blank")}
+        />
       ) : null}
 
       {activeTab === "vouchers" && navNode === "stock-movement" ? (

@@ -1418,6 +1418,95 @@ export const accountingService = {
     };
   },
 
+  /** Account statement for printing: the ledger plus school letterhead details. */
+  async ledgerStatement(range: ReportRange & { accountCode: string }) {
+    const [ledger, s, acc] = await Promise.all([
+      this.generalLedger(range),
+      Settings.findOne().select("schoolName address phone email currency logoUpdatedAt branches").lean(),
+      Account.findOne({ code: range.accountCode }).select("bankName accountNumber partyType").lean(),
+    ]);
+    const branch = range.branchCode
+      ? (s?.branches || []).find((b: { code: string; name: string }) => b.code === range.branchCode?.toUpperCase())
+      : null;
+    return {
+      ...ledger,
+      account: {
+        ...ledger.account,
+        bankName: acc?.bankName || "",
+        accountNumber: acc?.accountNumber || "",
+        partyType: acc?.partyType || "",
+      },
+      from: range.from || null,
+      to: range.to || null,
+      branchName: branch?.name || (range.branchCode ? range.branchCode : "All campuses"),
+      school: {
+        name: s?.schoolName || "School",
+        address: s?.address || "",
+        phone: s?.phone || "",
+        email: s?.email || "",
+        currency: s?.currency || "PKR",
+        logoUrl: s?.logoUpdatedAt ? `/api/settings/logo?v=${new Date(s.logoUpdatedAt).getTime()}` : null,
+      },
+    };
+  },
+
+  /**
+   * Party Ledger index: every posting account with its opening, movement and
+   * closing balance, grouped the way people look for them (suppliers,
+   * customers, bank & cash, students, staff, income, expenses...).
+   */
+  async ledgerIndex(range: ReportRange = {}) {
+    await ensureSeeded();
+    const { from, to } = rangeDates(range);
+    const base = baseMatch(range.branchCode);
+    const periodMatch: Record<string, unknown> = { ...base };
+    if (from || to) {
+      periodMatch.date = { ...(from ? { $gte: from } : {}), ...(to ? { $lte: to } : {}) };
+    }
+    const [openingMovement, periodMovement, accounts] = await Promise.all([
+      from ? movementsByAccount({ ...base, date: { $lt: from } }) : emptyMovements(),
+      movementsByAccount(periodMatch),
+      Account.find({ isPosting: true, isActive: true }).sort({ code: 1 }).lean(),
+    ]);
+
+    const groupOf = (a: (typeof accounts)[number]) => {
+      if (a.partyType === "supplier" || a.code.startsWith("2103")) return "Suppliers";
+      if (a.partyType === "customer" || a.code.startsWith("110302")) return "Customers";
+      if (a.isCashBank) return a.bankName || a.accountNumber || !/cash/i.test(a.name) ? "Bank accounts" : "Cash";
+      if (a.code.startsWith("110301")) return "Students (fees receivable)";
+      if (a.code.startsWith("2101")) return "Staff (payroll)";
+      if (a.type === "asset") return "Other assets";
+      if (a.type === "liability") return "Other liabilities";
+      if (a.type === "equity") return "Owners & equity";
+      if (a.type === "income") return "Income";
+      return "Expenses";
+    };
+
+    const rows = accounts.map((a) => {
+      const opened = openingMovement.get(a.code) || { debit: 0, credit: 0 };
+      const moved = periodMovement.get(a.code) || { debit: 0, credit: 0 };
+      let opening = opened.debit - opened.credit;
+      if (a.openingBalance) {
+        opening += a.openingBalanceSide === "debit" ? a.openingBalance : -a.openingBalance;
+      }
+      const debit = round(moved.debit);
+      const credit = round(moved.credit);
+      return {
+        code: a.code,
+        name: a.name,
+        type: a.type,
+        group: groupOf(a),
+        bankName: a.bankName || "",
+        accountNumber: a.accountNumber || "",
+        opening: round(opening),
+        debit,
+        credit,
+        closing: round(opening + debit - credit),
+      };
+    });
+    return { rows };
+  },
+
   /** Day book — every posted voucher of the period with its double entry. */
   async dayBook(range: ReportRange = {}) {
     await ensureSeeded();

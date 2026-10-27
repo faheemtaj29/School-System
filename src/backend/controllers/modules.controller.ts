@@ -190,6 +190,14 @@ export const accountingController = {
       if (view === "day-book") {
         return jsonOk(await accountingService.dayBook(range));
       }
+      if (view === "ledger-statement") {
+        const accountCode = url.searchParams.get("account");
+        if (!accountCode) return jsonError("Select an account");
+        return jsonOk(await accountingService.ledgerStatement({ ...range, accountCode }));
+      }
+      if (view === "ledger-index") {
+        return jsonOk(await accountingService.ledgerIndex(range));
+      }
       if (view === "general-ledger") {
         const accountCode = url.searchParams.get("account");
         if (!accountCode) return jsonError("Select an account to view its ledger");

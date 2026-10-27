@@ -688,9 +688,25 @@ export const inventoryService = {
         balance,
       });
     }
+    const s = await Settings.findOne()
+      .select("schoolName address phone email currency logoUpdatedAt branches")
+      .lean();
     return {
       item: { _id: String(item._id), sku: item.sku, name: item.name, unit: item.unit, unitCost: item.unitCost, salePrice: item.salePrice },
       branch,
+      branchName: branch
+        ? (s?.branches || []).find((b: { code: string; name: string }) => b.code === branch)?.name || branch
+        : "All campuses",
+      from: opts.from || null,
+      to: opts.to || null,
+      school: {
+        name: s?.schoolName || "School",
+        address: s?.address || "",
+        phone: s?.phone || "",
+        email: s?.email || "",
+        currency: s?.currency || "PKR",
+        logoUrl: s?.logoUpdatedAt ? `/api/settings/logo?v=${new Date(s.logoUpdatedAt).getTime()}` : null,
+      },
       opening,
       rows,
       closing: balance,
