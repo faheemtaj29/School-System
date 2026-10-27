@@ -13,6 +13,7 @@ import {
   inputClass,
 } from "@/components/ui";
 import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
+import { QbVoucher, type QbMode } from "@/components/accounting/QbVoucher";
 
 type Account = {
   _id: string;
@@ -174,7 +175,6 @@ const voucherLabels: Record<string, string> = {
 };
 
 export default function AccountingPage() {
-  const { name: schoolName } = useSchoolProfile();
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
   const [tab, setTab] = useState<Tab>("overview");
@@ -243,6 +243,8 @@ export default function AccountingPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [voucherOpen, setVoucherOpen] = useState(false);
+  // QuickBooks-style entry screen for payments, receipts, journal and contra vouchers.
+  const [qbMode, setQbMode] = useState<QbMode | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
   const [voucherForm, setVoucherForm] = useState(voucherBlank);
   const [editingVoucherId, setEditingVoucherId] = useState<string | null>(null);
@@ -901,28 +903,6 @@ export default function AccountingPage() {
     });
   }
 
-  function openExpenseVoucher(mode: "cash" | "bank" = "cash") {
-    const modeAccounts = mode === "bank" ? expenseBankAccounts : expenseCashAccounts;
-    const fallbackCode =
-      modeAccounts[0]?.code || defaultCode(mode === "bank" ? "Bank" : "Cash in Hand", "asset");
-    setExpensePaymentMode(mode);
-    setExpensePaymentAccount(fallbackCode);
-    setVoucherForm({
-      ...voucherBlank,
-      voucherType: "payment",
-      branchCode: branch || voucherForm.branchCode || "MAIN",
-      partyType: "supplier",
-      lines: [
-        { accountCode: defaultCode("General Expense", "expense"), debit: 0, credit: 0 },
-        { accountCode: fallbackCode, debit: 0, credit: 0 },
-      ],
-    });
-    setEditingVoucherId(null);
-    fetchVoucherNumberPreview("payment", branch || voucherForm.branchCode || "MAIN", voucherBlank.date);
-    setErr("");
-    setVoucherOpen(true);
-  }
-
   async function fetchVoucherNumberPreview(type: string, branchCode: string, date: string) {
     const params = new URLSearchParams({
       view: "next-voucher-number",
@@ -1232,69 +1212,7 @@ export default function AccountingPage() {
   }
 
   function printVoucher(voucher: Voucher) {
-    const popup = window.open("", "_blank", "noopener,noreferrer,width=960,height=760");
-    if (!popup) {
-      alert("Allow pop-ups to open the printable voucher.");
-      return;
-    }
-    const escapeHtml = (value: unknown) =>
-      String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    const lines = voucher.lines
-      .map(
-        (line) => `
-          <tr>
-            <td><strong>${escapeHtml(line.accountCode)}</strong><br><span>${escapeHtml(line.accountName)}</span></td>
-            <td>${escapeHtml(line.narration || voucher.narration)}</td>
-            <td class="amount">${line.debit ? formatNumber(line.debit) : "-"}</td>
-            <td class="amount">${line.credit ? formatNumber(line.credit) : "-"}</td>
-          </tr>`
-      )
-      .join("");
-    const items = voucher.items?.length
-      ? `
-        <h3>Invoice Items</h3>
-        <table><thead><tr><th>Description</th><th class="amount">Qty</th><th class="amount">Rate</th><th class="amount">Amount</th></tr></thead>
-        <tbody>${voucher.items
-          .map(
-            (item) => `<tr><td>${escapeHtml(item.description)}</td><td class="amount">${formatNumber(item.quantity)}</td><td class="amount">${formatNumber(item.rate)}</td><td class="amount">${formatNumber(item.amount || item.quantity * item.rate)}</td></tr>`
-          )
-          .join("")}</tbody></table>`
-      : "";
-    const debitTotal = voucher.lines.reduce((sum, line) => sum + Number(line.debit || 0), 0);
-    const creditTotal = voucher.lines.reduce((sum, line) => sum + Number(line.credit || 0), 0);
-    const branchName = branches.find((branch) => branch.code === voucher.branchCode)?.name || voucher.branchCode;
-
-    popup.document.write(`<!doctype html>
-      <html><head><title>${escapeHtml(voucher.number)} - Print</title>
-      <style>
-        @page { size: A4; margin: 14mm; }
-        * { box-sizing: border-box; }
-        body { margin: 0; color: #17241d; font: 12px Arial, sans-serif; }
-        .document { max-width: 190mm; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; gap: 20px; padding-bottom: 16px; border-bottom: 3px solid #157a5c; }
-        h1 { margin: 0; font: 700 25px Georgia, serif; } h2 { margin: 0; font: 700 17px Georgia, serif; text-align: right; }
-        h3 { margin: 23px 0 8px; color: #157a5c; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
-        .muted { color: #627369; margin-top: 5px; } .number { font: 700 13px 'Courier New', monospace; margin-top: 6px; }
-        .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 18px 0; padding: 12px; background: #f3f7f3; border: 1px solid #dce7dd; }
-        .meta span { display:block; color:#64746b; font-size:9px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:3px; }.meta b { font-size:12px; }
-        .narration { padding: 10px 12px; border-left: 3px solid #e8992e; background:#fffaf1; line-height:1.5; }
-        table { width:100%; border-collapse:collapse; margin-top:8px; } th { background:#15332a; color:#fff; padding:9px 8px; font-size:9px; text-align:left; letter-spacing:.06em; text-transform:uppercase; } td { padding:9px 8px; border-bottom:1px solid #dfe7df; vertical-align:top; } td span { color:#64746b; font-size:10px; } .amount { text-align:right; font-family:'Courier New', monospace; } .total td { border-top:2px solid #15332a; border-bottom:none; font-weight:bold; }
-        .summary { margin-left:auto; width:310px; margin-top:16px; border:1px solid #dce7dd; }.summary div { display:flex; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #e5ece5; }.summary div:last-child { border:0; background:#e3f2ec; font-weight:700; font-size:13px; }
-        .signatures { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-top:70px; }.signatures div { border-top:1px solid #44534a; padding-top:7px; text-align:center; font-size:10px; color:#4e5e55; }
-      </style></head><body><main class="document">
-        <header class="header"><div><h1>${escapeHtml(schoolName || "School")}</h1><p class="muted">${escapeHtml(branchName)}</p></div><div><h2>${escapeHtml(voucherLabels[voucher.voucherType] || voucher.voucherType)}</h2><div class="number">${escapeHtml(voucher.number)}</div></div></header>
-        <section class="meta"><div><span>Date</span><b>${escapeHtml(prettyDate(voucher.date))}</b></div><div><span>Party</span><b>${escapeHtml(voucher.partyName || "- ")}</b></div><div><span>Status</span><b>${escapeHtml(voucher.status.toUpperCase())}</b></div><div><span>Reference</span><b>${escapeHtml(voucher.reference || "- ")}</b></div><div><span>Branch</span><b>${escapeHtml(voucher.branchCode)}</b></div><div><span>Currency</span><b>${escapeHtml(voucher.currency)}</b></div></section>
-        <div class="narration"><strong>Narration:</strong> ${escapeHtml(voucher.narration)}</div>
-        ${items}<h3>Double-entry Posting</h3><table><thead><tr><th>Account</th><th>Narration</th><th class="amount">Debit</th><th class="amount">Credit</th></tr></thead><tbody>${lines}<tr class="total"><td colspan="2">TOTAL</td><td class="amount">${formatNumber(debitTotal)}</td><td class="amount">${formatNumber(creditTotal)}</td></tr></tbody></table>
-        <section class="summary"><div><span>Subtotal</span><strong>${formatNumber(voucher.subtotal)}</strong></div><div><span>Discount</span><strong>${formatNumber(voucher.discountAmount)}</strong></div><div><span>Tax</span><strong>${formatNumber(voucher.taxAmount)}</strong></div><div><span>Grand Total</span><strong>${escapeHtml(voucher.currency)} ${formatNumber(voucher.grandTotal)}</strong></div></section>
-        <footer class="signatures"><div>Prepared by</div><div>Checked by</div><div>Approved by</div><div>Received by</div></footer>
-      </main><script>window.onload = () => window.print();</script></body></html>`);
-    popup.document.close();
+    window.open(`/print/voucher?id=${voucher._id}`, "_blank", "noopener");
   }
 
   return (
@@ -1311,34 +1229,34 @@ export default function AccountingPage() {
             setAccountOpen(true);
             return;
           }
-          if (navNode === "cpv") {
-            openVoucher("payment");
-            return;
-          }
-          if (navNode === "bpv") {
-            openVoucher("payment");
-            return;
-          }
-          if (navNode === "crv") {
-            openVoucher("receipt");
-            return;
-          }
-          if (navNode === "brv") {
-            openVoucher("receipt");
-            return;
-          }
-          if (navNode === "cv") {
-            openVoucher("contra");
-            return;
-          }
-          if (navNode === "expv" || navNode === "expvp") {
-            openExpenseVoucher("cash");
+          const qbByNode: Record<string, QbMode> = {
+            cpv: "cpv",
+            bpv: "bpv",
+            crv: "crv",
+            brv: "brv",
+            cv: "cv",
+            jv: "jv",
+            expv: "cpv",
+            expvp: "bpv",
+          };
+          if (qbByNode[navNode]) {
+            setQbMode(qbByNode[navNode]);
             return;
           }
           if (!createLabel) return;
-          openVoucher("journal");
+          setQbMode("jv");
         }}
       />
+
+      {qbMode ? (
+        <QbVoucher
+          key={qbMode}
+          mode={qbMode}
+          branch={branch || "MAIN"}
+          onClose={() => setQbMode(null)}
+          onSaved={() => load()}
+        />
+      ) : null}
 
       <div className="chips" style={{ marginBottom: 10, alignItems: "center" }}>
         <span className="filter-chip">Accounting</span>

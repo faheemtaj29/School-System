@@ -153,6 +153,9 @@ export const accountingController = {
           vouchers: await accountingService.vouchers({ type, status, branchCode }),
         });
       }
+      if (view === "voucher") {
+        return jsonOk(await accountingService.voucherForPrint(url.searchParams.get("id") || ""));
+      }
       if (view === "next-voucher-number") {
         const voucherType = url.searchParams.get("type") || "journal";
         const date = url.searchParams.get("date") || new Date().toISOString();
@@ -213,6 +216,21 @@ export const accountingController = {
         const parsed = accountSchema.safeParse(body.account);
         if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
         return jsonOk({ account: await accountingService.createAccount(parsed.data) }, 201);
+      }
+      if (body.kind === "category") {
+        const type = body.type;
+        if (!["expense", "income", "asset", "liability", "bank", "cash"].includes(type)) {
+          return jsonError("Pick what kind of category this is");
+        }
+        return jsonOk(
+          {
+            account: await accountingService.createCategory(String(body.name || ""), type, {
+              bankName: body.bankName ? String(body.bankName) : undefined,
+              accountNumber: body.accountNumber ? String(body.accountNumber) : undefined,
+            }),
+          },
+          201
+        );
       }
       if (body.kind === "voucher") {
         const parsed = voucherSchema.safeParse(body.voucher);

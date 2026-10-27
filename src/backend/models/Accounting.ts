@@ -18,6 +18,9 @@ export interface IAccount {
   isControl: boolean;
   isPosting: boolean;
   isCashBank: boolean;
+  /** Bank accounts: which bank and which account number money moves through. */
+  bankName?: string;
+  accountNumber?: string;
   isActive: boolean;
   systemKey?: string;
   openingBalance: number;
@@ -41,6 +44,8 @@ const AccountSchema = new Schema<IAccount>(
     isControl: { type: Boolean, default: true },
     isPosting: { type: Boolean, default: false },
     isCashBank: { type: Boolean, default: false },
+    bankName: { type: String, trim: true },
+    accountNumber: { type: String, trim: true },
     isActive: { type: Boolean, default: true },
     systemKey: { type: String, sparse: true, unique: true },
     openingBalance: { type: Number, default: 0, min: 0 },

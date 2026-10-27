@@ -553,6 +553,96 @@ export const accountingService = {
       .lean();
   },
 
+  /** One voucher with its school header — used by the printable voucher page. */
+  async voucherForPrint(id: string) {
+    await ensureSeeded();
+    if (!/^[a-f0-9]{24}$/i.test(id)) throw new ServiceError("VALIDATION", "Invalid voucher ID", 400);
+    const voucher = await Voucher.findById(id)
+      .populate("createdBy", "name")
+      .populate("postedBy", "name")
+      .lean();
+    if (!voucher) throw new ServiceError("NOT_FOUND", "Voucher not found", 404);
+    const s = await Settings.findOne()
+      .select("schoolName address phone email currency logoUpdatedAt branches")
+      .lean();
+    const branch = (s?.branches || []).find(
+      (b: { code: string; name: string }) => b.code === voucher.branchCode
+    );
+    const codes = (voucher.lines || []).map((l: { accountCode: string }) => l.accountCode);
+    const accs = await Account.find({ code: { $in: codes } })
+      .select("code name isCashBank bankName accountNumber type")
+      .lean();
+    const byCode = new Map(accs.map((x: { code: string }) => [x.code, x]));
+    return {
+      voucher: {
+        ...voucher,
+        lines: (voucher.lines || []).map((l: { accountCode: string }) => {
+          const acc = byCode.get(l.accountCode) as
+            | { isCashBank?: boolean; bankName?: string; accountNumber?: string; type?: string }
+            | undefined;
+          return {
+            ...l,
+            isCashBank: Boolean(acc?.isCashBank),
+            bankName: acc?.bankName,
+            accountNumber: acc?.accountNumber,
+            accountType: acc?.type,
+          };
+        }),
+      },
+      branchName: branch?.name || voucher.branchCode,
+      school: {
+        name: s?.schoolName || "School",
+        address: s?.address || "",
+        phone: s?.phone || "",
+        email: s?.email || "",
+        currency: s?.currency || "PKR",
+        logoUrl: s?.logoUpdatedAt ? `/api/settings/logo?v=${new Date(s.logoUpdatedAt).getTime()}` : null,
+      },
+    };
+  },
+
+  /**
+   * Add a plain-language category (e.g. "Generator fuel") as a posting account under the
+   * right control group, with the next free code — users never type account codes.
+   */
+  async createCategory(
+    name: string,
+    kind: "expense" | "income" | "asset" | "liability" | "bank" | "cash",
+    bank?: { bankName?: string; accountNumber?: string }
+  ) {
+    const type = kind === "bank" || kind === "cash" ? "asset" : kind;
+    await ensureSeeded();
+    const clean = name.trim();
+    if (clean.length < 2) throw new ServiceError("VALIDATION", "Category name is too short", 400);
+    const existing = await Account.findOne({
+      name: new RegExp(`^${clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
+      isPosting: true,
+    }).lean();
+    if (existing) return existing;
+    const parentCode =
+      kind === "bank" || kind === "cash"
+        ? "110101"
+        : { expense: "530101", income: "420101", asset: "120101", liability: "210301" }[type];
+    const parent = await Account.findOne({ code: parentCode }).lean();
+    if (!parent) throw new ServiceError("NOT_FOUND", "Chart of accounts is not set up", 404);
+    const siblings = await Account.find({ parentCode }).select("code").lean();
+    const max = siblings.reduce((m: number, a: { code: string }) => Math.max(m, Number(a.code) || 0), Number(`${parentCode}00`));
+    return Account.create({
+      code: String(max + 1),
+      name: clean,
+      type,
+      nature: type === "asset" || type === "expense" ? "debit" : "credit",
+      level: 5,
+      parentCode,
+      isControl: false,
+      isPosting: true,
+      isCashBank: kind === "bank" || kind === "cash",
+      bankName: kind === "bank" ? bank?.bankName?.trim() || undefined : undefined,
+      accountNumber: kind === "bank" ? bank?.accountNumber?.trim() || undefined : undefined,
+      isActive: true,
+    });
+  },
+
   async nextVoucherNumberPreview(type: string, branchCode: string, date: string) {
     await ensureSeeded();
     return previewVoucherNumber(type, branchCode || "MAIN", new Date(date));
