@@ -151,6 +151,8 @@ export interface IVoucher {
   reference?: string;
   /** Period-end adjusting entry (accruals, depreciation…) — shown separately in the adjusted trial balance. */
   isAdjusting?: boolean;
+  /** Numbering series: CPV, BPV, CRV, BRV, EXP (each has its own running number). */
+  series?: string;
   currency: string;
   subtotal: number;
   discountAmount: number;
@@ -228,6 +230,7 @@ const VoucherSchema = new Schema<IVoucher>(
     narration: { type: String, required: true, trim: true },
     reference: String,
     isAdjusting: { type: Boolean, default: false },
+    series: { type: String, enum: ["CPV", "BPV", "CRV", "BRV", "EXP"] },
     currency: { type: String, default: "PKR" },
     subtotal: { type: Number, default: 0, min: 0 },
     discountAmount: { type: Number, default: 0, min: 0 },

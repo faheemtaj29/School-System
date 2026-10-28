@@ -163,7 +163,8 @@ export const accountingController = {
           number: await accountingService.nextVoucherNumberPreview(
             voucherType,
             branchCode || "MAIN",
-            date
+            date,
+            url.searchParams.get("series")
           ),
         });
       }

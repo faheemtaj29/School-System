@@ -205,6 +205,8 @@ export const voucherSchema = z.object({
   narration: z.string().min(2),
   reference: z.string().optional(),
   isAdjusting: z.boolean().optional(),
+  /** Own numbering for cash/bank payments & receipts and expense vouchers. */
+  series: z.enum(["CPV", "BPV", "CRV", "BRV", "EXP"]).optional(),
   discountAmount: z.coerce.number().min(0).default(0),
   taxAmount: z.coerce.number().min(0).default(0),
   items: z.array(invoiceItemSchema).default([]),

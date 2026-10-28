@@ -49,6 +49,7 @@ type InvoiceItem = {
 };
 
 type Voucher = {
+  series?: string;
   _id: string;
   number: string;
   voucherType: string;
@@ -376,32 +377,22 @@ export default function AccountingPage() {
     let rows = voucherTypeByNode
       ? vouchers.filter((v) => v.voucherType === voucherTypeByNode)
       : vouchers;
-    if (navMode === "cash_payment") {
+    // Vouchers carry their own series (CPV, BPV, CRV, BRV, EXP); older ones are recognised
+    // by whether the cash or bank line is paid out (credit) or received (debit).
+    const bySeries: Record<string, { series: string; side: "debit" | "credit"; pattern: RegExp }> = {
+      cash_payment: { series: "CPV", side: "credit", pattern: /cash/i },
+      bank_payment: { series: "BPV", side: "credit", pattern: /bank/i },
+      cash_receipt: { series: "CRV", side: "debit", pattern: /cash/i },
+      bank_receipt: { series: "BRV", side: "debit", pattern: /bank/i },
+      expense: { series: "EXP", side: "credit", pattern: /cash|bank/i },
+      expense_paid: { series: "EXP", side: "credit", pattern: /cash|bank/i },
+    };
+    const rule = bySeries[navMode];
+    if (rule) {
       rows = rows.filter((v) =>
-        v.lines.some((line) => line.credit > 0 && /cash/i.test(line.accountName || ""))
-      );
-    }
-    if (navMode === "bank_payment") {
-      rows = rows.filter((v) =>
-        v.lines.some((line) => line.credit > 0 && /bank/i.test(line.accountName || ""))
-      );
-    }
-    if (navMode === "cash_receipt") {
-      rows = rows.filter((v) =>
-        v.lines.some((line) => line.debit > 0 && /cash/i.test(line.accountName || ""))
-      );
-    }
-    if (navMode === "bank_receipt") {
-      rows = rows.filter((v) =>
-        v.lines.some((line) => line.debit > 0 && /bank/i.test(line.accountName || ""))
-      );
-    }
-    if (navMode === "expense" || navMode === "expense_paid") {
-      rows = rows.filter((v) =>
-        v.lines.some(
-          (line) =>
-            line.credit > 0 && /cash|bank/i.test(line.accountName || "")
-        )
+        v.series
+          ? v.series === rule.series
+          : v.lines.some((line) => line[rule.side] > 0 && rule.pattern.test(line.accountName || ""))
       );
     }
     return rows;
@@ -1153,8 +1144,9 @@ export default function AccountingPage() {
 
       {qbMode ? (
         <QbVoucher
-          key={qbMode}
+          key={`${qbMode}-${navNode}`}
           mode={qbMode}
+          expense={navNode === "expv" || navNode === "expvp"}
           branch={branch || "MAIN"}
           onClose={() => setQbMode(null)}
           onSaved={() => load()}

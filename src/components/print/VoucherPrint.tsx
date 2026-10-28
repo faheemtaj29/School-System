@@ -19,6 +19,7 @@ type Data = {
     _id: string;
     number: string;
     voucherType: string;
+    series?: string;
     status: string;
     date: string;
     partyName?: string;
@@ -68,7 +69,9 @@ export function VoucherPrintPage({ id }: { id: string }) {
   const total = v ? v.lines.reduce((s, l) => s + (l.debit || 0), 0) : 0;
   const cash = settle.some((l) => /cash/i.test(l.accountName || "") && !l.bankName);
   const title = v
-    ? simple
+    ? v.series === "EXP"
+      ? "EXPENSE VOUCHER"
+      : simple
       ? `${cash ? "CASH" : "BANK"} ${isPay ? "PAYMENT" : "RECEIPT"} VOUCHER`
       : TITLE[v.voucherType] || "VOUCHER"
     : "";

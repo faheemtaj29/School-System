@@ -254,17 +254,24 @@ function AddDialog({
 
 /* ---------- the voucher screen ---------- */
 
+/** Each payment / receipt kind has its own running number; expense vouchers have theirs. */
+const SERIES: Partial<Record<QbMode, string>> = { cpv: "CPV", bpv: "BPV", crv: "CRV", brv: "BRV" };
+
 export function QbVoucher({
   mode,
   branch,
+  expense = false,
   onClose,
   onSaved,
 }: {
   mode: QbMode;
   branch: string;
+  /** Opened as an Expense Voucher (cash or bank payment numbered in the EXP series). */
+  expense?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const series = expense && (mode === "cpv" || mode === "bpv") ? "EXP" : SERIES[mode];
   const isPayment = mode === "cpv" || mode === "bpv";
   const isReceipt = mode === "crv" || mode === "brv";
   const usesBank = mode === "bpv" || mode === "brv";
@@ -328,11 +335,12 @@ export function QbVoucher({
 
   useEffect(() => {
     const params = new URLSearchParams({ view: "next-voucher-number", type: VOUCHER_TYPE[mode], branch: campus, date });
+    if (series) params.set("series", series);
     fetch(`/api/accounting?${params}`)
       .then((r) => r.json())
       .then((d) => setNumber(d.number || ""))
       .catch(() => {});
-  }, [mode, campus, date]);
+  }, [mode, campus, date, series]);
 
   const cashAccounts = useMemo(() => accounts.filter(isCashAccount), [accounts]);
   const bankAccounts = useMemo(() => accounts.filter((a) => a.isCashBank && !isCashAccount(a)), [accounts]);
@@ -457,6 +465,7 @@ export function QbVoucher({
 
     return {
       voucherType: VOUCHER_TYPE[mode],
+      series,
       date,
       branchCode: campus,
       partyType: payee ? (isPayment && payeeId ? "supplier" : "other") : null,
@@ -543,7 +552,7 @@ export function QbVoucher({
       <header className="qb-top">
         <h1>
           <span className="qb-ic">{isReceipt ? "↓" : mode === "jv" ? "≡" : mode === "cv" ? "⇄" : "↑"}</span>
-          {TITLES[mode]}
+          {expense ? `Expense Voucher (${usesBank ? "bank" : "cash"})` : TITLES[mode]}
           {number ? <small>#{number}</small> : null}
         </h1>
         <button type="button" className="qb-x" onClick={onClose} aria-label="Close">✕</button>

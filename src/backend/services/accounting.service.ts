@@ -508,8 +508,15 @@ async function groupResolver() {
   };
 }
 
-async function nextVoucherNumber(type: string, branchCode: string, date: Date) {
-  const prefix = PREFIX[type] || "JV";
+/** Series that belong to each voucher type; anything else falls back to the type's prefix. */
+const SERIES_TYPE: Record<string, string> = { CPV: "payment", BPV: "payment", EXP: "payment", CRV: "receipt", BRV: "receipt" };
+
+function prefixOf(type: string, series?: string | null) {
+  return series && SERIES_TYPE[series] === type ? series : PREFIX[type] || "JV";
+}
+
+async function nextVoucherNumber(type: string, branchCode: string, date: Date, series?: string | null) {
+  const prefix = prefixOf(type, series);
   const year = date.getFullYear();
   const branch = branchCode.toUpperCase();
   const key = `${prefix}:${branch}:${year}`;
@@ -521,9 +528,9 @@ async function nextVoucherNumber(type: string, branchCode: string, date: Date) {
   return `${prefix}-${branch}-${year}-${String(counter.seq).padStart(5, "0")}`;
 }
 
-async function previewVoucherNumber(type: string, branchCode: string, date: Date) {
+async function previewVoucherNumber(type: string, branchCode: string, date: Date, series?: string | null) {
   await dbConnect();
-  const prefix = PREFIX[type] || "JV";
+  const prefix = prefixOf(type, series);
   const year = date.getFullYear();
   const branch = branchCode.toUpperCase();
   const key = `${prefix}:${branch}:${year}`;
@@ -666,7 +673,8 @@ async function createDoubleEntryVoucher(
     invoice?.lines || data.lines,
     data.voucherType
   );
-  const number = await nextVoucherNumber(data.voucherType, branchCode, date);
+  const series = data.series && SERIES_TYPE[data.series] === data.voucherType ? data.series : undefined;
+  const number = await nextVoucherNumber(data.voucherType, branchCode, date, series);
   const posted = forced?.status === "posted" || data.postNow;
 
   return Voucher.create({
@@ -682,6 +690,7 @@ async function createDoubleEntryVoucher(
     narration: data.narration,
     reference: data.reference,
     isAdjusting: data.voucherType === "journal" && Boolean(data.isAdjusting),
+    series,
     currency: settings.currency || "PKR",
     subtotal: invoice?.subtotal || checked.total,
     discountAmount: data.discountAmount,
@@ -1075,9 +1084,9 @@ export const accountingService = {
     });
   },
 
-  async nextVoucherNumberPreview(type: string, branchCode: string, date: string) {
+  async nextVoucherNumberPreview(type: string, branchCode: string, date: string, series?: string | null) {
     await ensureSeeded();
-    return previewVoucherNumber(type, branchCode || "MAIN", new Date(date));
+    return previewVoucherNumber(type, branchCode || "MAIN", new Date(date), series);
   },
 
   async auditTrail(voucherId: string) {
