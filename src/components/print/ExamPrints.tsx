@@ -22,7 +22,7 @@ type SlipData = {
     /** The class's campus letterhead. */
     head?: SchoolHeader;
     papers: Paper[];
-    students: { _id: string; name: string; fatherName: string; admissionNo: string; rollNo: string }[];
+    students: { _id: string; name: string; fatherName: string; admissionNo: string; rollNo: string; photoUrl?: string | null }[];
   }[];
 };
 
@@ -96,7 +96,7 @@ export function RollSlipsPrint({ termId, classIds, perPage }: { termId: string; 
                       <div><dt>Class</dt><dd>{s.batch.classLabel}</dd></div>
                       <div><dt>Admission No.</dt><dd>{s.admissionNo}</dd></div>
                     </dl>
-                    <div className="slip-photo">Photo</div>
+                    <StudentPhoto url={s.photoUrl} name={s.name} small />
                   </div>
                   <PaperTable papers={s.batch.papers} />
                   <footer className="slip-foot">
@@ -120,17 +120,64 @@ export function DateSheetPrint({ termId, classIds, src }: { termId: string; clas
   const { data, error } = usePrintData<SlipData>(src || slipsUrl(termId, classIds));
   return (
     <PrintShell title="Date Sheet" info={data ? `${data.batches.length} class(es)` : undefined} error={error} loading={!data} closable={!src}>
-      {data?.batches.map((b) => (
-        <section key={b.classId} className="doc-page">
-          <SchoolHead school={b.head || data.school} title="DATE SHEET" sub={`${data.term.name} · ${data.term.academicYear}`} />
-          <h2 className="doc-sub">Class: {b.classLabel}</h2>
-          <PaperTable papers={b.papers} />
-          <div className="signs">
-            <span>Controller of Exams</span>
-            <span>Principal</span>
-          </div>
-        </section>
-      ))}
+      {data?.batches.map((b) => {
+        const dated = b.papers.filter((p) => p.examDate);
+        const first = dated[0]?.examDate;
+        const last = dated[dated.length - 1]?.examDate;
+        return (
+          <section key={b.classId} className="doc-page ds2">
+            <SchoolHead school={b.head || data.school} title="DATE SHEET" sub={`${data.term.name} · ${data.term.academicYear}`} />
+            <div className="rc2-band">
+              <b>Date Sheet — {b.classLabel}</b>
+              <span>
+                {[data.term.name, data.term.academicYear].filter(Boolean).join(" · ")}
+                {first ? ` · ${fmtDate(first)}${last && last !== first ? ` to ${fmtDate(last)}` : ""}` : ""}
+              </span>
+            </div>
+            <div className="ds2-list">
+              {b.papers.map((p, i) => {
+                const d = p.examDate ? new Date(`${p.examDate}T00:00:00Z`) : null;
+                return (
+                  <div className="ds2-row" key={p.subject + i}>
+                    <div className="ds2-date">
+                      {d ? (
+                        <>
+                          <b>{d.getUTCDate()}</b>
+                          <span>{d.toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" })}</span>
+                        </>
+                      ) : (
+                        <span>Date to be announced</span>
+                      )}
+                    </div>
+                    <div className="ds2-day">{p.day || "—"}</div>
+                    <div className="ds2-subject">
+                      <b>{p.subject}</b>
+                      {p.code ? <small>{p.code}</small> : null}
+                    </div>
+                    <div className="ds2-time">
+                      {p.startTime ? `${fmtTime(p.startTime)} – ${fmtTime(p.endTime)}` : "—"}
+                      {p.room ? <small>Room {p.room}</small> : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="ds2-notes">
+              <b>Instructions</b>
+              <ul>
+                <li>Reach the examination hall 15 minutes before the paper starts.</li>
+                <li>Bring the roll number slip, school card and your own stationery to every paper.</li>
+                <li>Mobile phones, smart watches and notes are not allowed in the hall.</li>
+                <li>A student absent from a paper is marked absent for that subject.</li>
+              </ul>
+            </div>
+            <div className="signs">
+              <span>Controller of Exams</span>
+              <span>Principal</span>
+            </div>
+          </section>
+        );
+      })}
     </PrintShell>
   );
 }
@@ -149,7 +196,7 @@ type ResultData = {
     subjects: { _id: string; name: string; code: string; totalMarks: number; passingMarks: number; components: Component[] }[];
     stats: { students: number; complete: number; passed: number; failed: number; average: number; highest: number };
     cards: {
-      student: { _id: string; name: string; fatherName: string; admissionNo: string; rollNo: string };
+      student: { _id: string; name: string; fatherName: string; admissionNo: string; rollNo: string; photoUrl?: string | null; dateOfBirth?: string };
       subjects: {
         subjectId: string;
         name: string;
@@ -185,6 +232,21 @@ function ordinal(n: number) {
   return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
 }
 
+/** Passport-size photo box; initials when the student has no photo yet. */
+function StudentPhoto({ url, name, small }: { url?: string | null; name: string; small?: boolean }) {
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
+  return (
+    <div className={`stu-photo${small ? " small" : ""}`}>
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt={name} />
+      ) : (
+        <span>{initials || "?"}</span>
+      )}
+    </div>
+  );
+}
+
 const STATUS_LABEL = { pass: "Pass", fail: "Fail", absent: "Absent", pending: "Pending" } as const;
 
 export function ResultCardsPrint({ termId, classIds, studentId, src }: { termId: string; classIds: string; studentId?: string; src?: string }) {
@@ -205,28 +267,41 @@ export function ResultCardsPrint({ termId, classIds, studentId, src }: { termId:
         return (
           <Fragment key={b.classId}>
             {b.cards.map((card) => (
-              <section key={card.student._id} className="doc-page result-card-doc">
-                <SchoolHead
-                  school={b.head || data.school}
-                  title="RESULT CARD"
-                  sub={`${data.term.name} · ${data.term.academicYear}`}
-                />
-                <dl className="rc-info">
-                  <div><dt>Student</dt><dd>{card.student.name}</dd></div>
-                  <div><dt>Father / Guardian</dt><dd>{card.student.fatherName || "—"}</dd></div>
-                  <div><dt>Class</dt><dd>{b.classLabel}</dd></div>
-                  <div><dt>Roll No.</dt><dd>{card.student.rollNo || "—"}</dd></div>
-                  <div><dt>Admission No.</dt><dd>{card.student.admissionNo}</dd></div>
-                  <div><dt>Position</dt><dd>{card.position ? `${ordinal(card.position)} of ${b.stats.complete}` : "—"}</dd></div>
-                </dl>
-                <table className="doc-table rc-table">
+              <section key={card.student._id} className="doc-page result-card-doc rc2">
+                <SchoolHead school={b.head || data.school} title="RESULT CARD" sub={`${data.term.name} · ${data.term.academicYear}`} />
+                <div className="rc2-band">
+                  <b>Progress Report</b>
+                  <span>{[data.term.name, data.term.type, data.term.academicYear].filter(Boolean).join(" · ")}</span>
+                </div>
+
+                <div className="rc2-profile">
+                  <StudentPhoto url={card.student.photoUrl} name={card.student.name} />
+                  <div className="rc2-who">
+                    <h2>{card.student.name}</h2>
+                    <dl>
+                      <div><dt>Father / Guardian</dt><dd>{card.student.fatherName || "—"}</dd></div>
+                      <div><dt>Class</dt><dd>{b.classLabel}</dd></div>
+                      <div><dt>Roll No.</dt><dd>{card.student.rollNo || "—"}</dd></div>
+                      <div><dt>Admission No.</dt><dd>{card.student.admissionNo}</dd></div>
+                      <div><dt>Session</dt><dd>{data.term.academicYear || "—"}</dd></div>
+                      <div><dt>Date of Birth</dt><dd>{card.student.dateOfBirth ? fmtDate(card.student.dateOfBirth) : "—"}</dd></div>
+                    </dl>
+                  </div>
+                  <div className={`rc2-badge ${card.result === "PASS" ? "pass" : card.result === "FAIL" ? "fail" : ""}`}>
+                    <span>Result</span>
+                    <b>{card.result}</b>
+                    {card.position ? <small>{ordinal(card.position)} of {b.stats.complete}</small> : null}
+                  </div>
+                </div>
+
+                <table className="rc2-table">
                   <thead>
                     <tr>
                       <th>Subject</th>
                       {split ? columns.map((c) => <th key={c.key} className="num">{c.label}</th>) : null}
                       <th className="num">Max</th>
                       <th className="num">Obtained</th>
-                      <th className="num">%</th>
+                      <th className="rc2-bar-h">Score</th>
                       <th className="num">Grade</th>
                       {data.showGpa ? <th className="num">Cr.</th> : null}
                       {data.showGpa ? <th className="num">GP</th> : null}
@@ -249,11 +324,18 @@ export function ResultCardsPrint({ termId, classIds, studentId, src }: { termId:
                           : null}
                         <td className="num">{s.totalMarks}</td>
                         <td className="num"><b>{s.status === "absent" ? "ABS" : s.status === "pending" ? "—" : s.obtained}</b></td>
-                        <td className="num">{s.status === "pending" ? "—" : `${s.percent}%`}</td>
-                        <td className="num">{s.status === "pending" ? "—" : s.grade}</td>
+                        <td className="rc2-bar">
+                          {s.status === "pending" ? "—" : (
+                            <>
+                              <i style={{ width: `${Math.max(0, Math.min(100, s.percent))}%` }} />
+                              <span>{s.percent}%</span>
+                            </>
+                          )}
+                        </td>
+                        <td className="num"><b>{s.status === "pending" ? "—" : s.grade}</b></td>
                         {data.showGpa ? <td className="num">{s.credits}</td> : null}
                         {data.showGpa ? <td className="num">{s.gpa.toFixed(1)}</td> : null}
-                        <td>{STATUS_LABEL[s.status]}</td>
+                        <td><span className={`rc2-st ${s.status}`}>{STATUS_LABEL[s.status]}</span></td>
                       </tr>
                     ))}
                   </tbody>
@@ -263,7 +345,7 @@ export function ResultCardsPrint({ termId, classIds, studentId, src }: { termId:
                       {split ? columns.map((c) => <td key={c.key} />) : null}
                       <td className="num"><b>{card.totalMarks}</b></td>
                       <td className="num"><b>{card.obtained}</b></td>
-                      <td className="num"><b>{card.percent}%</b></td>
+                      <td className="rc2-bar"><i style={{ width: `${Math.max(0, Math.min(100, card.percent))}%` }} /><span>{card.percent}%</span></td>
                       <td className="num"><b>{card.grade}</b></td>
                       {data.showGpa ? <td /> : null}
                       {data.showGpa ? <td className="num"><b>{card.gpa.toFixed(2)}</b></td> : null}
@@ -271,20 +353,22 @@ export function ResultCardsPrint({ termId, classIds, studentId, src }: { termId:
                     </tr>
                   </tfoot>
                 </table>
-                <div className="rc-summary">
-                  <div className={`rc-result ${card.result === "PASS" ? "pass" : card.result === "FAIL" ? "fail" : ""}`}>
-                    <span>Result</span>
-                    <b>{card.result}</b>
-                  </div>
+
+                <div className="rc2-tiles">
+                  <div><span>Marks</span><b>{card.obtained} / {card.totalMarks}</b></div>
                   <div><span>Percentage</span><b>{card.percent}%</b></div>
                   <div><span>Grade</span><b>{card.grade}</b></div>
                   {data.showGpa ? <div><span>GPA</span><b>{card.gpa.toFixed(2)}</b></div> : null}
+                  <div><span>Position</span><b>{card.position ? `${ordinal(card.position)} / ${b.stats.complete}` : "—"}</b></div>
                   <div><span>Class average</span><b>{b.stats.average}%</b></div>
+                  <div><span>Highest in class</span><b>{b.stats.highest}%</b></div>
                 </div>
-                <p className="rc-remarks"><b>Remarks:</b> {card.remarks}</p>
-                <div className="rc-scale">
-                  Grading: A+ 80%+ · A 70–79 · B 60–69 · C 50–59 · D 40–49 · F below 40
+
+                <div className="rc2-remarks">
+                  <b>Teacher&apos;s remarks</b>
+                  <p>{card.remarks}</p>
                 </div>
+                <div className="rc-scale">Grading: A+ 80%+ · A 70–79 · B 60–69 · C 50–59 · D 40–49 · F below 40</div>
                 <div className="signs">
                   <span>Class Teacher</span>
                   <span>Principal</span>

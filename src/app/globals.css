@@ -3221,3 +3221,62 @@ a.wa-btn.disabled { opacity: .45; pointer-events: none; }
 .campus-logo small { font-size: 10.5px; color: var(--text-dim); }
 .campus-logo small.err { color: var(--red); }
 @media (max-width: 640px) { .campus-row { flex-direction: column; } }
+
+/* ── Result card (v2) and date sheet (v2) — printable, colour kept on paper ── */
+.rc2, .ds2 { -webkit-print-color-adjust: exact; print-color-adjust: exact; border: 2px solid #157a5c; outline: 1px solid #157a5c; outline-offset: -6px; }
+.rc2-band { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; background: linear-gradient(90deg, #157a5c, #1f9a74); color: #fff; padding: 7px 14px; border-radius: 6px; margin: 2px 0 12px; }
+.rc2-band b { font-family: var(--font-display), serif; font-size: 17px; letter-spacing: .02em; }
+.rc2-band span { font-size: 11px; opacity: .92; }
+.rc2-profile { display: flex; gap: 16px; align-items: stretch; margin-bottom: 12px; }
+.stu-photo { width: 30mm; height: 36mm; flex: none; border: 2px solid #157a5c; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #eef5f1; }
+.stu-photo img { width: 100%; height: 100%; object-fit: cover; }
+.stu-photo span { font-family: var(--font-display), serif; font-size: 26px; color: #157a5c; font-weight: 700; }
+.stu-photo.small { width: 22mm; height: 27mm; }
+.stu-photo.small span { font-size: 18px; }
+.rc2-who { flex: 1; min-width: 0; }
+.rc2-who h2 { font-family: var(--font-display), serif; font-size: 22px; margin: 0 0 6px; color: #10241c; }
+.rc2-who dl { display: grid; grid-template-columns: 1.45fr 1fr 1fr; gap: 6px 14px; margin: 0; }
+.rc2-who dt { font-size: 9px; text-transform: uppercase; letter-spacing: .06em; color: #667; }
+.rc2-who dd { margin: 0; font-size: 12px; font-weight: 700; border-bottom: 1px dotted #aaa; padding-bottom: 2px; }
+.rc2-badge { width: 30mm; flex: none; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: #f2f4f1; border: 2px solid #999; }
+.rc2-badge span { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: #555; }
+.rc2-badge b { font-size: 22px; letter-spacing: .06em; }
+.rc2-badge small { font-size: 10px; font-weight: 700; }
+.rc2-badge.pass { background: #e6f4ee; border-color: #157a5c; color: #157a5c; }
+.rc2-badge.fail { background: #fdecec; border-color: #c0392b; color: #c0392b; }
+table.rc2-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 11.5px; }
+.rc2-table th { background: #157a5c; color: #fff; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; padding: 6px; text-align: left; }
+.rc2-table td { padding: 5px 6px; border-bottom: 1px solid #dfe5e1; }
+.rc2-table tbody tr:nth-child(even) td { background: #f6f9f7; }
+.rc2-table .num { text-align: right; }
+.rc2-table tfoot td { background: #e6f4ee; border-top: 2px solid #157a5c; }
+.rc2-table tr.rc-fail td { color: #c0392b; }
+.rc2-bar-h { width: 24%; }
+.rc2-bar { position: relative; }
+.rc2-bar i { display: block; height: 7px; border-radius: 4px; background: linear-gradient(90deg, #1f9a74, #157a5c); margin-right: 38px; }
+.rc-fail .rc2-bar i { background: #e07a6e; }
+.rc2-bar span { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); font-size: 10.5px; font-weight: 700; }
+.rc2-st { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 99px; background: #e6f4ee; color: #157a5c; }
+.rc2-st.fail, .rc2-st.absent { background: #fdecec; color: #c0392b; }
+.rc2-st.pending { background: #f1f1f1; color: #777; }
+.rc2-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(28mm, 1fr)); gap: 8px; margin: 12px 0 10px; }
+.rc2-tiles div { border: 1px solid #cfdcd5; border-radius: 8px; padding: 6px 8px; background: #fbfdfc; }
+.rc2-tiles span { display: block; font-size: 8.5px; text-transform: uppercase; letter-spacing: .06em; color: #667; }
+.rc2-tiles b { font-size: 14px; color: #10241c; }
+.rc2-remarks { border-left: 4px solid #e2a03f; background: #fdf7ec; padding: 7px 10px; border-radius: 0 6px 6px 0; margin-bottom: 6px; }
+.rc2-remarks b { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #96650f; }
+.rc2-remarks p { margin: 2px 0 0; font-size: 12px; }
+.ds2-list { display: grid; gap: 6px; margin-bottom: 12px; }
+.ds2-row { display: grid; grid-template-columns: 26mm 28mm 1fr 44mm; align-items: center; gap: 10px; border: 1px solid #dfe5e1; border-radius: 8px; padding: 6px 10px; }
+.ds2-row:nth-child(even) { background: #f6f9f7; }
+.ds2-date { display: flex; align-items: baseline; gap: 6px; }
+.ds2-date b { font-family: var(--font-display), serif; font-size: 24px; color: #157a5c; line-height: 1; }
+.ds2-date span { font-size: 10.5px; color: #444; }
+.ds2-day { font-weight: 700; font-size: 12px; }
+.ds2-subject b { font-size: 14px; }
+.ds2-subject small { margin-left: 6px; font-size: 10px; color: #777; }
+.ds2-time { text-align: right; font-size: 12px; font-weight: 600; }
+.ds2-time small { display: block; font-size: 10px; color: #777; font-weight: 400; }
+.ds2-notes { border: 1px dashed #9db8aa; border-radius: 8px; padding: 8px 12px; font-size: 11px; }
+.ds2-notes b { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #157a5c; }
+.ds2-notes ul { margin: 4px 0 0; padding-left: 16px; }

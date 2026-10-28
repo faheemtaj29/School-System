@@ -5,6 +5,7 @@
  *   3. Marks entry: component-wise marks (theory / practical / viva / assignment …).
  *   4. Result cards: totals, grades, GPA, class position — for many classes at once.
  */
+import { photoUrl } from "@/backend/lib/images";
 import { letterheads, type Letterhead } from "@/backend/lib/letterhead";
 import { Types } from "mongoose";
 import { dbConnect } from "@/backend/config/database";
@@ -45,6 +46,8 @@ type StudentLean = {
   rollNumber?: string;
   parentName?: string;
   classId: Types.ObjectId;
+  photoUpdatedAt?: Date;
+  dateOfBirth?: Date;
 };
 
 type ScheduleRowLean = {
@@ -422,7 +425,7 @@ export const examCenterService = {
       const rollBy = new Map(((cls.s.rollNumbers || []) as RollLean[]).map((r) => [String(r.studentId), r.rollNo]));
       const students = sortStudents(
         (await Student.find({ classId: cls._id, status: "active" })
-          .select("firstName lastName admissionNo rollNumber parentName classId")
+          .select("firstName lastName admissionNo rollNumber parentName classId photoUpdatedAt dateOfBirth")
           .lean()) as unknown as StudentLean[],
         (s) => rollBy.get(String(s._id))
       );
@@ -449,6 +452,7 @@ export const examCenterService = {
           fatherName: s.parentName || "",
           admissionNo: s.admissionNo,
           rollNo: rollBy.get(String(s._id)) || "",
+          photoUrl: photoUrl("student", s._id, s.photoUpdatedAt),
         })),
       });
     }
@@ -601,7 +605,7 @@ export const examCenterService = {
       const rollBy = new Map(((cls.s.rollNumbers || []) as RollLean[]).map((r) => [String(r.studentId), r.rollNo]));
       const students = sortStudents(
         (await Student.find({ classId: cls._id, status: "active" })
-          .select("firstName lastName admissionNo rollNumber parentName classId")
+          .select("firstName lastName admissionNo rollNumber parentName classId photoUpdatedAt dateOfBirth")
           .lean()) as unknown as StudentLean[],
         (s) => rollBy.get(String(s._id))
       );
@@ -655,6 +659,8 @@ export const examCenterService = {
             fatherName: s.parentName || "",
             admissionNo: s.admissionNo,
             rollNo: rollBy.get(String(s._id)) || s.rollNumber || "",
+            photoUrl: photoUrl("student", s._id, s.photoUpdatedAt),
+            dateOfBirth: s.dateOfBirth ? isoDay(s.dateOfBirth) : "",
           },
           subjects,
           totalMarks: grandMax,
