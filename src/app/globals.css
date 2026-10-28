@@ -3450,3 +3450,15 @@ tr.def-hot td { background: #fff6f5; }
 .collect-lines div:last-child { border-bottom: none; }
 .collect-lines span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .collect-lines span:last-child { font-family: var(--font-mono), monospace; white-space: nowrap; }
+
+/* Budget vs Actual */
+.budget-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+.budget-in { width: 120px; margin-left: auto; }
+.budget-bar-cell { min-width: 120px; }
+.budget-bar { position: relative; height: 16px; border-radius: 8px; background: var(--line); overflow: hidden; }
+.budget-bar i { position: absolute; inset: 0 auto 0 0; background: var(--jade); border-radius: 8px; }
+.budget-bar.near i { background: var(--saffron); }
+.budget-bar.over i { background: var(--red); }
+.budget-bar span { position: relative; display: block; text-align: center; font-size: 10.5px; font-weight: 700; line-height: 16px; color: var(--text); }
+.budget-none { font-size: 11px; color: var(--text-dim); }
+@media print { .budget-in { border: none; background: none; padding: 0; text-align: right; } }

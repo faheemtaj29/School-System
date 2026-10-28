@@ -211,6 +211,9 @@ export const accountingController = {
           })
         );
       }
+      if (view === "budget") {
+        return jsonOk(await accountingService.budgetVsActual(range));
+      }
       if (view === "aging") {
         return jsonOk(
           await accountingService.aging({
@@ -275,6 +278,16 @@ export const accountingController = {
           { voucher: await accountingService.createVoucher(parsed.data, session!) },
           201
         );
+      }
+      if (body.kind === "budget") {
+        const parsed = z
+          .object({
+            branchCode: z.string().max(20).optional().nullable(),
+            lines: z.array(z.object({ accountCode: z.string().min(1).max(20), monthly: z.coerce.number().finite().min(0) })).max(500),
+          })
+          .safeParse(body);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        return jsonOk(await accountingService.saveBudget(parsed.data.branchCode, parsed.data.lines, session!.id));
       }
       if (body.kind === "reconcile") {
         return jsonOk({

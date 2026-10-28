@@ -129,6 +129,7 @@ const navGroups: NavGroup[] = [
                 { href: "/accounting?tab=equity&node=changes-in-equity", label: "Changes in Equity" },
                 { href: "/accounting?tab=bank&node=bank-reconciliation", label: "Bank Reconciliation" },
                 { href: "/accounting?tab=aging&node=aging", label: "Aging (Payables / Receivables)" },
+                { href: "/accounting?tab=budget&node=budget", label: "Budget vs Actual" },
                 { href: "/accounting?tab=overview&node=accounting-reports", label: "Accounting Reports" },
               ],
             },

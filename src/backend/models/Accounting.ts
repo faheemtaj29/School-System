@@ -288,3 +288,37 @@ const AccountingCounterSchema = new Schema<IAccountingCounter>({
 export const AccountingCounter =
   models.AccountingCounter ||
   model<IAccountingCounter>("AccountingCounter", AccountingCounterSchema);
+
+/**
+ * Monthly budget per income / expense account, for one campus or (branchCode "") the
+ * whole school. Budget vs Actual multiplies it by the months in the chosen period.
+ */
+export interface IBudget {
+  branchCode: string;
+  lines: { accountCode: string; monthly: number }[];
+  updatedBy?: Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const BudgetSchema = new Schema<IBudget>(
+  {
+    branchCode: { type: String, default: "", uppercase: true, trim: true, unique: true },
+    lines: {
+      type: [
+        new Schema(
+          {
+            accountCode: { type: String, required: true, trim: true },
+            monthly: { type: Number, required: true, min: 0 },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+    updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
+  },
+  { timestamps: true }
+);
+
+export const Budget = models.Budget || model<IBudget>("Budget", BudgetSchema);

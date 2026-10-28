@@ -4,7 +4,7 @@
  */
 import { letterhead } from "@/backend/lib/letterhead";
 import { dbConnect } from "@/backend/config/database";
-import { Account, AccountingCounter, Voucher } from "@/backend/models/Accounting";
+import { Account, AccountingCounter, Budget, Voucher } from "@/backend/models/Accounting";
 import { LedgerEntry, type LedgerSource } from "@/backend/models/Ledger";
 import { Settings } from "@/backend/models/Settings";
 import { StockVoucher } from "@/backend/models/Inventory";
@@ -2033,6 +2033,83 @@ export const accountingService = {
       from: range.from || null,
       to: range.to || null,
       ...header,
+    };
+  },
+
+  /** Saves the monthly budget lines for one campus ("" = whole school). */
+  async saveBudget(branchCode: string | null | undefined, lines: { accountCode: string; monthly: number }[], userId?: string) {
+    await ensureSeeded();
+    const codes = [...new Set(lines.map((l) => l.accountCode))];
+    const known = await Account.find({ code: { $in: codes }, isPosting: true, type: { $in: ["income", "expense"] } })
+      .select("code")
+      .lean();
+    const ok = new Set(known.map((a) => a.code));
+    const bad = codes.filter((c) => !ok.has(c));
+    if (bad.length) throw new ServiceError("VALIDATION", `Budgets are for income and expense accounts only: ${bad.join(", ")}`, 400);
+    const clean = lines.filter((l) => l.monthly > 0).map((l) => ({ accountCode: l.accountCode, monthly: round(l.monthly) }));
+    const branch = (branchCode || "").toUpperCase();
+    await Budget.updateOne({ branchCode: branch }, { $set: { lines: clean, updatedBy: userId || undefined } }, { upsert: true });
+    return this.budgetVsActual({ branchCode: branch });
+  },
+
+  /**
+   * Budget vs Actual for a period (default: 1 January this year to today). The monthly
+   * budget is multiplied by the months in the period; actual is what was posted.
+   */
+  async budgetVsActual(range: ReportRange = {}) {
+    await ensureSeeded();
+    const now = new Date();
+    const from = rangeDates(range).from || new Date(now.getFullYear(), 0, 1);
+    const to = rangeDates(range).to || new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    // Whole months count fully; a part month counts by its share of days.
+    let months = 0;
+    for (let d = new Date(from.getFullYear(), from.getMonth(), 1); d <= to; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+      const monthStart = d.getTime();
+      const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
+      const overlap = Math.min(monthEnd, to.getTime() + 1) - Math.max(monthStart, from.getTime());
+      if (overlap > 0) months += overlap / (monthEnd - monthStart);
+    }
+    months = Math.round(months * 100) / 100;
+
+    const branch = (range.branchCode || "").toUpperCase();
+    const [budget, moved, accounts] = await Promise.all([
+      Budget.findOne({ branchCode: branch }).lean(),
+      movementsByAccount({ ...baseMatch(range.branchCode), date: { $gte: from, $lte: to } }),
+      Account.find({ isPosting: true, type: { $in: ["income", "expense"] } }).select("code name type").sort({ code: 1 }).lean(),
+    ]);
+    const monthly = new Map<string, number>(((budget?.lines || []) as { accountCode: string; monthly: number }[]).map((l) => [l.accountCode, l.monthly]));
+    const rows = accounts
+      .map((a) => {
+        const m = moved.get(a.code) || { debit: 0, credit: 0 };
+        const actual = round(a.type === "income" ? m.credit - m.debit : m.debit - m.credit);
+        const perMonth = monthly.get(a.code) || 0;
+        const planned = round(perMonth * months);
+        // Over budget is bad for expenses, good for income.
+        const variance = round(a.type === "income" ? actual - planned : planned - actual);
+        return {
+          code: a.code,
+          name: a.name,
+          type: a.type as "income" | "expense",
+          monthly: perMonth,
+          budget: planned,
+          actual,
+          variance,
+          usedPercent: planned > 0 ? Math.round((actual / planned) * 100) : null,
+        };
+      })
+      .filter((r) => r.monthly > 0 || Math.abs(r.actual) > 0.004);
+    const total = (type: "income" | "expense") => {
+      const list = rows.filter((r) => r.type === type);
+      return { budget: round(list.reduce((t, r) => t + r.budget, 0)), actual: round(list.reduce((t, r) => t + r.actual, 0)) };
+    };
+    return {
+      branchCode: branch,
+      from: from.toISOString(),
+      to: to.toISOString(),
+      months,
+      rows,
+      totals: { income: total("income"), expense: total("expense") },
+      updatedAt: budget?.updatedAt || null,
     };
   },
 

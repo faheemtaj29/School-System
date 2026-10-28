@@ -16,7 +16,7 @@ import {
 import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
 import { PartyLedger } from "@/components/accounting/PartyLedger";
 import { CoaSetup, type CoaAccount } from "@/components/accounting/CoaSetup";
-import { AdjustedTrialBalance, AgingReport, EquityStatement, FullLedgerReport, ProfitDistribution, type Distribution } from "@/components/accounting/Reports";
+import { AdjustedTrialBalance, AgingReport, BudgetReport, EquityStatement, FullLedgerReport, ProfitDistribution, type Distribution } from "@/components/accounting/Reports";
 import { QbVoucher, type QbMode } from "@/components/accounting/QbVoucher";
 
 type Account = {
@@ -102,6 +102,7 @@ type Tab =
   | "cashflow"
   | "equity"
   | "aging"
+  | "budget"
   | "bank";
 
 type ReportGroup = {
@@ -275,6 +276,7 @@ export default function AccountingPage() {
       "changes-in-equity": { section: "Reports", leaf: "Changes in Equity" },
       "bank-reconciliation": { section: "Reports", leaf: "Bank Reconciliation" },
       aging: { section: "Reports", leaf: "Aging" },
+      budget: { section: "Reports", leaf: "Budget vs Actual" },
       "accounting-reports": { section: "Reports", leaf: "Accounting Reports" },
     };
     return map[navNode] || { section: "Overview", leaf: "Dashboard" };
@@ -301,6 +303,7 @@ export default function AccountingPage() {
     if (navNode === "changes-in-equity") return "Statement of Changes in Equity";
     if (navNode === "bank-reconciliation") return "Bank Reconciliation";
     if (navNode === "aging") return "Aging — Payables & Receivables";
+    if (navNode === "budget") return "Budget vs Actual";
     if (navNode === "accounting-reports") return "Accounting Reports";
     return "Accounting & Finance";
   }, [navNode]);
@@ -327,6 +330,7 @@ export default function AccountingPage() {
     if (navNode === "cash-flow") return "Cash received and paid, split into operating, investing and financing activities.";
     if (navNode === "changes-in-equity") return "Each owner's capital: opening, money introduced, share of profit by %, drawings and closing.";
     if (navNode === "bank-reconciliation") return "Unreconciled bank entries and WHT monitoring.";
+    if (navNode === "budget") return "Monthly budget for each income and expense head, compared with what was actually posted.";
     if (navNode === "aging") return "Who owes what, and for how long — current, 1–30, 31–60, 61–90 and over 90 days.";
     if (navNode === "accounting-reports") return "Summary reporting view across core accounting books.";
     return "5-level chart of accounts · double-entry vouchers · invoices · branch books";
@@ -368,6 +372,7 @@ export default function AccountingPage() {
       "changes-in-equity": "equity",
       "bank-reconciliation": "bank",
       aging: "aging",
+      budget: "budget",
     };
     return byNode[navNode] || tab;
   }, [navNode, tab]);
@@ -375,7 +380,7 @@ export default function AccountingPage() {
   const isDashboardNode = navNode === "accounting-dashboard";
 
   const needsPeriodControls = useMemo(
-    () => ["party-ledger", "general-ledger", "cash-book", "bank-book", "trial-balance", "income-statement", "balance-sheet", "cash-flow", "changes-in-equity", "bank-reconciliation", "aging", "accounting-reports"].includes(navNode),
+    () => ["party-ledger", "general-ledger", "cash-book", "bank-book", "trial-balance", "income-statement", "balance-sheet", "cash-flow", "changes-in-equity", "bank-reconciliation", "aging", "budget", "accounting-reports"].includes(navNode),
     [navNode]
   );
 
@@ -1653,6 +1658,8 @@ export default function AccountingPage() {
 
       {activeTab === "aging" ? <AgingReport period={{ branch, from, to }} /> : null}
 
+      {activeTab === "budget" ? <BudgetReport period={{ branch, from, to }} accounts={accounts} /> : null}
+
       {activeTab === "cashflow" ? (
         <Panel
           title="Statement of Cash Flows"
@@ -2161,6 +2168,7 @@ const REPORT_TITLES: Record<Tab, string> = {
   equity: "Statement of Changes in Equity",
   bank: "Bank Reconciliation & WHT",
   aging: "Aging — Payables & Receivables",
+  budget: "Budget vs Actual",
 };
 
 const PERIOD_PRESETS = [

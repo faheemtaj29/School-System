@@ -424,3 +424,212 @@ export function AgingReport({ period }: { period: Period }) {
     </Panel>
   );
 }
+
+/* ---------------- Budget vs Actual ---------------- */
+
+type BudgetRow = {
+  code: string;
+  name: string;
+  type: "income" | "expense";
+  monthly: number;
+  budget: number;
+  actual: number;
+  variance: number;
+  usedPercent: number | null;
+};
+type BudgetData = {
+  from: string;
+  to: string;
+  months: number;
+  rows: BudgetRow[];
+  totals: { income: { budget: number; actual: number }; expense: { budget: number; actual: number } };
+};
+
+/**
+ * Monthly budget per income and expense head (typed straight into the table) against what was
+ * actually posted in the period. Expenses over budget and income short of budget show in red.
+ */
+export function BudgetReport({
+  period,
+  accounts,
+}: {
+  period: Period;
+  accounts: { code: string; name: string; type: string; isPosting: boolean }[];
+}) {
+  const [reload, setReload] = useState(0);
+  const data = useReport<BudgetData>("budget", period, { r: String(reload) });
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [added, setAdded] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const options = useMemo(
+    () =>
+      accounts
+        .filter((a) => a.isPosting && (a.type === "income" || a.type === "expense"))
+        .map((a) => ({ value: a.code, code: a.code, label: a.name, group: a.type === "income" ? "Income" : "Expenses" })),
+    [accounts]
+  );
+
+  // Rows from the report, plus accounts just added to the budget here.
+  const rows = useMemo(() => {
+    const list = [...(data?.rows ?? [])];
+    for (const code of added) {
+      if (list.some((r) => r.code === code)) continue;
+      const a = accounts.find((x) => x.code === code);
+      if (a) list.push({ code, name: a.name, type: a.type as "income" | "expense", monthly: 0, budget: 0, actual: 0, variance: 0, usedPercent: null });
+    }
+    return list.sort((x, y) => x.code.localeCompare(y.code));
+  }, [data, added, accounts]);
+  const dirty = Object.keys(edits).length > 0 || added.length > 0;
+
+  async function save() {
+    setBusy(true);
+    setMsg("");
+    try {
+      const lines = rows.map((r) => ({ accountCode: r.code, monthly: Number(edits[r.code] ?? r.monthly) || 0 }));
+      const res = await fetch("/api/accounting", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "budget", branchCode: period.branch || "", lines }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Could not save the budget");
+      setEdits({});
+      setAdded([]);
+      setReload((n) => n + 1);
+      setMsg(`Budget saved for ${period.branch || "the whole school"}.`);
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function section(type: "income" | "expense") {
+    const list = rows.filter((r) => r.type === type);
+    if (!list.length) return null;
+    const t = data?.totals[type] ?? { budget: 0, actual: 0 };
+    return (
+      <>
+        <tr className="group-row">
+          <td colSpan={6}><strong>{type === "income" ? "Income" : "Expenses"}</strong></td>
+        </tr>
+        {list.map((r) => {
+          const bad = r.variance < 0 && r.budget > 0;
+          const pct = r.usedPercent ?? 0;
+          const tone = type === "expense" ? (pct > 100 ? " over" : pct > 85 ? " near" : "") : pct < 100 ? " near" : "";
+          return (
+            <tr key={r.code}>
+              <td><span className="num">{r.code} · </span>{r.name}</td>
+              <td className="num">
+                <input
+                  type="number"
+                  min={0}
+                  className="qb-in qb-r budget-in"
+                  value={edits[r.code] ?? (r.monthly ? String(r.monthly) : "")}
+                  placeholder="0"
+                  onChange={(e) => setEdits((m) => ({ ...m, [r.code]: e.target.value }))}
+                />
+              </td>
+              <td className="num">{amt(r.budget)}</td>
+              <td className="num">{amt(r.actual)}</td>
+              <td className={`num${bad ? " aging-late" : ""}`}>{r.budget ? formatNumber(r.variance) : ""}</td>
+              <td className="budget-bar-cell">
+                {r.usedPercent != null ? (
+                  <div className={`budget-bar${tone}`}>
+                    <i style={{ width: `${Math.min(pct, 100)}%` }} />
+                    <span>{pct}%</span>
+                  </div>
+                ) : (
+                  <span className="budget-none">no budget</span>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+        <tr className="total-row">
+          <td><strong>Total {type === "income" ? "income" : "expenses"}</strong></td>
+          <td />
+          <td className="num"><strong>{formatNumber(t.budget)}</strong></td>
+          <td className="num"><strong>{formatNumber(t.actual)}</strong></td>
+          <td className="num">
+            <strong>{formatNumber(type === "income" ? t.actual - t.budget : t.budget - t.actual)}</strong>
+          </td>
+          <td />
+        </tr>
+      </>
+    );
+  }
+
+  const net = data
+    ? { budget: data.totals.income.budget - data.totals.expense.budget, actual: data.totals.income.actual - data.totals.expense.actual }
+    : null;
+
+  return (
+    <Panel
+      title={`Budget vs Actual — ${period.branch || "whole school"}`}
+      meta={
+        data
+          ? `${prettyDate(data.from).toUpperCase()} – ${prettyDate(data.to).toUpperCase()} · ${data.months} MONTH${data.months === 1 ? "" : "S"}`
+          : "LOADING"
+      }
+    >
+      <div className="budget-tools no-print">
+        <div style={{ minWidth: 260, flex: 1 }}>
+          <Picker
+            value=""
+            options={options}
+            placeholder="Add an income or expense head to the budget…"
+            onChange={(code) => {
+              if (code) setAdded((list) => (list.includes(code) ? list : [...list, code]));
+            }}
+          />
+        </div>
+        <button type="button" className="btn-dark" disabled={!dirty || busy} onClick={save}>
+          {busy ? "Saving…" : "Save budget"}
+        </button>
+      </div>
+      {msg ? <div className="alert ok no-print">{msg}</div> : null}
+      {!data ? (
+        <EmptyState message="Loading…" />
+      ) : !rows.length ? (
+        <EmptyState message="No budget yet. Add an expense head above and type its monthly budget." />
+      ) : (
+        <div className="table-scroll">
+          <table className="reg report-table">
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th className="right">Monthly budget</th>
+                <th className="right">Budget (period)</th>
+                <th className="right">Actual</th>
+                <th className="right">Variance</th>
+                <th>Used</th>
+              </tr>
+            </thead>
+            <tbody>
+              {section("income")}
+              {section("expense")}
+              {net ? (
+                <tr className="total-row">
+                  <td><strong>NET SURPLUS / (DEFICIT)</strong></td>
+                  <td />
+                  <td className="num"><strong>{formatNumber(net.budget)}</strong></td>
+                  <td className="num"><strong>{formatNumber(net.actual)}</strong></td>
+                  <td className="num"><strong>{formatNumber(net.actual - net.budget)}</strong></td>
+                  <td />
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="coa-hint">
+        The monthly budget is multiplied by the months in the period (part months count by days). Pick a campus above to
+        keep a separate budget for it; Consolidated is the whole-school budget. Red variance means spending over budget,
+        or income below budget.
+      </p>
+    </Panel>
+  );
+}
