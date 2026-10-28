@@ -232,8 +232,8 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
         <Field label="First Name" required>
           <input className={inputClass} value={form.firstName} onChange={(e) => set("firstName", e.target.value)} placeholder="e.g. Ahmed" required />
         </Field>
-        <Field label="Last Name" required>
-          <input className={inputClass} value={form.lastName} onChange={(e) => set("lastName", e.target.value)} placeholder="e.g. Raza" required />
+        <Field label="Last Name">
+          <input className={inputClass} value={form.lastName} onChange={(e) => set("lastName", e.target.value)} placeholder="e.g. Raza" />
         </Field>
         <Field label="Gender">
           <select className={inputClass} value={form.gender} onChange={(e) => set("gender", e.target.value)}>

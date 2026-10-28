@@ -1,5 +1,6 @@
 "use client";
 
+import QRCode from "qrcode";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 export type SchoolHeader = {
@@ -168,4 +169,20 @@ export function QbLetterhead({
       ) : null}
     </div>
   );
+}
+
+/** A QR code (as an image URL) for the given text — challan links, ID card details. */
+export function useQr(text: string) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    let live = true;
+    if (!text) return;
+    QRCode.toDataURL(text, { margin: 0, width: 160, errorCorrectionLevel: "M" })
+      .then((url) => live && setSrc(url))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [text]);
+  return src;
 }

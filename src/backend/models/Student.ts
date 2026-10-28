@@ -54,7 +54,8 @@ const StudentSchema = new Schema<IStudent>(
   {
     admissionNo: { type: String, required: true, unique: true, trim: true },
     firstName: { type: String, required: true, trim: true },
-    lastName: { type: String, required: true, trim: true },
+    // Blank for one-word names (common in imports).
+    lastName: { type: String, trim: true, default: "" },
     email: { type: String, lowercase: true, trim: true },
     phone: String,
     gender: { type: String, enum: ["male", "female", "other"] },

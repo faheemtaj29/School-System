@@ -123,6 +123,7 @@ export function Hero({
   actionLabel,
   onAction,
   actionIcon,
+  extra,
 }: {
   kicker?: string;
   title: string;
@@ -131,6 +132,8 @@ export function Hero({
   actionLabel?: string;
   onAction?: () => void;
   actionIcon?: ReactNode;
+  /** More buttons beside the main action (e.g. Import from Excel). */
+  extra?: ReactNode;
 }) {
   return (
     <div className="hero">
@@ -144,11 +147,16 @@ export function Hero({
           </div>
         ) : null}
       </div>
-      {actionLabel && onAction ? (
-        <button type="button" className="btn-primary" onClick={onAction}>
-          {actionIcon ?? <PlusIcon />}
-          {actionLabel}
-        </button>
+      {extra || (actionLabel && onAction) ? (
+        <div className="hero-actions">
+          {extra}
+          {actionLabel && onAction ? (
+            <button type="button" className="btn-primary" onClick={onAction}>
+              {actionIcon ?? <PlusIcon />}
+              {actionLabel}
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
@@ -445,11 +453,13 @@ export function ModalForm({
         <form onSubmit={handleSubmit} className="modal-body">
           {children}
           <div className="form-actions">
-            <button type="submit" className="btn-dark" disabled={saving}>
-              {saving ? "Saving…" : submitLabel}
-            </button>
+            {onSubmit ? (
+              <button type="submit" className="btn-dark" disabled={saving}>
+                {saving ? "Saving…" : submitLabel}
+              </button>
+            ) : null}
             <button type="button" className="btn-ghost" onClick={onClose}>
-              Cancel
+              {onSubmit ? "Cancel" : "Close"}
             </button>
           </div>
         </form>

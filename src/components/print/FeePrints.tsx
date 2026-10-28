@@ -1,8 +1,6 @@
 "use client";
 
-import QRCode from "qrcode";
-import { useEffect, useState } from "react";
-import { PrintShell, SchoolHead, fmtDate, usePrintData, type SchoolHeader } from "./PrintShell";
+import { PrintShell, SchoolHead, fmtDate, usePrintData, useQr, type SchoolHeader } from "./PrintShell";
 
 type School = SchoolHeader & {
   currency: string;
@@ -111,21 +109,6 @@ function period(month: string | null, fallback: string) {
   if (!month) return fallback;
   const [y, m] = month.split("-").map(Number);
   return `${new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" })}-${String(y).slice(2)}`;
-}
-
-/** QR code (as an image) of this challan's online copy, which the parent can open and pay from. */
-function useQr(text: string) {
-  const [src, setSrc] = useState("");
-  useEffect(() => {
-    let live = true;
-    QRCode.toDataURL(text, { margin: 0, width: 160, errorCorrectionLevel: "M" })
-      .then((url) => live && setSrc(url))
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, [text]);
-  return src;
 }
 
 /** One copy of the challan: header band, student block, particulars, totals, copy bar, terms, signatures. */
