@@ -10,7 +10,7 @@ import { Fee } from "@/backend/models/Fee";
 import { MessageLog, type MessageKind } from "@/backend/models/Messaging";
 import { Settings, type MessagingConfig } from "@/backend/models/Settings";
 import { Student } from "@/backend/models/Student";
-import { challanUrl } from "@/backend/lib/challanLink";
+import { challanUrl, shareUrl } from "@/backend/lib/challanLink";
 import { examCenterService } from "@/backend/services/examCenter.service";
 import { feeBillingService } from "@/backend/services/feeBilling.service";
 import { ServiceError, type SessionUser } from "@/backend/types";
@@ -20,7 +20,9 @@ export const DEFAULT_TEMPLATES: MessagingConfig["templates"] = {
     "Dear {parent}, {student} ({class}) was absent from school on {date}. Please contact the school if this was not expected. — {school}",
   fee: "Dear {parent}, fee challan of {student} ({class}) for {period} is {status}.\n{heads}\nTotal payable by {dueDate}: {currency} {amount}\nAfter due date: {currency} {amountAfterDue}\nView / download challan: {link}\n— {school}",
   result:
-    "Dear {parent}, the {term} result of {student} ({class}) is ready: {obtained}/{total} marks, {percent}%, grade {grade}, {result}{position}. — {school}",
+    "Dear {parent}, the {term} result of {student} ({class}) is ready: {obtained}/{total} marks, {percent}%, grade {grade}, {result}{position}.\nView / download result card: {link}\n— {school}",
+  datesheet:
+    "Dear {parent}, the {term} date sheet for {class} is out. Exams start on {firstPaper}.\nView / download date sheet: {link}\n— {school}",
 };
 
 const DEFAULTS: MessagingConfig = {
@@ -66,6 +68,17 @@ export function normalizePhone(raw: string | undefined | null, countryCode: stri
 
 function fill(template: string, vars: Record<string, string | number>) {
   return template.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
+}
+
+/**
+ * Wording saved before document links existed still gets the missing lines (e.g. the link),
+ * placed above the sign-off ("— {school}") when there is one.
+ */
+function withLines(template: string, lines: { placeholder: string; text: string }[]) {
+  const extra = lines.filter((l) => !template.includes(l.placeholder)).map((l) => l.text).join("\n");
+  if (!extra) return template;
+  const sign = template.lastIndexOf("— {school}");
+  return sign >= 0 ? `${template.slice(0, sign).trimEnd()}\n${extra}\n${template.slice(sign)}` : `${template}\n${extra}`;
 }
 
 function prettyDay(d: Date | string) {
@@ -194,18 +207,10 @@ export const messagingService = {
       const { challans } = feeIds.length ? await feeBillingService.challans({ ids: feeIds }) : { challans: [] };
       const money = (n: number) => Math.round(n).toLocaleString("en-IN");
       // Saved wording from before challan links existed still gets the heads and the link.
-      let template = cfg.templates.fee;
-      const extra = [
-        template.includes("{heads}") ? "" : "{heads}",
-        template.includes("{link}") ? "" : "View / download challan: {link}",
-      ].filter(Boolean).join("\n");
-      if (extra) {
-        // Put them above the sign-off ("— {school}") when there is one.
-        const sign = template.lastIndexOf("— {school}");
-        template = sign >= 0
-          ? `${template.slice(0, sign).trimEnd()}\n${extra}\n${template.slice(sign)}`
-          : `${template}\n${extra}`;
-      }
+      const template = withLines(cfg.templates.fee, [
+        { placeholder: "{heads}", text: "{heads}" },
+        { placeholder: "{link}", text: "View / download challan: {link}" },
+      ]);
       for (const st of students) {
         const fee = latest.get(String(st._id))!;
         const c = challans.find((x) => x._id === String(fee._id));
@@ -234,6 +239,7 @@ export const messagingService = {
         throw new ServiceError("VALIDATION", "Choose the exam term and classes", 400);
       }
       const data = await examCenterService.resultCards(input.termId, classIds);
+      const template = withLines(cfg.templates.result, [{ placeholder: "{link}", text: "View / download result card: {link}" }]);
       const ids = data.batches.flatMap((b) => b.cards.map((c) => c.student._id));
       const students = await Student.find({ _id: { $in: ids } }).lean();
       for (const b of data.batches) {
@@ -241,7 +247,7 @@ export const messagingService = {
           if (c.result === "PENDING") continue;
           const st = students.find((s) => String(s._id) === c.student._id);
           if (!st) continue;
-          push(st, b.classLabel, cfg.templates.result, {
+          push(st, b.classLabel, template, {
             term: `${data.term.name} ${data.term.academicYear}`.trim(),
             obtained: c.obtained,
             total: c.totalMarks,
@@ -249,6 +255,25 @@ export const messagingService = {
             grade: c.grade,
             result: c.result,
             position: c.position ? `, position ${c.position} of ${b.stats.complete}` : "",
+            link: input.baseUrl ? shareUrl(input.baseUrl, "r", [input.termId!, b.classId, c.student._id]) : "",
+          });
+        }
+      }
+    } else if (input.kind === "datesheet") {
+      if (!input.termId || !isValidObjectId(input.termId) || !classIds.length) {
+        throw new ServiceError("VALIDATION", "Choose the exam term and classes", 400);
+      }
+      const data = await examCenterService.rollSlips(input.termId, classIds);
+      const template = withLines(cfg.templates.datesheet, [{ placeholder: "{link}", text: "View / download date sheet: {link}" }]);
+      for (const b of data.batches) {
+        const first = b.papers.find((p) => p.examDate);
+        const link = input.baseUrl ? shareUrl(input.baseUrl, "d", [input.termId, b.classId]) : "";
+        const students = await Student.find({ classId: b.classId, status: "active" }).sort({ firstName: 1 }).lean();
+        for (const st of students) {
+          push(st, b.classLabel, template, {
+            term: `${data.term.name} ${data.term.academicYear}`.trim(),
+            firstPaper: first ? `${prettyDay(first.examDate)} (${first.subject})` : "the dates shown",
+            link,
           });
         }
       }

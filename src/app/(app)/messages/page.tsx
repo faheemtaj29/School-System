@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState, Hero, Panel, StatusBadge, inputClass } from "@/components/ui";
 import { prettyDate, toDateInput } from "@/lib/types";
 
-type Kind = "absence" | "fee" | "result" | "custom";
+type Kind = "absence" | "fee" | "result" | "datesheet" | "custom";
 type Tab = Kind | "log" | "settings";
 type Row = { studentId: string; student: string; parent: string; className: string; phone: string; text: string; waLink: string | null };
 type ClassOpt = { _id: string; name: string; section?: string };
@@ -17,8 +17,8 @@ type Config = {
   httpMethod?: "GET" | "POST";
   hasTwilioToken: boolean;
   httpUrlHost: string;
-  templates: { absence: string; fee: string; result: string };
-  defaults: { absence: string; fee: string; result: string };
+  templates: { absence: string; fee: string; result: string; datesheet: string };
+  defaults: { absence: string; fee: string; result: string; datesheet: string };
 };
 type LogRow = {
   _id: string;
@@ -38,6 +38,7 @@ const TAB_LABEL: Record<Tab, string> = {
   absence: "Absences",
   fee: "Fee reminders",
   result: "Results ready",
+  datesheet: "Date sheet",
   custom: "Custom message",
   log: "Sent log",
   settings: "Settings",
@@ -45,7 +46,8 @@ const TAB_LABEL: Record<Tab, string> = {
 const PLACEHOLDERS: Record<Kind, string> = {
   absence: "{parent} {student} {class} {date} {school}",
   fee: "{parent} {student} {class} {period} {heads} {amount} {amountAfterDue} {currency} {dueDate} {status} {link} {school}",
-  result: "{parent} {student} {class} {term} {obtained} {total} {percent} {grade} {result} {position} {school}",
+  result: "{parent} {student} {class} {term} {obtained} {total} {percent} {grade} {result} {position} {link} {school}",
+  datesheet: "{parent} {student} {class} {term} {firstPaper} {link} {school}",
   custom: "{parent} {student} {class} {school}",
 };
 
@@ -83,14 +85,16 @@ export default function MessagesPage() {
     const q = new URLSearchParams(window.location.search);
     const k = q.get("kind") as Kind | null;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the URL
-    if (k && ["absence", "fee", "result", "custom"].includes(k)) setTab(k);
+    if (k && ["absence", "fee", "result", "datesheet", "custom"].includes(k)) setTab(k);
     if (q.get("date")) setDate(q.get("date")!);
     if (q.get("classIds")) setClassIds(q.get("classIds")!.split(",").filter(Boolean));
+    // Opened from the Exam Center: /messages?kind=result&termId=…&classIds=…
+    if (q.get("termId")) setTermId(q.get("termId")!);
     // Opened from a notice: /messages?kind=custom&text=…
     if (q.get("text")) setText(q.get("text")!);
   }, []);
 
-  const kind: Kind | null = ["absence", "fee", "result", "custom"].includes(tab) ? (tab as Kind) : null;
+  const kind: Kind | null = ["absence", "fee", "result", "datesheet", "custom"].includes(tab) ? (tab as Kind) : null;
   const filters = useMemo(
     () => ({ kind, date, classIds, feeScope, dueWithinDays: days, termId, text }),
     [kind, date, classIds, feeScope, days, termId, text]
@@ -173,7 +177,7 @@ export default function MessagesPage() {
 
   const gateway = config && config.provider !== "none";
   const tabs: Tab[] =
-    role === "teacher" ? ["absence"] : role === "admin" ? ["absence", "fee", "result", "custom", "log", "settings"] : ["absence", "fee", "result", "custom", "log"];
+    role === "teacher" ? ["absence"] : role === "admin" ? ["absence", "fee", "result", "datesheet", "custom", "log", "settings"] : ["absence", "fee", "result", "datesheet", "custom", "log"];
 
   return (
     <>
@@ -223,7 +227,7 @@ export default function MessagesPage() {
                 ) : null}
               </>
             ) : null}
-            {kind === "result" ? (
+            {kind === "result" || kind === "datesheet" ? (
               <label>
                 <span>Exam term</span>
                 <select className={inputClass} value={termId} onChange={(e) => setTermId(e.target.value)}>
@@ -233,14 +237,14 @@ export default function MessagesPage() {
                 </select>
               </label>
             ) : null}
-            <button type="button" className="btn-dark" disabled={busy || (kind === "result" && !classIds.length)} onClick={prepare}>
+            <button type="button" className="btn-dark" disabled={busy || ((kind === "result" || kind === "datesheet") && !classIds.length)} onClick={prepare}>
               {busy ? "Working…" : "Prepare list"}
             </button>
           </div>
 
           <div className="chips" style={{ margin: "4px 0 12px" }}>
             <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
-              {kind === "result" ? "Classes (choose at least one):" : "Classes (none = all):"}
+              {kind === "result" || kind === "datesheet" ? "Classes (choose at least one):" : "Classes (none = all):"}
             </span>
             {classes.map((c) => {
               const on = classIds.includes(c._id);
@@ -437,7 +441,7 @@ function MessagingSettings({ config, onSave }: { config: Config; onSave: (patch:
         </div>
       </Panel>
       <Panel title="Message wording">
-        {(["absence", "fee", "result"] as const).map((k) => (
+        {(["absence", "fee", "result", "datesheet"] as const).map((k) => (
           <label key={k} className="msg-text">
             <span>{TAB_LABEL[k]} — {PLACEHOLDERS[k]}</span>
             <textarea className={inputClass} rows={3} value={t[k]} onChange={(e) => setT({ ...t, [k]: e.target.value })} />

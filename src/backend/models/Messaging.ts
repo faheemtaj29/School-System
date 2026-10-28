@@ -3,7 +3,7 @@
  */
 import { Schema, models, model, Types } from "mongoose";
 
-export type MessageKind = "absence" | "fee" | "result" | "custom";
+export type MessageKind = "absence" | "fee" | "result" | "datesheet" | "custom";
 
 export interface IMessageLog {
   kind: MessageKind;
@@ -22,7 +22,7 @@ export interface IMessageLog {
 
 const MessageLogSchema = new Schema<IMessageLog>(
   {
-    kind: { type: String, enum: ["absence", "fee", "result", "custom"], required: true },
+    kind: { type: String, enum: ["absence", "fee", "result", "datesheet", "custom"], required: true },
     studentId: { type: Schema.Types.ObjectId, ref: "Student" },
     to: { type: String, required: true },
     recipientName: String,

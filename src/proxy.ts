@@ -13,6 +13,8 @@ const publicPaths = [
   "/contact",
   // A fee challan opened from a signed WhatsApp/SMS link.
   "/challan",
+  // A result card or date sheet opened from a signed link.
+  "/share",
 ];
 
 /** Public read/submit endpoints for the website. */

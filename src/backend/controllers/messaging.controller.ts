@@ -8,7 +8,7 @@ import { messagingService } from "@/backend/services/messaging.service";
 
 const id = z.string().regex(/^[a-f\d]{24}$/i);
 const prepareSchema = z.object({
-  kind: z.enum(["absence", "fee", "result", "custom"]),
+  kind: z.enum(["absence", "fee", "result", "datesheet", "custom"]),
   date: z.string().optional(),
   classIds: z.array(id).max(200).optional(),
   feeScope: z.enum(["unpaid", "overdue", "due_soon"]).optional(),
@@ -32,7 +32,7 @@ const configSchema = z.object({
   httpUrl: z.string().trim().url().max(1000).optional().or(z.literal("")),
   httpMethod: z.enum(["GET", "POST"]).optional(),
   templates: z
-    .object({ absence: z.string().max(1000), fee: z.string().max(1000), result: z.string().max(1000) })
+    .object({ absence: z.string().max(1000), fee: z.string().max(1000), result: z.string().max(1000), datesheet: z.string().max(1000) })
     .partial()
     .optional(),
 });

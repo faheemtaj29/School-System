@@ -114,10 +114,10 @@ export function RollSlipsPrint({ termId, classIds, perPage }: { termId: string; 
   );
 }
 
-export function DateSheetPrint({ termId, classIds }: { termId: string; classIds: string }) {
-  const { data, error } = usePrintData<SlipData>(slipsUrl(termId, classIds));
+export function DateSheetPrint({ termId, classIds, src }: { termId: string; classIds: string; src?: string }) {
+  const { data, error } = usePrintData<SlipData>(src || slipsUrl(termId, classIds));
   return (
-    <PrintShell title="Date Sheet" info={data ? `${data.batches.length} class(es)` : undefined} error={error} loading={!data}>
+    <PrintShell title="Date Sheet" info={data ? `${data.batches.length} class(es)` : undefined} error={error} loading={!data} closable={!src}>
       {data?.batches.map((b) => (
         <section key={b.classId} className="doc-page">
           <SchoolHead school={data.school} title="DATE SHEET" sub={`${data.term.name} · ${data.term.academicYear}`} />
@@ -183,16 +183,16 @@ function ordinal(n: number) {
 
 const STATUS_LABEL = { pass: "Pass", fail: "Fail", absent: "Absent", pending: "Pending" } as const;
 
-export function ResultCardsPrint({ termId, classIds, studentId }: { termId: string; classIds: string; studentId?: string }) {
+export function ResultCardsPrint({ termId, classIds, studentId, src }: { termId: string; classIds: string; studentId?: string; src?: string }) {
   const url = resultsUrl(termId, classIds);
-  const { data: all, error } = usePrintData<ResultData>(url && studentId ? `${url}&student=${studentId}` : url);
+  const { data: all, error } = usePrintData<ResultData>(src || (url && studentId ? `${url}&student=${studentId}` : url));
   // One student's card when opened from their profile.
   const data = all && studentId
     ? { ...all, batches: all.batches.map((b) => ({ ...b, cards: b.cards.filter((c) => c.student._id === studentId) })) }
     : all;
   const count = data?.batches.reduce((s, b) => s + b.cards.length, 0) || 0;
   return (
-    <PrintShell title="Result Cards" info={data ? `${count} cards` : undefined} error={error} loading={!data}>
+    <PrintShell title="Result Cards" info={data ? `${count} cards` : undefined} error={error} loading={!data} closable={!src}>
       {data?.batches.map((b) => {
         // Union of component labels across papers, so every row lines up under the same columns.
         const columns: Component[] = [];

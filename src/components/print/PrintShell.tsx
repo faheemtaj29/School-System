@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 export type SchoolHeader = {
   name: string;
@@ -47,6 +47,27 @@ export function PrintShell({
   useEffect(() => {
     document.title = title;
   }, [title]);
+  // On a phone the A4 page is shrunk to fit the screen; printing uses the real size.
+  const pagesRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = pagesRef.current;
+    if (!el) return;
+    const fit = () => {
+      el.style.zoom = "";
+      const page = el.querySelector<HTMLElement>(".doc-page");
+      if (!page) return;
+      const scale = Math.min(1, (document.documentElement.clientWidth - 16) / page.offsetWidth);
+      if (scale < 1) el.style.zoom = String(scale);
+    };
+    fit();
+    const obs = new MutationObserver(fit);
+    obs.observe(el, { childList: true });
+    window.addEventListener("resize", fit);
+    return () => {
+      obs.disconnect();
+      window.removeEventListener("resize", fit);
+    };
+  }, []);
   return (
     <>
       {landscape ? <style>{"@page { size: A4 landscape; margin: 10mm; }"}</style> : (
@@ -70,7 +91,7 @@ export function PrintShell({
       </div>
       {error ? <div className="alert err print-msg">{error}</div> : null}
       {loading && !error ? <div className="print-msg">Preparing…</div> : null}
-      <div className={`print-pages${landscape ? " landscape" : ""}`}>{children}</div>
+      <div ref={pagesRef} className={`print-pages${landscape ? " landscape" : ""}`}>{children}</div>
     </>
   );
 }

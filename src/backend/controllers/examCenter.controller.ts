@@ -1,3 +1,4 @@
+import { verifyShareToken } from "@/backend/lib/challanLink";
 import {
   firstZodError,
   fromServiceError,
@@ -143,6 +144,25 @@ export const examCenterController = {
         return jsonOk({ ...data, batches: data.batches.map((b) => ({ ...b, cards: b.cards.filter((c) => c.student._id === student) })) });
       }
       return jsonOk(await examCenterService.resultCards(termId, classIds));
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  /** GET /api/public/doc?t=<share token> — a result card or date sheet from a WhatsApp/SMS link, no login. */
+  async publicDoc(req: Request) {
+    try {
+      const share = verifyShareToken(new URL(req.url).searchParams.get("t") || "");
+      if (!share) return jsonError("This link is not valid", 404);
+      if (share.kind === "r") {
+        const [termId, classId, studentId] = share.ids;
+        const data = await examCenterService.resultCards(termId, [classId]);
+        return jsonOk({ ...data, batches: data.batches.map((b) => ({ ...b, cards: b.cards.filter((c) => c.student._id === studentId) })) });
+      }
+      const [termId, classId] = share.ids;
+      const data = await examCenterService.rollSlips(termId, [classId]);
+      // The date sheet only: no class list or roll numbers on a public link.
+      return jsonOk({ ...data, batches: data.batches.map((b) => ({ ...b, students: [] })) });
     } catch (e) {
       return fromServiceError(e);
     }

@@ -56,7 +56,7 @@ export type MessagingConfig = {
   /** Gateway link with {to} and {message}, e.g. https://sms.example.com/send?to={to}&text={message}&key=… */
   httpUrl?: string;
   httpMethod?: "GET" | "POST";
-  templates: { absence: string; fee: string; result: string };
+  templates: { absence: string; fee: string; result: string; datesheet: string };
 };
 
 export interface ISettings {

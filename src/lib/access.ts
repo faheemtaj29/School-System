@@ -25,7 +25,7 @@ export const ACADEMIC_PAGES = [
 ];
 
 /** Everyone signed in */
-export const SHARED_PAGES = ["/dashboard", "/distance-learning", "/notices", "/print", "/challan"];
+export const SHARED_PAGES = ["/dashboard", "/distance-learning", "/notices", "/print", "/challan", "/share"];
 
 export function canOpenPage(role: string, pathname: string) {
   const normalizedRole = (role || "").toLowerCase();

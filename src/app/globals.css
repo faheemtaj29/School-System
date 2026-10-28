@@ -3203,3 +3203,4 @@ table.reg.compact td { padding: 6px 8px; }
 .fee-tab-actions { margin-left: auto; display: flex; gap: 8px; }
 .coll-print-table td:nth-child(2), .coll-print-table td:nth-child(3), .coll-print-table td:nth-child(5) { white-space: nowrap; }
 .coll-print-table { font-size: 10.5px; }
+@media print { .print-pages { zoom: 1 !important; } }
