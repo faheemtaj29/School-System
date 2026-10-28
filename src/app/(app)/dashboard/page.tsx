@@ -14,6 +14,7 @@ import {
 import {
   formatCompact,
 } from "@/lib/types";
+import { canOpenPage } from "@/lib/access";
 import {
   StudentDashboard,
   TeacherDashboard,
@@ -42,8 +43,121 @@ type Stats = {
 type Charts = {
   attendanceTrend: { date: string; label: string; rate: number; present: number; total: number }[];
   avgAttendance: number;
+  feeTrend?: { month: string; label: string; billed: number; collected: number }[];
   classStrength: { label: string; count: number }[];
 };
+
+type Attention = {
+  absentCount: number;
+  absentStudents: { _id: string; name: string; className: string }[];
+  unmarkedClasses: number;
+  defaulters: { _id: string; name: string; admissionNo: string; due: number; vouchers: number }[];
+  pendingLeaves: number;
+  pendingApprovals: number;
+  lowStock: number;
+};
+
+function FeeTrendChart({ data }: { data: NonNullable<Charts["feeTrend"]> }) {
+  const max = Math.max(...data.map((d) => Math.max(d.billed, d.collected)), 1);
+  if (!data.some((d) => d.billed || d.collected)) {
+    return <EmptyState message="Issue fee vouchers to see monthly billing and collection." />;
+  }
+  return (
+    <>
+      <div className="bar-chart fee-trend">
+        {data.map((d) => (
+          <div className="bar-col" key={d.month} title={`${d.label}: billed ${formatCompact(d.billed)}, collected ${formatCompact(d.collected)}`}>
+            <div className="bar-val">{formatCompact(d.collected)}</div>
+            <div className="fee-pair">
+              <div className="fee-bar billed" style={{ height: `${Math.max((d.billed / max) * 100, 3)}%` }} />
+              <div className="fee-bar collected" style={{ height: `${Math.max((d.collected / max) * 100, 3)}%` }} />
+            </div>
+            <div className="bar-label">{d.label}</div>
+          </div>
+        ))}
+      </div>
+      <div className="legend fee-legend">
+        <div><span className="dot-sq" style={{ background: "#cfd6cc" }} />Billed</div>
+        <div><span className="dot-sq" style={{ background: "var(--jade)" }} />Collected</div>
+      </div>
+    </>
+  );
+}
+
+function NeedsAttention({ data, role }: { data: Attention; role: string }) {
+  const rows = [
+    {
+      show: data.absentCount > 0,
+      href: "/attendance",
+      tone: "red",
+      text: `${data.absentCount} student${data.absentCount === 1 ? "" : "s"} absent today`,
+      detail: data.absentStudents.map((s) => `${s.name}${s.className ? ` (${s.className})` : ""}`).join(", ") +
+        (data.absentCount > data.absentStudents.length ? ` +${data.absentCount - data.absentStudents.length} more` : ""),
+    },
+    {
+      show: data.unmarkedClasses > 0,
+      href: "/attendance",
+      tone: "amber",
+      text: `${data.unmarkedClasses} class${data.unmarkedClasses === 1 ? "" : "es"} without attendance today`,
+      detail: "Mark attendance so parents can be told about absences.",
+    },
+    {
+      show: data.pendingLeaves > 0,
+      href: "/hr",
+      tone: "amber",
+      text: `${data.pendingLeaves} leave request${data.pendingLeaves === 1 ? "" : "s"} waiting`,
+      detail: "Approve or reject in HR & Payroll.",
+    },
+    {
+      show: data.pendingApprovals > 0,
+      href: "/approvals",
+      tone: "amber",
+      text: `${data.pendingApprovals} approval${data.pendingApprovals === 1 ? "" : "s"} waiting for a decision`,
+      detail: "",
+    },
+    {
+      show: data.lowStock > 0,
+      href: "/inventory",
+      tone: "amber",
+      text: `${data.lowStock} store item${data.lowStock === 1 ? "" : "s"} at or below reorder level`,
+      detail: "Raise a purchase before they run out.",
+    },
+  ].filter((r) => r.show && canOpenPage(role, r.href));
+  const defaulters = canOpenPage(role, "/fees") ? data.defaulters : [];
+
+  if (!rows.length && !defaulters.length) {
+    return <div className="attn-clear">All clear — nothing needs attention right now.</div>;
+  }
+  return (
+    <div className="attn-list">
+      {rows.map((r) => (
+        <Link key={r.text} href={r.href} className={`attn-row ${r.tone}`}>
+          <span className="attn-dot" />
+          <div>
+            <div className="attn-text">{r.text}</div>
+            {r.detail ? <div className="attn-detail">{r.detail}</div> : null}
+          </div>
+        </Link>
+      ))}
+      {defaulters.length ? (
+        <div className="attn-sub">
+          <div className="attn-sub-title">Highest overdue fees</div>
+          {defaulters.map((d) => (
+            <Link key={d._id} href={`/students/${d._id}`} className="deadline-row">
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{d.name}</div>
+                <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
+                  {d.admissionNo} · {d.vouchers} voucher{d.vouchers === 1 ? "" : "s"}
+                </div>
+              </div>
+              <div className="num" style={{ color: "var(--red)" }}>{formatCompact(d.due)}</div>
+            </Link>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function TrendChart({ data }: { data: Charts["attendanceTrend"] }) {
   const w = 560;
@@ -142,6 +256,7 @@ export default function DashboardPage() {
   }, []);
   const [stats, setStats] = useState<Stats | null>(null);
   const [charts, setCharts] = useState<Charts | null>(null);
+  const [attention, setAttention] = useState<Attention | null>(null);
   const [recentStudents, setRecentStudents] = useState<RecentStudent[]>([]);
   const [upcomingExams, setUpcomingExams] = useState<UpcomingExam[]>([]);
 
@@ -152,6 +267,7 @@ export default function DashboardPage() {
         setRole(d);
         setStats(d.stats ?? null);
         setCharts(d.charts ?? null);
+        setAttention(d.attention ?? null);
         setRecentStudents(d.recentStudents ?? []);
         setUpcomingExams(d.upcomingExams ?? []);
       })
@@ -264,6 +380,16 @@ export default function DashboardPage() {
 
       <div className="grid-2">
         <div>
+          {attention ? (
+            <Panel title="Needs Attention" meta="TODAY">
+              <NeedsAttention data={attention} role={role?.role ?? ""} />
+            </Panel>
+          ) : null}
+
+          <Panel title="Fee Trend" meta="BILLED VS COLLECTED · 6 MONTHS">
+            <FeeTrendChart data={charts?.feeTrend ?? []} />
+          </Panel>
+
           <Panel title="Attendance Trend" meta={`LAST 7 DAYS · AVG ${charts?.avgAttendance ?? 0}%`}>
             <TrendChart data={charts?.attendanceTrend ?? []} />
           </Panel>

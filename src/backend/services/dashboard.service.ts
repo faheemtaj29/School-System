@@ -13,6 +13,8 @@ import { Exam } from "@/backend/models/Exam";
 import { Attendance } from "@/backend/models/Attendance";
 import { Course, Diploma, Enrollment, Lecture } from "@/backend/models/ELearning";
 import { LeaveRequest, Payslip } from "@/backend/models/HR";
+import { InventoryItem } from "@/backend/models/Inventory";
+import { WorkflowInstance } from "@/backend/models/Platform";
 import { Notice } from "@/backend/models/Notice";
 import type { SessionUser } from "@/backend/types";
 
@@ -26,6 +28,120 @@ function todayRange() {
 
 function rate(part: number, total: number) {
   return total > 0 ? Math.round((part / total) * 100) : 0;
+}
+
+const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+function monthKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Billed (by due date) vs collected (by payment date) for the last six months. */
+async function feeTrend(startOfToday: Date) {
+  const from = new Date(startOfToday.getFullYear(), startOfToday.getMonth() - 5, 1);
+  const monthOf = (field: string) => ({ $dateToString: { format: "%Y-%m", date: field, timezone: TZ } });
+
+  const [billedRows, paidRows] = await Promise.all([
+    Fee.aggregate([
+      { $match: { dueDate: { $gte: from } } },
+      { $group: { _id: monthOf("$dueDate"), amount: { $sum: "$amount" } } },
+    ]),
+    Fee.aggregate([
+      { $match: { paidAmount: { $gt: 0 } } },
+      {
+        // Older vouchers carry only paidAmount + paymentDate, not a payments list.
+        $project: {
+          entries: {
+            $cond: [
+              { $gt: [{ $size: { $ifNull: ["$payments", []] } }, 0] },
+              "$payments",
+              [{ amount: "$paidAmount", date: { $ifNull: ["$paymentDate", "$updatedAt"] } }],
+            ],
+          },
+        },
+      },
+      { $unwind: "$entries" },
+      { $match: { "entries.date": { $gte: from } } },
+      { $group: { _id: monthOf("$entries.date"), amount: { $sum: "$entries.amount" } } },
+    ]),
+  ]);
+
+  const billed = new Map(billedRows.map((r) => [r._id as string, r.amount as number]));
+  const paid = new Map(paidRows.map((r) => [r._id as string, r.amount as number]));
+  return Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(from.getFullYear(), from.getMonth() + i, 1);
+    const key = monthKey(d);
+    return {
+      month: key,
+      label: d.toLocaleDateString("en-GB", { month: "short" }).toUpperCase(),
+      billed: billed.get(key) ?? 0,
+      collected: paid.get(key) ?? 0,
+    };
+  });
+}
+
+type SheetRecord = { studentId: unknown; status: string };
+
+/** Things someone should act on today, each small enough to show in one panel. */
+async function attentionItems(
+  startOfToday: Date,
+  todaySheets: { classId: unknown; records?: SheetRecord[] }[],
+  classCount: number
+) {
+  const absentIds = todaySheets.flatMap((s) =>
+    (s.records ?? []).filter((r) => r.status === "absent").map((r) => r.studentId)
+  );
+  const markedClasses = new Set(todaySheets.map((s) => String(s.classId)));
+
+  const [absentStudents, defaulters, pendingLeaves, pendingApprovals, lowStock] = await Promise.all([
+    absentIds.length
+      ? Student.find({ _id: { $in: absentIds.slice(0, 6) } })
+          .select("firstName lastName admissionNo classId")
+          .populate("classId", "name section")
+          .lean()
+      : [],
+    Fee.aggregate([
+      { $match: { status: { $ne: "paid" }, dueDate: { $lt: startOfToday } } },
+      { $project: { studentId: 1, due: { $subtract: ["$amount", "$paidAmount"] } } },
+      { $match: { due: { $gt: 0 } } },
+      { $group: { _id: "$studentId", due: { $sum: "$due" }, vouchers: { $sum: 1 } } },
+      { $sort: { due: -1 } },
+      { $limit: 5 },
+      { $lookup: { from: "students", localField: "_id", foreignField: "_id", as: "s" } },
+      { $unwind: "$s" },
+      {
+        $project: {
+          due: 1,
+          vouchers: 1,
+          name: { $concat: ["$s.firstName", " ", "$s.lastName"] },
+          admissionNo: "$s.admissionNo",
+        },
+      },
+    ]),
+    LeaveRequest.countDocuments({ status: "pending" }),
+    WorkflowInstance.countDocuments({ status: "pending" }),
+    InventoryItem.countDocuments({ $expr: { $lte: ["$quantity", "$reorderLevel"] } }),
+  ]);
+
+  return {
+    absentCount: absentIds.length,
+    absentStudents: absentStudents.map((s) => ({
+      _id: String(s._id),
+      name: `${s.firstName} ${s.lastName}`,
+      className: s.classId && typeof s.classId === "object" ? `${s.classId.name}-${s.classId.section}` : "",
+    })),
+    unmarkedClasses: Math.max(classCount - markedClasses.size, 0),
+    defaulters: defaulters.map((d) => ({
+      _id: String(d._id),
+      name: d.name as string,
+      admissionNo: d.admissionNo as string,
+      due: d.due as number,
+      vouchers: d.vouchers as number,
+    })),
+    pendingLeaves,
+    pendingApprovals,
+    lowStock,
+  };
 }
 
 export const dashboardService = {
@@ -171,7 +287,13 @@ export const dashboardService = {
         )
       : 0;
 
+    const [monthlyFees, attention] = await Promise.all([
+      feeTrend(startOfToday),
+      attentionItems(startOfToday, todaySheets, classes),
+    ]);
+
     return {
+      attention,
       stats: {
         students,
         teachers,
@@ -191,6 +313,7 @@ export const dashboardService = {
       charts: {
         attendanceTrend,
         avgAttendance,
+        feeTrend: monthlyFees,
         classStrength: classCounts.map((c) => ({
           label: c.label,
           count: c.count,
