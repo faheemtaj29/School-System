@@ -132,23 +132,42 @@ type RoleData =
 
 export default function DashboardPage() {
   const [role, setRole] = useState<RoleData | null>(null);
+  const [dashboardState, setDashboardState] = useState<"loading" | "ready" | "error">("loading");
+  const [reloadCount, setReloadCount] = useState(0);
   const [stats, setStats] = useState<Stats | null>(null);
   const [charts, setCharts] = useState<Charts | null>(null);
   const [recentStudents, setRecentStudents] = useState<RecentStudent[]>([]);
   const [upcomingExams, setUpcomingExams] = useState<UpcomingExam[]>([]);
 
   useEffect(() => {
+    let active = true;
     fetch("/api/dashboard")
-      .then((r) => r.json())
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Dashboard request failed (${response.status})`);
+        const data = await response.json();
+        if (!data || typeof data.role !== "string") {
+          throw new Error("Dashboard response did not include a user role");
+        }
+        return data;
+      })
       .then((d) => {
+        if (!active) return;
         setRole(d);
         setStats(d.stats ?? null);
         setCharts(d.charts ?? null);
         setRecentStudents(d.recentStudents ?? []);
         setUpcomingExams(d.upcomingExams ?? []);
       })
-      .catch(() => undefined);
-  }, []);
+      .then(() => {
+        if (active) setDashboardState("ready");
+      })
+      .catch(() => {
+        if (active) setDashboardState("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, [reloadCount]);
 
   const fees = stats?.fees;
   const collectedPct =
@@ -179,6 +198,36 @@ export default function DashboardPage() {
     ],
     [stats, fees, charts, collectedPct]
   );
+
+  if (dashboardState === "loading") {
+    return (
+      <Panel title="Loading dashboard">
+        <div role="status" style={{ padding: "16px 0", color: "var(--text-dim)" }}>
+          Loading your role-specific dashboard...
+        </div>
+      </Panel>
+    );
+  }
+
+  if (dashboardState === "error") {
+    return (
+      <Panel title="Dashboard unavailable">
+        <div style={{ padding: "16px 0", color: "var(--text-dim)" }}>
+          Could not load your dashboard. Please check your connection and try again.
+        </div>
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => {
+            setDashboardState("loading");
+            setReloadCount((count) => count + 1);
+          }}
+        >
+          Try again
+        </button>
+      </Panel>
+    );
+  }
 
   if (role?.role === "teacher") {
     if (!role.linked) return <UnlinkedNotice role="teacher" />;

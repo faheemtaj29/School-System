@@ -890,7 +890,13 @@ export default function SettingsPage() {
               </div>
               <div className="theme-preview">
                 <div className="theme-preview-side">
-                  <span className="theme-preview-badge">S</span>
+                  {form.logoUrl ? (
+                    <Image src={form.logoUrl} alt="" width={32} height={32} unoptimized className="theme-preview-badge" />
+                  ) : (
+                    <span className="theme-preview-badge">
+                      {form.schoolName.split(/\s+/).slice(0, 2).map((word) => word[0]).join("")}
+                    </span>
+                  )}
                   <b>{form.schoolName}</b>
                   <em>Dashboard</em>
                   <em className="on">Students</em>

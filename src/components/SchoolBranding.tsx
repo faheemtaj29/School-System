@@ -30,10 +30,7 @@ const defaultBranding: SchoolBranding = {
 const brandingEvent = "school-branding-updated";
 const brandingStorageKey = "sabaq-branding-updated";
 
-const SchoolBrandingContext = createContext<SchoolBrandingContextValue>({
-  ...defaultBranding,
-  updateSchoolBranding: () => {},
-});
+const SchoolBrandingContext = createContext<SchoolBrandingContextValue | null>(null);
 
 function applyBrowserBranding(branding: SchoolBranding) {
   document.title = `${branding.schoolName} | School Management System`;
@@ -106,7 +103,9 @@ export function SchoolBrandingProvider({ children }: { children: ReactNode }) {
 }
 
 export function useSchoolBranding() {
-  return useContext(SchoolBrandingContext);
+  const context = useContext(SchoolBrandingContext);
+  if (!context) throw new Error("useSchoolBranding must be used inside SchoolBrandingProvider");
+  return context;
 }
 
 export function SchoolName({ className }: { className?: string }) {

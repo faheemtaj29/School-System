@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Field, ModalForm, OptionSelect, inputClass } from "@/components/ui";
+import { Field, ModalForm, OptionSelect, ProfilePhotoField, inputClass } from "@/components/ui";
 import {
   ClassItem,
   StudentItem,
@@ -31,6 +31,7 @@ const empty = {
   idMode: "auto",
   firstName: "",
   lastName: "",
+  profilePhoto: "",
   email: "",
   phone: "",
   gender: "",
@@ -100,6 +101,7 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
         idMode: "manual",
         firstName: initial.firstName,
         lastName: initial.lastName,
+        profilePhoto: initial.profilePhoto ?? "",
         email: initial.email ?? "",
         phone: initial.phone ?? "",
         gender: initial.gender ?? "",
@@ -204,6 +206,13 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
       submitLabel={initial ? "Update Student" : "Enroll Student"}
     >
       {error ? <div className="alert err">{error}</div> : null}
+
+      <div className="form-section-title">Student Profile Photo</div>
+      <ProfilePhotoField
+        name={`${form.firstName} ${form.lastName}`}
+        value={form.profilePhoto}
+        onChange={(profilePhoto) => set("profilePhoto", profilePhoto)}
+      />
 
       <div className="form-section-title">Personal Information</div>
       <div className="form-grid">
@@ -538,6 +547,7 @@ const teacherEmpty = {
   idMode: "auto",
   firstName: "",
   lastName: "",
+  profilePhoto: "",
   email: "",
   phone: "",
   gender: "",
@@ -547,6 +557,8 @@ const teacherEmpty = {
   subjects: [] as string[],
   classes: [] as string[],
   qualification: "",
+  designation: "",
+  department: "",
   status: "active",
   branchCode: "",
 };
@@ -571,6 +583,7 @@ export function TeacherForm({
         idMode: "manual",
         firstName: initial.firstName,
         lastName: initial.lastName,
+        profilePhoto: initial.profilePhoto ?? "",
         email: initial.email,
         phone: initial.phone ?? "",
         gender: initial.gender ?? "",
@@ -580,6 +593,8 @@ export function TeacherForm({
         subjects: (initial.subjects || []).map((s) => idOf(s as never)),
         classes: (initial.classes || []).map((c) => idOf(c as never)),
         qualification: initial.qualification ?? "",
+        designation: initial.designation ?? "",
+        department: initial.department ?? "",
         status: initial.status,
         branchCode: initial.branchCode ?? "",
       });
@@ -643,6 +658,13 @@ export function TeacherForm({
     >
       {error ? <div className="alert err">{error}</div> : null}
 
+      <div className="form-section-title">Teacher Profile Photo</div>
+      <ProfilePhotoField
+        name={`${form.firstName} ${form.lastName}`}
+        value={form.profilePhoto}
+        onChange={(profilePhoto) => setForm((prev) => ({ ...prev, profilePhoto }))}
+      />
+
       <div className="form-section-title">Staff Information</div>
       <div className="form-grid">
         <Field label="Employee ID" required>
@@ -696,6 +718,12 @@ export function TeacherForm({
         </Field>
         <Field label="Qualification">
           <input className={inputClass} value={form.qualification} onChange={(e) => setForm({ ...form, qualification: e.target.value })} placeholder="e.g. M.Sc Mathematics" />
+        </Field>
+        <Field label="Designation">
+          <input className={inputClass} value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} placeholder="e.g. Senior Mathematics Teacher" />
+        </Field>
+        <Field label="Department">
+          <input className={inputClass} value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} placeholder="e.g. Mathematics" />
         </Field>
         <Field label="Join Date">
           <input type="date" className={inputClass} value={form.joinDate} onChange={(e) => setForm({ ...form, joinDate: e.target.value })} />

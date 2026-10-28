@@ -1,18 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { NameCell, Panel, StatusBadge, inputClass } from "@/components/ui";
+import { Panel, StatusBadge } from "@/components/ui";
+import { FeePaymentDialog } from "@/components/forms/FeePaymentDialog";
 import {
-  ClassItem,
   FeeItem,
+  FeePaymentItem,
   StudentItem,
   fullName,
   formatNumber,
   labelOfClass,
   prettyDate,
-  toDateInput,
 } from "@/lib/types";
 
 /* ── local types ─────────────────────────────────────────────────── */
@@ -28,7 +29,18 @@ type ExamResult = {
   remarks?: string;
 };
 
-type ProfileTab = "overview" | "fees" | "academics";
+type ProfileTab = "info" | "fees" | "history";
+type StudentLedgerVoucher = {
+  _id: string;
+  number: string;
+  voucherType: string;
+  status: string;
+  date: string;
+  narration: string;
+  reference?: string;
+  grandTotal: number;
+  lines: { accountCode: string; accountName: string; debit: number; credit: number }[];
+};
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 function initials(s: StudentItem) {
@@ -47,31 +59,44 @@ function pct(marks: number, max: number) {
   return Math.round((marks / max) * 100);
 }
 
+function fineAmount(fee: FeeItem) {
+  if (fee.lateFeeAmount) return fee.lateFeeAmount;
+  return (fee.lines || [])
+    .filter((line) => /fine|late fee|penalty/i.test(line.head))
+    .reduce((sum, line) => sum + line.amount, 0);
+}
+
 /* ══════════════════════════════════════════════════════════════════ */
 export default function StudentProfilePage() {
   const params = useParams();
   const id = params?.id as string;
 
   const [student, setStudent] = useState<StudentItem | null>(null);
-  const [classes, setClasses] = useState<ClassItem[]>([]);
   const [fees, setFees] = useState<FeeItem[]>([]);
+  const [ledger, setLedger] = useState<StudentLedgerVoucher[]>([]);
   const [exams, setExams] = useState<ExamResult[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<ProfileTab>("overview");
+  const [tab, setTab] = useState<ProfileTab>("info");
+  const [role, setRole] = useState("student");
+  const [paymentDialog, setPaymentDialog] = useState<{
+    fee: FeeItem;
+    receipt?: FeePaymentItem;
+  } | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     try {
-      const [sRes, fRes, eRes, cRes] = await Promise.all([
+      const [sRes, fRes, eRes, meRes] = await Promise.all([
         fetch(`/api/students/${id}`).then((r) => r.json()),
         fetch(`/api/fees?studentId=${id}`).then((r) => r.json()),
         fetch("/api/exams").then((r) => r.json()),
-        fetch("/api/classes").then((r) => r.json()),
+        fetch("/api/auth/me").then((r) => r.json()),
       ]);
       setStudent(sRes.student ?? null);
       setFees(fRes.fees ?? []);
-      setClasses(cRes.classes ?? []);
+      setLedger(fRes.ledger ?? []);
+      setRole(meRes.user?.role || "student");
 
       // filter exam results for this student
       const allExams = eRes.exams ?? [];
@@ -112,11 +137,14 @@ export default function StudentProfilePage() {
   const feeStats = useMemo(() => {
     const billed = fees.reduce((s, f) => s + (f.amount || 0), 0);
     const collected = fees.reduce((s, f) => s + (f.paidAmount || 0), 0);
-    const outstanding = fees.filter((f) => f.status !== "paid").reduce((s, f) => s + Math.max(0, (f.amount || 0) - (f.paidAmount || 0)), 0);
-    const paid = fees.filter((f) => f.status === "paid").length;
-    const pending = fees.filter((f) => f.status !== "paid").length;
-    return { billed, collected, outstanding, paid, pending };
+    const outstanding = fees.reduce((sum, fee) => sum + Math.max(0, (fee.amount || 0) - (fee.paidAmount || 0)), 0);
+    const fines = fees.reduce((sum, fee) => {
+        return sum + fineAmount(fee);
+      }, 0);
+    return { billed, collected, outstanding, fines };
   }, [fees]);
+
+  const canReceive = role === "admin" || role === "staff";
 
   const examStats = useMemo(() => {
     if (!exams.length) return null;
@@ -144,7 +172,14 @@ export default function StudentProfilePage() {
     );
   }
 
-  const className = labelOfClass(student.classId as ClassItem);
+  const className = labelOfClass(student.classId);
+  const receipts = fees.flatMap((fee) =>
+    (fee.payments || []).map((receipt) => ({ fee, receipt }))
+  );
+  const fineFees = fees.filter((fee) =>
+    fineAmount(fee) > 0
+  );
+  const discountedFees = fees.filter((fee) => (fee.discountAmount || 0) > 0);
 
   /* ── render ─────────────────────────────────────────────────────── */
   return (
@@ -172,13 +207,10 @@ export default function StudentProfilePage() {
         flexWrap: "wrap",
       }}>
         {/* Avatar */}
-        <div style={{
-          width: 72, height: 72, borderRadius: "50%",
-          background: "var(--primary)", color: "#fff",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 24, fontWeight: 700, flexShrink: 0, letterSpacing: 1,
-        }}>
-          {initials(student)}
+        <div className="student-profile-avatar">
+          {student.profilePhoto ? (
+            <Image src={student.profilePhoto} alt="" width={88} height={88} unoptimized />
+          ) : initials(student)}
         </div>
 
         {/* Main info */}
@@ -201,31 +233,14 @@ export default function StudentProfilePage() {
           </div>
         </div>
 
-        {/* Quick stats */}
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <div style={{ textAlign: "center", minWidth: 72 }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: feeStats.outstanding > 0 ? "var(--danger)" : "#16a34a" }}>
-              {feeStats.outstanding > 0 ? `PKR ${formatNumber(feeStats.outstanding)}` : "✓"}
-            </div>
-            <div style={{ fontSize: 11, color: "var(--text-dim)" }}>Outstanding</div>
-          </div>
-          {examStats ? (
-            <div style={{ textAlign: "center", minWidth: 72 }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: gradeColor(examStats.avg) }}>
-                {examStats.avg}%
-              </div>
-              <div style={{ fontSize: 11, color: "var(--text-dim)" }}>Avg Score</div>
-            </div>
-          ) : null}
-        </div>
       </div>
 
       {/* ── Tab bar ─────────────────────────────────────────────────── */}
       <div className="tabs" style={{ margin: "16px 24px 0" }}>
         {([
-          { key: "overview", label: "Overview" },
-          { key: "fees",     label: `Fees (${fees.length})` },
-          { key: "academics", label: `Academics (${exams.length})` },
+          { key: "info", label: "Student Information" },
+          { key: "fees", label: `Fees & Payments (${fees.length})` },
+          { key: "history", label: "History & Reports" },
         ] as { key: ProfileTab; label: string }[]).map(({ key, label }) => (
           <button
             key={key}
@@ -239,7 +254,7 @@ export default function StudentProfilePage() {
       </div>
 
       {/* ══ OVERVIEW TAB ════════════════════════════════════════════════ */}
-      {tab === "overview" ? (
+      {tab === "info" ? (
         <>
           {/* Personal details */}
           <Panel title="Personal Information" style={{ margin: "12px 24px 0" }}>
@@ -278,29 +293,6 @@ export default function StudentProfilePage() {
             </Panel>
           ) : null}
 
-          {/* Fee snapshot */}
-          <Panel title="Fee Snapshot" style={{ margin: "12px 24px 0" }}>
-            <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-              <StatTile label="Total Billed" value={`PKR ${formatNumber(feeStats.billed)}`} />
-              <StatTile label="Collected" value={`PKR ${formatNumber(feeStats.collected)}`} color="#16a34a" />
-              <StatTile label="Outstanding" value={`PKR ${formatNumber(feeStats.outstanding)}`} color={feeStats.outstanding > 0 ? "var(--danger)" : undefined} />
-              <StatTile label="Paid Vouchers" value={String(feeStats.paid)} />
-              <StatTile label="Pending" value={String(feeStats.pending)} color={feeStats.pending > 0 ? "var(--warn, #e97316)" : undefined} />
-            </div>
-          </Panel>
-
-          {/* Academic snapshot */}
-          {examStats ? (
-            <Panel title="Academic Snapshot" style={{ margin: "12px 24px 0" }}>
-              <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-                <StatTile label="Exams Taken" value={String(examStats.total)} />
-                <StatTile label="Average Score" value={`${examStats.avg}%`} color={gradeColor(examStats.avg)} />
-                <StatTile label="Best Subject" value={examStats.highest.subject.name} sub={`${pct(examStats.highest.marks, examStats.highest.maxMarks)}%`} color="#16a34a" />
-                <StatTile label="Needs Attention" value={examStats.lowest.subject.name} sub={`${pct(examStats.lowest.marks, examStats.lowest.maxMarks)}%`} color={gradeColor(pct(examStats.lowest.marks, examStats.lowest.maxMarks))} />
-              </div>
-            </Panel>
-          ) : null}
-
           {/* TC info if issued */}
           {student.tcNo ? (
             <Panel title="Transfer Certificate" style={{ margin: "12px 24px 0" }}>
@@ -318,7 +310,14 @@ export default function StudentProfilePage() {
 
       {/* ══ FEES TAB ════════════════════════════════════════════════════ */}
       {tab === "fees" ? (
-        <Panel title="Fee History" meta={`${fees.length} VOUCHER${fees.length !== 1 ? "S" : ""}`} style={{ margin: "12px 24px 0" }}>
+        <>
+          <div className="student-fee-summary" aria-label="Fee summary">
+            <StatTile label="Total Fee" value={`PKR ${formatNumber(feeStats.billed)}`} />
+            <StatTile label="Paid Amount" value={`PKR ${formatNumber(feeStats.collected)}`} color="#168451" />
+            <StatTile label="Pending Amount" value={`PKR ${formatNumber(feeStats.outstanding)}`} color={feeStats.outstanding > 0 ? "var(--danger)" : undefined} />
+            <StatTile label="Fine Amount" value={`PKR ${formatNumber(feeStats.fines)}`} color={feeStats.fines > 0 ? "var(--warn, #e97316)" : undefined} />
+          </div>
+          <Panel title="Fee challans" meta={`${fees.length} RECORD${fees.length !== 1 ? "S" : ""}`} style={{ margin: "12px 24px 0" }}>
           {!fees.length ? (
             <div style={{ padding: "24px 0", textAlign: "center", color: "var(--text-dim)", fontSize: 13 }}>
               No fee vouchers generated yet.
@@ -328,11 +327,13 @@ export default function StudentProfilePage() {
               <table className="reg">
                 <thead>
                   <tr>
-                    <th>Title</th>
+                    <th>Challan</th>
                     <th className="num">Due Date</th>
                     <th className="num">Amount</th>
                     <th className="num">Paid</th>
+                    <th className="num">Balance</th>
                     <th className="right">Status</th>
+                    <th className="right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -345,13 +346,75 @@ export default function StudentProfilePage() {
                             {fee.lines.map((l) => `${l.head}: PKR ${formatNumber(l.amount)}`).join(" · ")}
                           </div>
                         ) : null}
+                        {fee.discountAmount ? (
+                          <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
+                            Discount / scholarship · PKR {formatNumber(fee.discountAmount)}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="num">{prettyDate(fee.dueDate)}</td>
                       <td className="num" style={{ fontWeight: 600 }}>PKR {formatNumber(fee.amount)}</td>
                       <td className="num" style={{ color: (fee.paidAmount || 0) > 0 ? "#16a34a" : "var(--text-dim)" }}>
                         {(fee.paidAmount || 0) > 0 ? `PKR ${formatNumber(fee.paidAmount)}` : "—"}
                       </td>
+                      <td className="num" style={{ fontWeight: 600 }}>
+                        PKR {formatNumber(Math.max(0, fee.amount - (fee.paidAmount || 0)))}
+                      </td>
                       <td className="right">
+                        <StatusBadge status={fee.status} />
+                      </td>
+                      <td>
+                        <div className="row-actions">
+                          {canReceive && fee.amount > (fee.paidAmount || 0) ? (
+                            <button
+                              type="button"
+                              className="link-btn"
+                              onClick={() => setPaymentDialog({ fee })}
+                            >
+                              Receive
+                            </button>
+                          ) : null}
+                          {fee.payments?.length ? (
+                            <button
+                              type="button"
+                              className="link-btn"
+                              onClick={() => setPaymentDialog({ fee, receipt: fee.payments?.[0] })}
+                            >
+                              Receipts ({fee.payments.length})
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          </Panel>
+        </>
+      ) : null}
+
+      {/* ══ HISTORY & REPORTS TAB ═══════════════════════════════════════ */}
+      {tab === "history" ? (
+        <>
+        <Panel title="Fee challan history" meta={`${fees.length} CHALLAN${fees.length !== 1 ? "S" : ""}`} style={{ margin: "12px 24px 0" }}>
+          {!fees.length ? <EmptyHistory message="No fee challans have been generated." /> : (
+            <div className="table-scroll">
+              <table className="reg">
+                <thead>
+                  <tr><th>Fee / Challan</th><th className="num">Due</th><th className="num">Fee</th><th className="num">Discount</th><th className="num">Fine</th><th className="right">Balance / Status</th></tr>
+                </thead>
+                <tbody>
+                  {fees.map((fee) => (
+                    <tr key={fee._id}>
+                      <td>{fee.title}</td>
+                      <td className="num">{prettyDate(fee.dueDate)}</td>
+                      <td className="num">PKR {formatNumber(fee.amount)}</td>
+                      <td className="num">{fee.discountAmount ? `PKR ${formatNumber(fee.discountAmount)}` : "—"}</td>
+                      <td className="num">{fineAmount(fee) ? `PKR ${formatNumber(fineAmount(fee))}` : "—"}</td>
+                      <td className="right">
+                        <div>PKR {formatNumber(Math.max(0, fee.amount - fee.paidAmount))}</div>
                         <StatusBadge status={fee.status} />
                       </td>
                     </tr>
@@ -361,11 +424,110 @@ export default function StudentProfilePage() {
             </div>
           )}
         </Panel>
-      ) : null}
 
-      {/* ══ ACADEMICS TAB ═══════════════════════════════════════════════ */}
-      {tab === "academics" ? (
-        <Panel title="Exam Results" meta={`${exams.length} RESULT${exams.length !== 1 ? "S" : ""}`} style={{ margin: "12px 24px 0" }}>
+        <Panel title="Payment receipt history" meta={`${receipts.length} RECEIPT${receipts.length !== 1 ? "S" : ""}`} style={{ margin: "12px 24px 0" }}>
+          {!receipts.length ? <EmptyHistory message="No receipt records are available for this student." /> : (
+            <div className="table-scroll">
+              <table className="reg">
+                <thead><tr><th>Receipt</th><th>Fee challan</th><th className="num">Payment date</th><th className="num">Amount</th><th>Method / Reference</th><th className="right">Status</th><th /></tr></thead>
+                <tbody>
+                  {receipts.map(({ fee, receipt }) => (
+                    <tr key={receipt._id}>
+                      <td className="mono">{receipt.receiptNumber}</td>
+                      <td>{fee.title}</td>
+                      <td className="num">{prettyDate(receipt.paymentDate)}</td>
+                      <td className="num">PKR {formatNumber(receipt.amount)}</td>
+                      <td>{receipt.method.toUpperCase()} · {receipt.transactionReference || "No reference"}</td>
+                      <td className="right"><StatusBadge status={receipt.status === "posted" ? "paid" : "reversed"} /></td>
+                      <td>
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={() => setPaymentDialog({ fee, receipt })}
+                        >
+                          View receipt
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+
+        <div className="student-history-grid">
+          <Panel title="Fine history" style={{ margin: "12px 0 0" }}>
+            {!fineFees.length ? <EmptyHistory message="No fine or late-fee records." /> : (
+              <div className="table-scroll">
+                <table className="reg">
+                  <thead><tr><th>Challan / Reason</th><th className="num">Due date</th><th className="num">Amount</th></tr></thead>
+                  <tbody>{fineFees.map((fee) => (
+                    <tr key={fee._id}>
+                      <td>{fee.lines?.filter((line) => /fine|late fee|penalty/i.test(line.head)).map((line) => line.head).join(", ") || "Late fee"} · {fee.title}</td>
+                      <td className="num">{prettyDate(fee.dueDate)}</td>
+                      <td className="num">PKR {formatNumber(fineAmount(fee))}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+          <Panel title="Discounts & scholarships" style={{ margin: "12px 0 0" }}>
+            {!discountedFees.length ? <EmptyHistory message="No discount or scholarship records." /> : (
+              <div className="table-scroll">
+                <table className="reg">
+                  <thead><tr><th>Challan</th><th>Type</th><th className="num">Rate</th><th className="num">Amount</th></tr></thead>
+                  <tbody>{discountedFees.map((fee) => (
+                    <tr key={fee._id}>
+                      <td>{fee.title}</td>
+                      <td>{fee.discountType || "Discount"}</td>
+                      <td className="num">{fee.discountPercent || 0}%</td>
+                      <td className="num">PKR {formatNumber(fee.discountAmount || 0)}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+        </div>
+
+        <Panel title="Student accounting ledger" meta={`${ledger.length} VOUCHER${ledger.length !== 1 ? "S" : ""}`} style={{ margin: "12px 24px 0" }}>
+          {!ledger.length ? <EmptyHistory message="No accounting vouchers are linked to this student's fee records." /> : (
+            <div className="table-scroll">
+              <table className="reg">
+                <thead><tr><th>Date</th><th>Voucher / Description</th><th>Accounts</th><th className="num">Debit</th><th className="num">Credit</th><th className="right">Status</th></tr></thead>
+                <tbody>{ledger.map((voucher) => {
+                  const debit = voucher.lines.reduce((sum, line) => sum + (line.debit || 0), 0);
+                  const credit = voucher.lines.reduce((sum, line) => sum + (line.credit || 0), 0);
+                  return (
+                    <tr key={voucher._id}>
+                      <td className="num">{prettyDate(voucher.date)}</td>
+                      <td><div className="mono">{voucher.number}</div><div>{voucher.narration}</div></td>
+                      <td>{voucher.lines.map((line) => `${line.accountCode} · ${line.accountName}`).join(", ")}</td>
+                      <td className="num">{debit ? `PKR ${formatNumber(debit)}` : "—"}</td>
+                      <td className="num">{credit ? `PKR ${formatNumber(credit)}` : "—"}</td>
+                      <td className="right"><StatusBadge status={voucher.status} /></td>
+                    </tr>
+                  );
+                })}</tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+
+        {examStats ? (
+          <Panel title="Academic summary" style={{ margin: "12px 24px 0" }}>
+            <div className="student-fee-summary" style={{ margin: 0, padding: 0 }}>
+              <StatTile label="Exams Taken" value={String(examStats.total)} />
+              <StatTile label="Average Score" value={`${examStats.avg}%`} color={gradeColor(examStats.avg)} />
+              <StatTile label="Best Subject" value={examStats.highest.subject.name} sub={`${pct(examStats.highest.marks, examStats.highest.maxMarks)}%`} color="#16a34a" />
+              <StatTile label="Needs Attention" value={examStats.lowest.subject.name} sub={`${pct(examStats.lowest.marks, examStats.lowest.maxMarks)}%`} color={gradeColor(pct(examStats.lowest.marks, examStats.lowest.maxMarks))} />
+            </div>
+          </Panel>
+        ) : null}
+
+        <Panel title="Exam results" meta={`${exams.length} RESULT${exams.length !== 1 ? "S" : ""}`} style={{ margin: "12px 24px 0" }}>
           {!exams.length ? (
             <div style={{ padding: "24px 0", textAlign: "center", color: "var(--text-dim)", fontSize: 13 }}>
               No exam results recorded yet.
@@ -417,6 +579,17 @@ export default function StudentProfilePage() {
             </div>
           )}
         </Panel>
+        </>
+      ) : null}
+
+      {paymentDialog ? (
+        <FeePaymentDialog
+          fee={paymentDialog.fee}
+          initialReceipt={paymentDialog.receipt}
+          canReverse={role === "admin"}
+          onClose={() => setPaymentDialog(null)}
+          onSaved={load}
+        />
       ) : null}
 
       <div style={{ height: 40 }} />
@@ -442,6 +615,14 @@ function StatTile({ label, value, color, sub }: { label: string; value: string; 
       <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 4 }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 700, color: color || undefined }}>{value}</div>
       {sub ? <div style={{ fontSize: 11, color: color || "var(--text-dim)", marginTop: 2 }}>{sub}</div> : null}
+    </div>
+  );
+}
+
+function EmptyHistory({ message }: { message: string }) {
+  return (
+    <div style={{ padding: "20px 0", textAlign: "center", color: "var(--text-dim)", fontSize: 13 }}>
+      {message}
     </div>
   );
 }

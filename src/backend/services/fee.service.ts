@@ -3,16 +3,24 @@
  * Each voucher carries one or more fee-head lines; concessions apply on create.
  */
 import { dbConnect } from "@/backend/config/database";
-import { Fee } from "@/backend/models/Fee";
+import mongoose from "mongoose";
+import { Fee, FeePayment } from "@/backend/models/Fee";
 import { Student } from "@/backend/models/Student";
+import { Voucher } from "@/backend/models/Accounting";
 import { parseOptionalDate } from "@/backend/lib/http";
 import { ServiceError } from "@/backend/types";
-import type { BulkFeeInput, FeeInput, InstallmentFeeInput } from "@/backend/validators/fee.validator";
+import type {
+  BulkFeeInput,
+  FeeInput,
+  FeePaymentInput,
+  InstallmentFeeInput,
+} from "@/backend/validators/fee.validator";
 import { accountingService } from "@/backend/services/accounting.service";
 import { DISCOUNT_DEFAULTS } from "@/backend/services/student.service";
 import { Settings } from "@/backend/models/Settings";
 import { platformService } from "@/backend/services/platform.service";
 import type { SessionUser } from "@/backend/types";
+import { recordAudit } from "@/backend/lib/audit";
 
 const studentPopulate = {
   path: "studentId",
@@ -25,11 +33,12 @@ function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
 
-function cleanLines(lines: { head: string; amount: number }[]) {
+function cleanLines(lines: { head: string; amount: number; accountCode?: string }[]) {
   const cleaned = lines
     .map((line) => ({
       head: line.head.trim(),
       amount: roundMoney(Number(line.amount) || 0),
+      accountCode: line.accountCode?.trim() || undefined,
     }))
     .filter((line) => line.head);
   if (!cleaned.length) {
@@ -80,7 +89,7 @@ function applyConcession(
 function toPayload(
   data: FeeInput & {
     title: string;
-    lines: { head: string; amount: number }[];
+    lines: { head: string; amount: number; accountCode?: string }[];
     amount: number;
     originalAmount?: number;
     discountPercent?: number;
@@ -117,7 +126,11 @@ async function syncFeeLedger(fee: {
   branchCode?: string;
   studentId: unknown;
 }) {
-  const paid = fee.paidAmount || 0;
+  const receipts = await FeePayment.find({ feeId: fee._id, status: "posted" })
+    .select("amount")
+    .lean();
+  const tracked = receipts.reduce((sum, receipt) => sum + receipt.amount, 0);
+  const paid = roundMoney(Math.max(0, (fee.paidAmount || 0) - tracked));
   if (paid <= 0 || fee.status === "pending") {
     await accountingService.removeBySource("fee", String(fee._id));
     return;
@@ -149,11 +162,51 @@ export const feeService = {
     if (filters.status) query.status = filters.status;
     if (filters.branchCode) query.branchCode = filters.branchCode.toUpperCase();
 
-    return Fee.find(query).populate(studentPopulate).sort({ dueDate: -1 }).lean();
+    const fees = await Fee.find(query).populate(studentPopulate).sort({ dueDate: -1 }).lean();
+    if (!fees.length) return fees;
+    const payments = await FeePayment.find({
+      feeId: { $in: fees.map((fee) => fee._id) },
+    })
+      .populate("receivedBy", "name")
+      .populate("reversedBy", "name")
+      .sort({ paymentDate: -1, createdAt: -1 })
+      .lean();
+    const byFee = new Map<string, typeof payments>();
+    for (const payment of payments) {
+      const key = String(payment.feeId);
+      const rows = byFee.get(key) || [];
+      rows.push(payment);
+      byFee.set(key, rows);
+    }
+    return fees.map((fee) => ({
+      ...fee,
+      payments: byFee.get(String(fee._id)) || [],
+    }));
+  },
+
+  async studentLedger(studentId: string) {
+    await dbConnect();
+    const feeIds = await Fee.find({ studentId }).distinct("_id");
+    return Voucher.find({
+      $or: [
+        { partyType: "student", partyId: studentId },
+        { sourceType: "fee", sourceId: { $in: feeIds.map(String) } },
+      ],
+    })
+      .sort({ date: -1, createdAt: -1 })
+      .limit(500)
+      .lean();
   },
 
   async create(data: FeeInput) {
     await dbConnect();
+    if ((data.paidAmount || 0) > 0 || data.status !== "pending") {
+      throw new ServiceError(
+        "VALIDATION",
+        "Payments must be recorded through the fee collection workflow",
+        400
+      );
+    }
     const student = await Student.findById(data.studentId)
       .select("discountType discountPercent branchCode")
       .lean();
@@ -188,17 +241,34 @@ export const feeService = {
     const gross = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
     const existing = await Fee.findById(id).lean();
     if (!existing) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
+    if (
+      roundMoney(data.paidAmount || 0) !== roundMoney(existing.paidAmount || 0) ||
+      data.status !== existing.status
+    ) {
+      throw new ServiceError(
+        "CONFLICT",
+        "Paid amounts and fee status are managed by recorded receipts; use Receive Payment or an authorized reversal",
+        409
+      );
+    }
 
     /** Keep original concession ratio when editing heads, if one was applied. */
     let amount = gross;
     let originalAmount = gross;
     let discountAmount = 0;
-    let discountPercent = existing.discountPercent || 0;
-    let discountType = existing.discountType;
+    const discountPercent = existing.discountPercent || 0;
+    const discountType = existing.discountType;
     if ((existing.discountPercent || 0) > 0) {
       discountAmount = roundMoney((gross * (existing.discountPercent || 0)) / 100);
       amount = roundMoney(Math.max(0, gross - discountAmount));
       originalAmount = gross;
+    }
+    if (amount < (existing.paidAmount || 0)) {
+      throw new ServiceError(
+        "VALIDATION",
+        "The challan amount cannot be lower than its recorded payments",
+        400
+      );
     }
 
     const item = await Fee.findByIdAndUpdate(
@@ -213,6 +283,14 @@ export const feeService = {
           discountAmount,
           discountPercent,
           discountType,
+          status:
+            (existing.paidAmount || 0) >= amount
+              ? "paid"
+              : (existing.paidAmount || 0) > 0
+                ? "partial"
+                : new Date(data.dueDate) < new Date()
+                  ? "overdue"
+                  : "pending",
         }),
         paymentDate: data.paymentDate ? new Date(data.paymentDate) : null,
       },
@@ -225,10 +303,326 @@ export const feeService = {
 
   async remove(id: string) {
     await dbConnect();
+    if (
+      (await FeePayment.exists({ feeId: id })) ||
+      (await Fee.exists({ _id: id, paidAmount: { $gt: 0 } }))
+    ) {
+      throw new ServiceError(
+        "CONFLICT",
+        "A challan with payment history cannot be deleted; reverse the receipt with an audit reason instead",
+        409
+      );
+    }
     const item = await Fee.findByIdAndDelete(id);
     if (!item) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
     await accountingService.removeBySource("fee", id);
     return { ok: true };
+  },
+
+  async collectPayment(
+    feeId: string,
+    input: FeePaymentInput,
+    actor: SessionUser
+  ) {
+    await dbConnect();
+    await accountingService.accounts();
+    const amount = roundMoney(input.amount);
+    const paymentDate = new Date(input.paymentDate);
+    if (Number.isNaN(paymentDate.getTime())) {
+      throw new ServiceError("VALIDATION", "Enter a valid payment date", 400);
+    }
+    const previous = await FeePayment.findOne({ idempotencyKey: input.idempotencyKey })
+      .populate("receivedBy", "name")
+      .lean();
+    if (previous) {
+      if (
+        String(previous.feeId) !== feeId ||
+        roundMoney(previous.amount) !== amount ||
+        previous.depositAccountCode !== input.depositAccountCode ||
+        previous.method !== input.method ||
+        previous.paymentDate.getTime() !== paymentDate.getTime() ||
+        (previous.transactionReference || "") !== (input.transactionReference || "")
+      ) {
+        throw new ServiceError(
+          "CONFLICT",
+          "This payment submission key was already used for a different payment",
+          409
+        );
+      }
+      return { payment: previous, fee: await Fee.findById(feeId).populate(studentPopulate).lean() };
+    }
+
+    const session = await mongoose.startSession();
+    let paymentId = "";
+    let postedVoucher: { _id: { toString(): string }; number: string } | undefined;
+    try {
+      await session.withTransaction(async () => {
+        const duplicate = await FeePayment.findOne({
+          idempotencyKey: input.idempotencyKey,
+        }).session(session);
+        if (duplicate) {
+          if (
+            String(duplicate.feeId) !== feeId ||
+            roundMoney(duplicate.amount) !== amount ||
+            duplicate.depositAccountCode !== input.depositAccountCode ||
+            duplicate.method !== input.method ||
+            duplicate.paymentDate.getTime() !== paymentDate.getTime() ||
+            (duplicate.transactionReference || "") !== (input.transactionReference || "")
+          ) {
+            throw new ServiceError(
+              "CONFLICT",
+              "This payment submission key was already used for a different payment",
+              409
+            );
+          }
+          paymentId = String(duplicate._id);
+          return;
+        }
+
+        const fee = await Fee.findById(feeId).session(session);
+        if (!fee) throw new ServiceError("NOT_FOUND", "Fee challan not found", 404);
+        const outstanding = roundMoney(fee.amount - (fee.paidAmount || 0));
+        if (outstanding <= 0) {
+          throw new ServiceError("CONFLICT", "This challan has no outstanding balance", 409);
+        }
+        if (amount <= 0 || amount > outstanding) {
+          throw new ServiceError(
+            "VALIDATION",
+            `Payment must be greater than zero and no more than the outstanding balance of PKR ${outstanding.toFixed(2)}`,
+            400
+          );
+        }
+        const student = await Student.findById(fee.studentId)
+          .select("firstName lastName admissionNo")
+          .session(session)
+          .lean();
+        if (!student) throw new ServiceError("NOT_FOUND", "Student not found", 404);
+
+        const nextPaymentId = new mongoose.Types.ObjectId();
+        const voucher = await accountingService.postFeeReceipt(
+          {
+            paymentId: String(nextPaymentId),
+            studentId: String(student._id),
+            studentName: `${student.firstName} ${student.lastName}`.trim(),
+            admissionNo: student.admissionNo,
+            title: fee.title,
+            amount,
+            paymentDate,
+            method: input.method,
+            depositAccountCode: input.depositAccountCode,
+            transactionReference: input.transactionReference,
+            branchCode: fee.branchCode,
+            feeLines: fee.lines.map((line: { head: string; amount: number; accountCode?: string }) => ({
+              head: line.head,
+              amount: line.amount,
+              accountCode: line.accountCode,
+            })),
+            recordedBy: actor.id,
+          },
+          session
+        );
+
+        fee.paidAmount = roundMoney((fee.paidAmount || 0) + amount);
+          fee.status =
+          fee.paidAmount >= fee.amount
+            ? "paid"
+              : fee.paidAmount > 0
+                ? "partial"
+                : fee.dueDate < new Date()
+                  ? "overdue"
+                  : "pending";
+        fee.paymentDate = paymentDate;
+        fee.method = input.method;
+        await fee.save({ session });
+
+        const payment = new FeePayment({
+          _id: nextPaymentId,
+          feeId: fee._id,
+          studentId: student._id,
+          receiptNumber: voucher.number,
+          idempotencyKey: input.idempotencyKey,
+          amount,
+          method: input.method,
+          depositAccountCode: input.depositAccountCode,
+          paymentDate,
+          transactionReference: input.transactionReference,
+          voucherId: voucher._id,
+          voucherNumber: voucher.number,
+          status: "posted",
+          receivedBy: actor.id,
+        });
+        await payment.save({ session });
+        paymentId = String(payment._id);
+        postedVoucher = voucher;
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (
+        message.includes("Transaction numbers are only allowed") ||
+        message.includes("replica set")
+      ) {
+        throw new ServiceError(
+          "INTERNAL",
+          "Fee collection requires MongoDB transaction support; configure MongoDB as a replica set before receiving payments",
+          500
+        );
+      }
+      if ((error as { code?: number })?.code === 11000) {
+        const duplicate = await FeePayment.findOne({
+          idempotencyKey: input.idempotencyKey,
+        })
+          .populate("receivedBy", "name")
+          .lean();
+        if (
+          duplicate &&
+          String(duplicate.feeId) === feeId &&
+          roundMoney(duplicate.amount) === amount &&
+          duplicate.depositAccountCode === input.depositAccountCode &&
+          duplicate.method === input.method &&
+          duplicate.paymentDate.getTime() === paymentDate.getTime() &&
+          (duplicate.transactionReference || "") === (input.transactionReference || "")
+        ) {
+          return {
+            payment: duplicate,
+            fee: await Fee.findById(feeId).populate(studentPopulate).lean(),
+          };
+        }
+      }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+
+    if (postedVoucher) {
+      await recordAudit({
+        module: "accounting",
+        action: "posted",
+        entity: "voucher",
+        entityId: postedVoucher._id.toString(),
+        summary: `Posted fee receipt ${postedVoucher.number}`,
+        after: { number: postedVoucher.number, status: "posted" },
+        actor,
+      });
+    }
+    const payment = await FeePayment.findById(paymentId)
+      .populate("receivedBy", "name")
+      .lean();
+    const fee = await Fee.findById(feeId).populate(studentPopulate).lean();
+    if (!payment || !fee) {
+      throw new ServiceError("INTERNAL", "Payment was committed but could not be reloaded", 500);
+    }
+    return { payment, fee };
+  },
+
+  async reversePayment(
+    feeId: string,
+    paymentId: string,
+    reason: string,
+    actor: SessionUser
+  ) {
+    await dbConnect();
+    const session = await mongoose.startSession();
+    type ReversalResult = {
+      payment: { _id: { toString(): string } };
+      feeId: string;
+      voucher: { _id: { toString(): string }; number: string };
+      before: Record<string, unknown>;
+      after: Record<string, unknown>;
+    };
+    let reversed: ReversalResult | null = null;
+    try {
+      await session.withTransaction(async () => {
+        const payment = await FeePayment.findById(paymentId).session(session);
+        if (!payment) throw new ServiceError("NOT_FOUND", "Payment receipt not found", 404);
+        if (String(payment.feeId) !== feeId) {
+          throw new ServiceError("NOT_FOUND", "Payment receipt not found for this challan", 404);
+        }
+        if (payment.status !== "posted") {
+          throw new ServiceError("CONFLICT", "This payment has already been reversed", 409);
+        }
+        const fee = await Fee.findById(payment.feeId).session(session);
+        if (!fee || fee.paidAmount < payment.amount) {
+          throw new ServiceError(
+            "CONFLICT",
+            "The challan balance no longer matches this receipt; reconcile it before reversal",
+            409
+          );
+        }
+        const voucherResult = await accountingService.reverseFeeReceipt(
+          String(payment.voucherId),
+          reason,
+          actor,
+          session
+        );
+        payment.status = "reversed";
+        payment.reversedAt = new Date();
+        payment.reversedBy = actor.id as never;
+        payment.reversalReason = reason;
+        await payment.save({ session });
+
+        fee.paidAmount = roundMoney(fee.paidAmount - payment.amount);
+        fee.status =
+          fee.paidAmount <= 0
+            ? fee.dueDate < new Date()
+              ? "overdue"
+              : "pending"
+            : "partial";
+        const latestPayment = await FeePayment.findOne({
+          feeId: fee._id,
+          status: "posted",
+          _id: { $ne: payment._id },
+        })
+          .sort({ paymentDate: -1, createdAt: -1 })
+          .session(session);
+        fee.paymentDate = latestPayment?.paymentDate;
+        fee.method = latestPayment?.method;
+        await fee.save({ session });
+
+        reversed = {
+          payment,
+          feeId: String(fee._id),
+          voucher: voucherResult.voucher,
+          before: voucherResult.before,
+          after: voucherResult.after,
+        };
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (
+        message.includes("Transaction numbers are only allowed") ||
+        message.includes("replica set")
+      ) {
+        throw new ServiceError(
+          "INTERNAL",
+          "Fee receipt reversal requires MongoDB transaction support; configure MongoDB as a replica set",
+          500
+        );
+      }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+    const completed = reversed as ReversalResult | null;
+    if (!completed) throw new ServiceError("INTERNAL", "Payment reversal did not complete", 500);
+    await recordAudit({
+      module: "accounting",
+      action: "reversed",
+      entity: "voucher",
+      entityId: completed.voucher._id.toString(),
+      summary: `Reversed fee receipt ${completed.voucher.number} — ${reason}`,
+      before: completed.before,
+      after: completed.after,
+      actor,
+    });
+    return {
+      payment: await FeePayment.findById(completed.payment._id)
+        .populate("receivedBy", "name")
+        .populate("reversedBy", "name")
+        .lean(),
+      fee: await Fee.findById(completed.feeId)
+        .populate(studentPopulate)
+        .lean(),
+    };
   },
 
   /**
@@ -328,6 +722,7 @@ export const feeService = {
       const partLines = lines.map((line) => ({
         head: line.head,
         amount: roundMoney(line.amount * share),
+        accountCode: line.accountCode,
       }));
       const doc = await Fee.create({
         studentId: data.studentId,
@@ -380,7 +775,7 @@ export const feeService = {
       fee.lateFeeAmount = late;
       fee.lateFeeApplied = true;
       fee.amount = roundMoney(fee.amount + late);
-      fee.status = "overdue";
+      fee.status = fee.paidAmount > 0 ? "partial" : "overdue";
       fee.lines = [
         ...(fee.lines || []),
         ...(late > 0 ? [{ head: "Late Fee", amount: late }] : []),

@@ -60,6 +60,11 @@ export default function StudentsPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const requestedClass = new URLSearchParams(window.location.search).get("classId");
+    if (requestedClass) setFilterClass(requestedClass);
+  }, []);
+
   async function remove(id: string) {
     if (!confirm("Delete this student record?")) return;
     await fetch(`/api/students/${id}`, { method: "DELETE" });
@@ -276,7 +281,7 @@ export default function StudentsPage() {
                   <tr key={s._id}>
                     <td className="num">{s.rollNumber || "—"}</td>
                     <td>
-                      <NameCell name={fullName(s)} sub={s.phone || undefined} />
+                      <NameCell name={fullName(s)} sub={s.phone || undefined} imageUrl={s.profilePhoto} />
                     </td>
                     <td>{s.parentName || "—"}</td>
                     <td>{labelOfClass(s.classId as never)}</td>
@@ -378,7 +383,19 @@ export default function StudentsPage() {
                 </div>
                   <h3 className="print-title">Student Admission Form</h3>
                 </div>
-                <div className="print-section-title">Student Information</div>
+                <div className="admission-student-heading">
+                  <div className="print-section-title">Student Information</div>
+                  {docStudent.profilePhoto ? (
+                    <Image
+                      className="admission-profile-photo"
+                      src={docStudent.profilePhoto}
+                      alt={`${fullName(docStudent)} profile`}
+                      width={112}
+                      height={132}
+                      unoptimized
+                    />
+                  ) : null}
+                </div>
                 <div className="print-grid">
                   <div className="print-field">
                     <span className="print-label">Admission No.</span>

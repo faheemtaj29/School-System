@@ -6,6 +6,7 @@ import {
   requireAuth,
 } from "@/backend/lib/http";
 import { examWorkflowService } from "@/backend/services/examWorkflow.service";
+import { teacherService } from "@/backend/services/teacher.service";
 import {
   examScheduleSchema,
   examTermSchema,
@@ -115,14 +116,26 @@ export const examWorkflowController = {
   },
 
   async listSchedules(req: Request) {
-    const { error } = await requireAuth(["admin", "teacher", "staff"]);
+    const { session, error } = await requireAuth(["admin", "teacher", "staff"]);
     if (error) return error;
     try {
       const params = new URL(req.url).searchParams;
       if (params.get("view") === "subjects") {
         const classId = params.get("classId");
         if (!classId) return jsonError("classId is required", 400);
-        return jsonOk(await examWorkflowService.classSubjects(classId));
+        if (session!.role === "teacher") {
+          await teacherService.assertClassAssigned(session!, classId);
+        }
+        const result = await examWorkflowService.classSubjects(classId);
+        if (session!.role === "teacher") {
+          const teacher = await teacherService.forSession(session!);
+          const assignedSubjects = new Set(teacher.subjects.map(String));
+          return jsonOk({
+            ...result,
+            subjects: result.subjects.filter((subject) => assignedSubjects.has(String(subject._id))),
+          });
+        }
+        return jsonOk(result);
       }
       return jsonOk({
         schedules: await examWorkflowService.listSchedules({
@@ -130,6 +143,7 @@ export const examWorkflowController = {
           academicYear: params.get("academicYear"),
           termId: params.get("termId"),
           classId: params.get("classId"),
+          teacher: session!.role === "teacher" ? session! : undefined,
         }),
       });
     } catch (e) {
@@ -138,7 +152,7 @@ export const examWorkflowController = {
   },
 
   async createSchedule(req: Request) {
-    const { session, error } = await requireAuth(["admin", "teacher"]);
+    const { session, error } = await requireAuth(["admin"]);
     if (error) return error;
     try {
       const parsed = examScheduleSchema.safeParse(await req.json());
@@ -153,7 +167,7 @@ export const examWorkflowController = {
   },
 
   async updateSchedule(req: Request, ctx: Ctx) {
-    const { session, error } = await requireAuth(["admin", "teacher"]);
+    const { session, error } = await requireAuth(["admin"]);
     if (error) return error;
     try {
       const { id } = await ctx.params;

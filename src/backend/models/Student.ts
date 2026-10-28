@@ -4,6 +4,7 @@ export interface IStudent {
   admissionNo: string;
   firstName: string;
   lastName: string;
+  profilePhoto?: string;
   email?: string;
   phone?: string;
   gender?: "male" | "female" | "other";
@@ -50,6 +51,7 @@ const StudentSchema = new Schema<IStudent>(
     admissionNo: { type: String, required: true, unique: true, trim: true },
     firstName: { type: String, required: true, trim: true },
     lastName: { type: String, required: true, trim: true },
+    profilePhoto: { type: String, trim: true },
     email: { type: String, lowercase: true, trim: true },
     phone: String,
     gender: { type: String, enum: ["male", "female", "other"] },

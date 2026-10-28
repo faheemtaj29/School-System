@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   EmptyState,
   Field,
@@ -12,8 +12,10 @@ import {
   inputClass,
 } from "@/components/ui";
 import { FeeForm } from "@/components/forms/SchoolForms";
+import { FeePaymentDialog } from "@/components/forms/FeePaymentDialog";
 import {
   FeeItem,
+  FeePaymentItem,
   StudentItem,
   formatNumber,
   fullName,
@@ -23,7 +25,16 @@ import {
 } from "@/lib/types";
 
 type MainTab = "generate" | "received" | "pending" | "all";
-type CoaAccount = { _id: string; code: string; name: string; type: string; level: number; isPosting: boolean };
+type CoaAccount = {
+  _id: string;
+  code: string;
+  name: string;
+  type: string;
+  level: number;
+  isPosting: boolean;
+  isActive: boolean;
+  isCashBank: boolean;
+};
 
 export default function FeesPage() {
   const [fees, setFees] = useState<FeeItem[]>([]);
@@ -56,10 +67,10 @@ export default function FeesPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editFee, setEditFee] = useState<FeeItem | null>(null);
 
-  // Quick-pay inline
-  const [payingId, setPayingId] = useState("");
-  const [payForm, setPayForm] = useState({ paidAmount: 0, method: "cash", paymentDate: toDateInput(new Date()) });
-  const [payMsg, setPayMsg] = useState("");
+  const [paymentDialog, setPaymentDialog] = useState<{
+    fee: FeeItem;
+    receipt?: FeePaymentItem;
+  } | null>(null);
 
   // Voucher print
   const [voucherId, setVoucherId] = useState("");
@@ -77,11 +88,15 @@ export default function FeesPage() {
       const [s, c, a] = await Promise.all([
         fetch("/api/students").then((r) => r.json()),
         fetch("/api/classes").then((r) => r.json()),
-        fetch("/api/accounting?view=accounts").then((r) => r.json()).catch(() => ({})),
+        fetch("/api/fees?view=income-accounts").then((r) => r.json()).catch(() => ({})),
       ]);
       setStudents(s.students || []);
       setClasses(c.classes || []);
-      setCoaAccounts((a.accounts || []).filter((ac: CoaAccount) => ac.isPosting));
+      setCoaAccounts(
+        (a.accounts || []).filter(
+          (ac: CoaAccount) => ac.isPosting && ac.isActive && ac.type === "income"
+        )
+      );
     }
   }, []);
 
@@ -95,7 +110,7 @@ export default function FeesPage() {
       billed, collected,
       outstanding: Math.max(billed - collected, 0),
       paid: fees.filter((f) => f.status === "paid").length,
-      pending: fees.filter((f) => f.status === "pending" || f.status === "overdue").length,
+      pending: fees.filter((f) => f.status === "pending" || f.status === "overdue" || f.status === "partial").length,
     };
   }, [fees]);
 
@@ -147,35 +162,12 @@ export default function FeesPage() {
     }
   }
 
-  // ── Quick pay ───────────────────────────────────────────────────────────
   function startPay(fee: FeeItem) {
-    setPayingId(fee._id);
-    setPayForm({
-      paidAmount: fee.amount - fee.paidAmount,
-      method: "cash",
-      paymentDate: toDateInput(new Date()),
-    });
-    setPayMsg("");
+    setPaymentDialog({ fee });
   }
 
-  async function submitPay(fee: FeeItem) {
-    const res = await fetch(`/api/fees/${fee._id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        studentId: typeof fee.studentId === "object" ? (fee.studentId as { _id: string })._id : fee.studentId,
-        dueDate: toDateInput(fee.dueDate),
-        lines: fee.lines?.length ? fee.lines : [{ head: fee.title, amount: fee.amount }],
-        status: "paid",
-        paidAmount: payForm.paidAmount,
-        paymentDate: payForm.paymentDate,
-        method: payForm.method || undefined,
-        notes: fee.notes,
-      }),
-    });
-    const data = await res.json();
-    if (res.ok) { setPayingId(""); load(); }
-    else setPayMsg(data.error || "Failed");
+  function openReceipt(fee: FeeItem, receipt?: FeePaymentItem) {
+    setPaymentDialog({ fee, receipt: receipt || fee.payments?.[0] });
   }
 
   // ── Filtered lists ──────────────────────────────────────────────────────
@@ -211,7 +203,7 @@ export default function FeesPage() {
   // ── Render helpers ──────────────────────────────────────────────────────
   function FeeRow({ fee, showPay }: { fee: FeeItem; showPay?: boolean }) {
     const s = typeof fee.studentId === "object" ? fee.studentId : null;
-    const isPaying = payingId === fee._id;
+    const balance = Math.max(0, fee.amount - fee.paidAmount);
     return (
       <>
         <tr key={fee._id} style={{ background: fee.status === "overdue" ? "var(--red-bg, #fff1f1)" : undefined }}>
@@ -242,56 +234,27 @@ export default function FeesPage() {
               <button type="button" className="link-btn" onClick={() => setVoucherId(fee._id)}>Voucher</button>
               {canEdit ? (
                 <>
-                  {showPay && fee.status !== "paid" ? (
+                  {showPay && balance > 0 ? (
                     <button type="button" className="link-btn" onClick={() => startPay(fee)}>
-                      {isPaying ? "Cancel" : "Mark Paid"}
+                      Receive
                     </button>
                   ) : null}
                   <button type="button" className="link-btn" onClick={() => { setEditFee(fee); setEditOpen(true); }}>Edit</button>
                 </>
               ) : null}
+              {fee.payments?.length ? (
+                <button type="button" className="link-btn" onClick={() => openReceipt(fee)}>
+                  Receipts ({fee.payments.length})
+                </button>
+              ) : null}
             </div>
           </td>
         </tr>
-        {isPaying ? (
-          <tr>
-            <td colSpan={7} style={{ background: "var(--paper)", padding: "10px 16px" }}>
-              {payMsg ? <div className="alert" style={{ marginBottom: 8 }}>{payMsg}</div> : null}
-              <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
-                <div>
-                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 3 }}>Amount Paid (PKR)</div>
-                  <input
-                    type="number" min={0} className={inputClass}
-                    value={payForm.paidAmount}
-                    onChange={(e) => setPayForm({ ...payForm, paidAmount: Number(e.target.value) })}
-                    style={{ width: 120 }}
-                  />
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 3 }}>Method</div>
-                  <select className={inputClass} value={payForm.method} onChange={(e) => setPayForm({ ...payForm, method: e.target.value })} style={{ width: 110 }}>
-                    <option value="cash">Cash</option>
-                    <option value="bank">Bank</option>
-                    <option value="online">Online</option>
-                    <option value="card">Card</option>
-                  </select>
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 3 }}>Payment Date</div>
-                  <input type="date" className={inputClass} value={payForm.paymentDate}
-                    onChange={(e) => setPayForm({ ...payForm, paymentDate: e.target.value })} style={{ width: 140 }} />
-                </div>
-                <button type="button" className="btn-dark" onClick={() => submitPay(fee)} style={{ height: 36 }}>Confirm</button>
-                <button type="button" className="btn-ghost" onClick={() => setPayingId("")} style={{ height: 36 }}>Cancel</button>
-              </div>
-            </td>
-          </tr>
-        ) : null}
       </>
     );
   }
 
-  function ClassFilter() {
+  function renderClassFilter() {
     return (
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <input
@@ -465,17 +428,10 @@ export default function FeesPage() {
                     onChange={(e) => setLine(i, { accountCode: e.target.value || undefined })}
                     title="Link this fee head to a Chart of Accounts income account"
                   >
-                    <option value="">— No COA link —</option>
+                    <option value="">Default fee income account</option>
                     {coaAccounts.filter(a => a.type === "income").map(a => (
                       <option key={a.code} value={a.code}>{a.code} · {a.name}</option>
                     ))}
-                    {coaAccounts.filter(a => a.type !== "income").length > 0 && (
-                      <optgroup label="Other accounts">
-                        {coaAccounts.filter(a => a.type !== "income").map(a => (
-                          <option key={a.code} value={a.code}>{a.code} · {a.name} ({a.type})</option>
-                        ))}
-                      </optgroup>
-                    )}
                   </select>
                 )}
                 <button type="button" className="link-btn danger"
@@ -509,7 +465,7 @@ export default function FeesPage() {
       {/* ══ PENDING TAB ═══════════════════════════════════════════════════ */}
       {tab === "pending" ? (
         <Panel title="Pending & Overdue" meta="Students who have not yet paid">
-          <ClassFilter />
+          {renderClassFilter()}
           {!pendingFees.length ? (
             <EmptyState message="No pending fees for this selection." />
           ) : (
@@ -538,7 +494,7 @@ export default function FeesPage() {
       {/* ══ RECEIVED TAB ══════════════════════════════════════════════════ */}
       {tab === "received" ? (
         <Panel title="Fee Received" meta="Fully paid vouchers">
-          <ClassFilter />
+          {renderClassFilter()}
           {!receivedFees.length ? (
             <EmptyState message="No paid fees for this selection." />
           ) : (
@@ -567,7 +523,7 @@ export default function FeesPage() {
       {/* ══ ALL VOUCHERS TAB ══════════════════════════════════════════════ */}
       {tab === "all" ? (
         <Panel title="All Vouchers">
-          <ClassFilter />
+          {renderClassFilter()}
           {!fees.filter((f) => !filterClass || studentClass(f) === filterClass).length ? (
             <EmptyState message="No fee vouchers found." />
           ) : (
@@ -676,6 +632,16 @@ export default function FeesPage() {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {paymentDialog ? (
+        <FeePaymentDialog
+          fee={paymentDialog.fee}
+          initialReceipt={paymentDialog.receipt}
+          canReverse={role === "admin"}
+          onClose={() => setPaymentDialog(null)}
+          onSaved={load}
+        />
       ) : null}
 
       {/* Single voucher form */}

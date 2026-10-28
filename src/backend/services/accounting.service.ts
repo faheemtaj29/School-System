@@ -3,6 +3,7 @@
  * Existing modules keep using upsertLinked/removeBySource unchanged.
  */
 import { dbConnect } from "@/backend/config/database";
+import type { ClientSession } from "mongoose";
 import { Account, AccountingCounter, Voucher } from "@/backend/models/Accounting";
 import { LedgerEntry, type LedgerSource } from "@/backend/models/Ledger";
 import { Settings } from "@/backend/models/Settings";
@@ -287,7 +288,12 @@ async function groupResolver() {
   };
 }
 
-async function nextVoucherNumber(type: string, branchCode: string, date: Date) {
+async function nextVoucherNumber(
+  type: string,
+  branchCode: string,
+  date: Date,
+  session?: ClientSession
+) {
   const prefix = PREFIX[type] || "JV";
   const year = date.getFullYear();
   const branch = branchCode.toUpperCase();
@@ -295,7 +301,7 @@ async function nextVoucherNumber(type: string, branchCode: string, date: Date) {
   const counter = await AccountingCounter.findByIdAndUpdate(
     key,
     { $inc: { seq: 1 } },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { upsert: true, new: true, setDefaultsOnInsert: true, session }
   );
   return `${prefix}-${branch}-${year}-${String(counter.seq).padStart(5, "0")}`;
 }
@@ -320,13 +326,16 @@ async function systemAccount(key: string) {
 
 async function enrichAndValidateLines(
   lines: { accountCode: string; debit: number; credit: number; narration?: string }[],
-  voucherType: string
+  voucherType: string,
+  session?: ClientSession
 ) {
   if (lines.length < 2) {
     throw new ServiceError("VALIDATION", "At least two voucher lines are required", 400);
   }
   const codes = [...new Set(lines.map((line) => line.accountCode))];
-  const accounts = await Account.find({ code: { $in: codes }, isActive: true }).lean();
+  const accountQuery = Account.find({ code: { $in: codes }, isActive: true });
+  if (session) accountQuery.session(session);
+  const accounts = await accountQuery.lean();
   const map = new Map(accounts.map((a) => [a.code, a]));
   const result = lines.map((line) => {
     const account = map.get(line.accountCode);
@@ -488,6 +497,22 @@ export const accountingService = {
   async accounts() {
     await ensureSeeded();
     return Account.find().sort({ code: 1 }).lean();
+  },
+
+  async feeIncomeAccounts() {
+    await ensureSeeded();
+    return Account.find({ type: "income", isPosting: true, isActive: true })
+      .select("code name type level isPosting isActive isCashBank systemKey")
+      .sort({ code: 1 })
+      .lean();
+  },
+
+  async feeReceiptAccounts() {
+    await ensureSeeded();
+    return Account.find({ isCashBank: true, isPosting: true, isActive: true })
+      .select("code name type level isPosting isActive isCashBank systemKey")
+      .sort({ code: 1 })
+      .lean();
   },
 
   async createAccount(data: AccountInput) {
@@ -1219,6 +1244,160 @@ export const accountingService = {
       sourceType: "manual",
       recordedBy: userId || undefined,
     });
+  },
+
+  async postFeeReceipt(
+    input: {
+      paymentId: string;
+      studentId: string;
+      studentName: string;
+      admissionNo: string;
+      title: string;
+      amount: number;
+      paymentDate: Date;
+      method: "cash" | "card" | "bank" | "online";
+      depositAccountCode: string;
+      transactionReference?: string;
+      branchCode?: string;
+      feeLines: { head: string; amount: number; accountCode?: string }[];
+      recordedBy: string;
+    },
+    session: ClientSession
+  ) {
+    const settings = await loadFinanceSettings();
+    const depositQuery = Account.findOne({
+      code: input.depositAccountCode,
+      isActive: true,
+    });
+    depositQuery.session(session);
+    const deposit = await depositQuery.lean();
+    if (!deposit || !deposit.isPosting || !deposit.isCashBank) {
+      throw new ServiceError(
+        "VALIDATION",
+        "Choose an active posting Cash/Bank account from the Chart of Accounts",
+        400
+      );
+    }
+
+    const defaultIncomeQuery = Account.findOne({
+      systemKey: "feeIncome",
+      isActive: true,
+    });
+    defaultIncomeQuery.session(session);
+    const defaultIncome = await defaultIncomeQuery.lean();
+    if (!defaultIncome || !defaultIncome.isPosting || defaultIncome.type !== "income") {
+      throw new ServiceError(
+        "VALIDATION",
+        "The default student fee income account is not configured in the Chart of Accounts",
+        400
+      );
+    }
+
+    const feeLines = input.feeLines.filter((line) => line.amount > 0);
+    if (!feeLines.length) {
+      throw new ServiceError(
+        "VALIDATION",
+        "This challan has no fee lines mapped for accounting",
+        400
+      );
+    }
+    const lineTotal = feeLines.reduce((sum, line) => sum + line.amount, 0);
+    let allocated = 0;
+    const credits = feeLines.map((line, index) => {
+      const credit =
+        index === feeLines.length - 1
+          ? round(input.amount - allocated)
+          : round((input.amount * line.amount) / lineTotal);
+      allocated = round(allocated + credit);
+      return {
+        accountCode: line.accountCode || defaultIncome.code,
+        debit: 0,
+        credit,
+        narration: line.head,
+      };
+    }).filter((line) => line.credit > 0);
+
+    const creditAccountsQuery = Account.find({
+      code: { $in: [...new Set(credits.map((line) => line.accountCode))] },
+      isActive: true,
+    });
+    creditAccountsQuery.session(session);
+    const creditAccounts = await creditAccountsQuery.lean();
+    for (const line of credits) {
+      const account = creditAccounts.find((candidate) => candidate.code === line.accountCode);
+      if (!account || !account.isPosting || account.type !== "income") {
+        throw new ServiceError(
+          "VALIDATION",
+          `Fee head "${line.narration}" must map to an active posting income account`,
+          400
+        );
+      }
+    }
+
+    const checked = await enrichAndValidateLines(
+      [
+        { accountCode: deposit.code, debit: input.amount, credit: 0 },
+        ...credits,
+      ],
+      "receipt",
+      session
+    );
+    const date = input.paymentDate;
+    const branchCode = (input.branchCode || settings.defaultBranchCode || "MAIN").toUpperCase();
+    const number = await nextVoucherNumber("receipt", branchCode, date, session);
+    const [voucher] = await Voucher.create(
+      [
+        {
+          number,
+          voucherType: "receipt",
+          status: "posted",
+          date,
+          branchCode,
+          partyType: "student",
+          partyId: input.studentId,
+          partyName: `${input.studentName} · ${input.admissionNo}`,
+          narration: `Fee payment · ${input.title}`,
+          reference: input.transactionReference || number,
+          currency: settings.currency || "PKR",
+          subtotal: input.amount,
+          discountAmount: 0,
+          taxAmount: 0,
+          grandTotal: input.amount,
+          items: [],
+          lines: checked.lines,
+          sourceType: "fee",
+          sourceId: input.paymentId,
+          createdBy: input.recordedBy,
+          postedBy: input.recordedBy,
+          postedAt: new Date(),
+        },
+      ],
+      { session }
+    );
+    return voucher;
+  },
+
+  async reverseFeeReceipt(
+    voucherId: string,
+    reason: string,
+    actor: SessionUser,
+    session: ClientSession
+  ) {
+    const voucher = await Voucher.findById(voucherId).session(session);
+    if (!voucher) throw new ServiceError("NOT_FOUND", "Accounting receipt not found", 404);
+    if (voucher.sourceType !== "fee" || voucher.voucherType !== "receipt") {
+      throw new ServiceError("CONFLICT", "This voucher is not a student fee receipt", 409);
+    }
+    if (voucher.status !== "posted") {
+      throw new ServiceError("CONFLICT", "Only a posted fee receipt can be reversed", 409);
+    }
+    const before = voucherSnapshot(voucher.toObject());
+    voucher.status = "reversed";
+    voucher.voidedAt = new Date();
+    voucher.voidedBy = actor.id as never;
+    voucher.voidReason = reason;
+    await voucher.save({ session });
+    return { voucher, before, after: voucherSnapshot(voucher.toObject()) };
   },
 
   async upsertLinked(post: LinkedPost) {

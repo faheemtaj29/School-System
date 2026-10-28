@@ -9,16 +9,26 @@ import {
   requireAuth,
 } from "@/backend/lib/http";
 import { subjectService } from "@/backend/services/subject.service";
+import { teacherService } from "@/backend/services/teacher.service";
 import { subjectSchema } from "@/backend/validators/subject.validator";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export const subjectController = {
   async list() {
-    const { error } = await requireAuth();
+    const { session, error } = await requireAuth();
     if (error) return error;
     try {
-      return jsonOk({ subjects: await subjectService.list() });
+      const subjects = session!.role === "teacher"
+        ? await subjectService.list(
+            [...new Set(
+              (await teacherService.assignedClasses(session!)).flatMap((item) =>
+                (item.subjects || []).map((subject: { _id: unknown }) => String(subject._id))
+              )
+            )]
+          )
+        : await subjectService.list();
+      return jsonOk({ subjects });
     } catch (e) {
       return fromServiceError(e);
     }

@@ -11,7 +11,7 @@ export { Teacher } from "./Teacher";
 export { Student } from "./Student";
 export { Attendance } from "./Attendance";
 export { Exam } from "./Exam";
-export { Fee } from "./Fee";
+export { Fee, FeePayment } from "./Fee";
 export { Settings } from "./Settings";
 export { AcademicSession } from "./AcademicSession";
 export { ExamTypeMaster, ExamTerm, ExamSchedule } from "./ExamWorkflow";

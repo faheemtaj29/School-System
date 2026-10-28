@@ -3,8 +3,9 @@
  */
 import { dbConnect } from "@/backend/config/database";
 import { Teacher } from "@/backend/models/Teacher";
+import { ClassModel } from "@/backend/models/Class";
 import { parseOptionalDate } from "@/backend/lib/http";
-import { ServiceError } from "@/backend/types";
+import { ServiceError, type SessionUser } from "@/backend/types";
 import type { TeacherInput } from "@/backend/validators/teacher.validator";
 import { numberingService } from "@/backend/services/numbering.service";
 
@@ -26,6 +27,54 @@ async function populated(id: string) {
 }
 
 export const teacherService = {
+  async forSession(session: SessionUser) {
+    await dbConnect();
+    const teacher = await Teacher.findOne({
+      $or: [{ user: session.id }, { email: session.email.toLowerCase() }],
+    })
+      .select("employeeId firstName lastName designation department qualification branchCode subjects classes")
+      .lean();
+    if (!teacher) throw new ServiceError("FORBIDDEN", "Your login is not linked to a teacher profile", 403);
+    return teacher;
+  },
+
+  async assignedClasses(session: SessionUser) {
+    const teacher = await this.forSession(session);
+    const assignedSubjectIds = new Set(teacher.subjects.map((subject: unknown) => String(subject)));
+    const classes = await ClassModel.find({
+      $or: [{ _id: { $in: teacher.classes } }, { classTeacher: teacher._id }],
+    })
+      .populate("subjects", "name code")
+      .sort({ level: 1, name: 1, section: 1 })
+      .lean();
+    return classes.map((item) => ({
+      ...item,
+      subjects: (item.subjects || []).filter((subject: { _id: unknown }) =>
+        assignedSubjectIds.has(String(subject._id))
+      ),
+    }));
+  },
+
+  async assertClassAssigned(session: SessionUser, classId: string) {
+    const teacher = await this.forSession(session);
+    const assigned = await ClassModel.exists({
+      _id: classId,
+      $or: [{ _id: { $in: teacher.classes } }, { classTeacher: teacher._id }],
+    });
+    if (!assigned) throw new ServiceError("FORBIDDEN", "This class is not assigned to your teacher account", 403);
+    return teacher;
+  },
+
+  async assertSubjectAssigned(session: SessionUser, classId: string, subjectId: string) {
+    const teacher = await this.assertClassAssigned(session, classId);
+    const assignedSubject = teacher.subjects.some((id: unknown) => String(id) === subjectId);
+    const inClass = await ClassModel.exists({ _id: classId, subjects: subjectId });
+    if (!assignedSubject || !inClass) {
+      throw new ServiceError("FORBIDDEN", "This subject is not assigned to you for this class", 403);
+    }
+    return teacher;
+  },
+
   async list(branchCode?: string | null) {
     await dbConnect();
     const filter = branchCode ? { branchCode: branchCode.toUpperCase() } : {};

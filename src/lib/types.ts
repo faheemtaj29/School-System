@@ -63,12 +63,15 @@ export type TeacherItem = {
   employeeId: string;
   firstName: string;
   lastName: string;
+  profilePhoto?: string;
   email: string;
   phone?: string;
   gender?: string;
   dateOfBirth?: string;
   joinDate?: string;
   address?: string;
+  designation?: string;
+  department?: string;
   subjects: SubjectItem[] | string[];
   classes: ClassItem[] | string[];
   qualification?: string;
@@ -81,6 +84,7 @@ export type StudentItem = {
   admissionNo: string;
   firstName: string;
   lastName: string;
+  profilePhoto?: string;
   email?: string;
   phone?: string;
   gender?: string;
@@ -119,6 +123,8 @@ export type AttendanceItem = {
   _id: string;
   classId: ClassItem | string;
   date: string;
+  takenBy?: { _id: string; name?: string } | string;
+  updatedAt?: string;
   records: {
     studentId: StudentItem | string;
     status: "present" | "absent" | "late" | "excused";
@@ -147,7 +153,7 @@ export type FeeItem = {
   _id: string;
   studentId: StudentItem | string;
   title: string;
-  lines?: { head: string; amount: number }[];
+  lines?: { head: string; amount: number; accountCode?: string }[];
   originalAmount?: number;
   amount: number;
   discountPercent?: number;
@@ -161,6 +167,27 @@ export type FeeItem = {
   notes?: string;
   lateFeeAmount?: number;
   lateFeeApplied?: boolean;
+  payments?: FeePaymentItem[];
+};
+
+export type FeePaymentItem = {
+  _id: string;
+  feeId: string;
+  studentId: string;
+  receiptNumber: string;
+  amount: number;
+  method: "cash" | "card" | "bank" | "online";
+  depositAccountCode: string;
+  paymentDate: string;
+  transactionReference?: string;
+  voucherId: string;
+  voucherNumber: string;
+  status: "posted" | "reversed";
+  receivedBy?: { _id: string; name?: string } | string;
+  reversedAt?: string;
+  reversedBy?: { _id: string; name?: string } | string;
+  reversalReason?: string;
+  createdAt: string;
 };
 
 export function idOf(value: IdRef | null | undefined): string {

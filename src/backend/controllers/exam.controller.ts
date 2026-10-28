@@ -15,17 +15,17 @@ type Ctx = { params: Promise<{ id: string }> };
 
 export const examController = {
   async list() {
-    const { error } = await requireAuth();
+    const { session, error } = await requireAuth();
     if (error) return error;
     try {
-      return jsonOk({ exams: await examService.list() });
+      return jsonOk({ exams: await examService.list(session!) });
     } catch (e) {
       return fromServiceError(e);
     }
   },
 
   async create(req: Request) {
-    const { error } = await requireAuth(["admin", "teacher"]);
+    const { error } = await requireAuth(["admin"]);
     if (error) return error;
     try {
       const body = await req.json();
@@ -38,7 +38,7 @@ export const examController = {
   },
 
   async update(req: Request, ctx: Ctx) {
-    const { error } = await requireAuth(["admin", "teacher"]);
+    const { error } = await requireAuth(["admin"]);
     if (error) return error;
     try {
       const { id } = await ctx.params;
@@ -63,25 +63,30 @@ export const examController = {
   },
 
   async getMarksheet(req: Request) {
-    const { error } = await requireAuth(["admin", "teacher"]);
+    const { session, error } = await requireAuth(["admin", "teacher"]);
     if (error) return error;
     try {
-      const classId = new URL(req.url).searchParams.get("classId");
+      const params = new URL(req.url).searchParams;
+      const classId = params.get("classId");
       if (!classId) return jsonError("classId is required");
-      return jsonOk(await examService.getMarksheet(classId));
+      return jsonOk(await examService.getMarksheet(classId, {
+        subjectId: params.get("subjectId"),
+        scheduleId: params.get("scheduleId"),
+        session: session!,
+      }));
     } catch (e) {
       return fromServiceError(e);
     }
   },
 
   async saveMarksheet(req: Request) {
-    const { error } = await requireAuth(["admin", "teacher"]);
+    const { session, error } = await requireAuth(["admin", "teacher"]);
     if (error) return error;
     try {
       const body = await req.json();
       const parsed = marksheetSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
-      return jsonOk(await examService.saveMarksheet(parsed.data));
+      return jsonOk(await examService.saveMarksheet(parsed.data, session!));
     } catch (e) {
       return fromServiceError(e);
     }

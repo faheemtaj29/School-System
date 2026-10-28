@@ -35,6 +35,7 @@ export const examSchema = z.object({
 /** Schema for bulk marksheet save: one entry per subject per class. */
 export const marksheetSchema = z.object({
   classId: z.string().min(1),
+  scheduleId: z.string().optional(),
   academicYear: z.string().min(1),
   termLabel: z.string().optional(),
   examType: z.enum(["quiz", "midterm", "final", "assignment"]).default("final"),

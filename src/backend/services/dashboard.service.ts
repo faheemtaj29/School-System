@@ -13,6 +13,9 @@ import { Attendance } from "@/backend/models/Attendance";
 import { Course, Diploma, Enrollment, Lecture } from "@/backend/models/ELearning";
 import { LeaveRequest, Payslip } from "@/backend/models/HR";
 import { Notice } from "@/backend/models/Notice";
+import { ExamSchedule } from "@/backend/models/ExamWorkflow";
+import { TimetableSlot } from "@/backend/models/CampusModules";
+import { teacherService } from "@/backend/services/teacher.service";
 import type { SessionUser } from "@/backend/types";
 
 function todayRange() {
@@ -25,6 +28,34 @@ function todayRange() {
 
 function rate(part: number, total: number) {
   return total > 0 ? Math.round((part / total) * 100) : 0;
+}
+
+type ScheduleRef = { _id?: unknown; name?: string; section?: string; key?: string } | string;
+type TeacherScheduleRow = {
+  subjectId: ScheduleRef;
+  examDate?: Date;
+  startTime?: string;
+  endTime?: string;
+  totalMarks: number;
+  room?: string;
+  status: "draft" | "published";
+};
+type TeacherSchedule = {
+  _id: unknown;
+  classId: ScheduleRef;
+  termId?: ScheduleRef;
+  examTypeId?: ScheduleRef;
+  academicYear: string;
+  rows: TeacherScheduleRow[];
+};
+
+function refValue(value: ScheduleRef | null | undefined) {
+  return value && typeof value === "object" ? value : {};
+}
+
+function refId(value: ScheduleRef) {
+  const ref = refValue(value);
+  return ref._id ?? value;
 }
 
 export const dashboardService = {
@@ -214,8 +245,15 @@ export const dashboardService = {
     if (!teacher) return { role: "teacher" as const, linked: false };
 
     const { start, end } = todayRange();
-    const classIds = (teacher.classes || []).map((c: { _id: unknown }) => c._id);
-    const subjectIds = (teacher.subjects || []).map((s: { _id: unknown }) => s._id);
+    const assignedClasses = await teacherService.assignedClasses(session);
+    const classIds = assignedClasses.map((c) => c._id);
+    const subjectsByClass = new Map(
+      assignedClasses.map((item) => [
+        String(item._id),
+        new Set((item.subjects || []).map((subject: { _id: unknown }) => String(subject._id))),
+      ])
+    );
+    const subjectIds = [...new Set([...subjectsByClass.values()].flatMap((ids) => [...ids]))];
     const monthAgo = new Date(start);
     monthAgo.setDate(monthAgo.getDate() - 29);
 
@@ -223,7 +261,10 @@ export const dashboardService = {
       students,
       todaySheets,
       monthSheets,
-      upcomingExams,
+      schedules,
+      timetable,
+      attendanceActivity,
+      marksActivity,
       courses,
       lectures,
       payslips,
@@ -235,14 +276,31 @@ export const dashboardService = {
         .populate("classId", "name section")
         .lean(),
       Attendance.find({ classId: { $in: classIds }, date: { $gte: monthAgo, $lt: end } }).lean(),
-      Exam.find({
-        date: { $gte: start },
-        $or: [{ teacherId: teacher._id }, { classId: { $in: classIds } }, { subjectId: { $in: subjectIds } }],
-      })
-        .sort({ date: 1 })
-        .limit(6)
+      ExamSchedule.find({ classId: { $in: classIds }, status: "published" })
+        .populate("termId", "name academicYear")
+        .populate("examTypeId", "key name")
+        .populate("classId", "name section")
+        .populate("rows.subjectId", "name code")
+        .sort({ updatedAt: -1 })
+        .lean(),
+      TimetableSlot.find({ teacherId: teacher._id, day: ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][new Date().getDay()] })
         .populate("classId", "name section")
         .populate("subjectId", "name code")
+        .sort({ period: 1 })
+        .lean(),
+      Attendance.find({ classId: { $in: classIds } })
+        .populate("classId", "name section")
+        .sort({ date: -1, updatedAt: -1 })
+        .limit(4)
+        .lean(),
+      Exam.find({
+        classId: { $in: classIds },
+        subjectId: { $in: subjectIds },
+      })
+        .populate("classId", "name section")
+        .populate("subjectId", "name code")
+        .sort({ updatedAt: -1 })
+        .limit(5)
         .lean(),
       Course.find({ teacherId: teacher._id }).sort({ startDate: -1 }).limit(8).lean(),
       Lecture.find({
@@ -256,11 +314,27 @@ export const dashboardService = {
         .lean(),
       Payslip.find({ teacherId: teacher._id }).sort({ createdAt: -1 }).limit(4).lean(),
       LeaveRequest.find({ teacherId: teacher._id }).sort({ createdAt: -1 }).limit(4).lean(),
-      Notice.find().sort({ createdAt: -1 }).limit(4).lean(),
+      Notice.find({
+        publishDate: { $lte: new Date() },
+        $and: [
+          { $or: [{ expiryDate: null }, { expiryDate: { $gte: new Date() } }] },
+          {
+            $or: [
+              { audience: { $in: ["all", "staff"] } },
+              { audience: "class", classId: { $in: classIds } },
+            ],
+          },
+        ],
+      }).sort({ publishDate: -1 }).limit(4).lean(),
     ]);
 
     const markedClassIds = new Set(todaySheets.map((s) => String(s.classId?._id ?? s.classId)));
-    const pendingClasses = (teacher.classes || []).filter(
+    const assignedMarksActivity = marksActivity.filter(
+      (activity: { classId: ScheduleRef; subjectId: ScheduleRef }) =>
+        subjectsByClass.get(String(refId(activity.classId)))
+          ?.has(String(refId(activity.subjectId)))
+    );
+    const pendingClasses =     assignedClasses.filter(
       (c: { _id: unknown }) => !markedClassIds.has(String(c._id))
     );
 
@@ -282,6 +356,87 @@ export const dashboardService = {
       : [];
     const enrollMap = new Map(enrollments.map((e) => [String(e._id), e]));
 
+    const classRosterCounts = new Map(
+      await Student.aggregate([
+        { $match: { classId: { $in: classIds }, status: "active" } },
+        { $group: { _id: "$classId", count: { $sum: 1 } } },
+      ]).then((rows: { _id: unknown; count: number }[]) =>
+        rows.map((row) => [String(row._id), row.count] as const)
+      )
+    );
+    const teacherSchedules = schedules as TeacherSchedule[];
+    const scheduleTasks = teacherSchedules.flatMap((schedule: TeacherSchedule) => {
+      const classRef = refValue(schedule.classId);
+      const classId = String(refId(schedule.classId));
+      const className = classRef?.name
+        ? `${classRef.name} - ${classRef.section || ""}`.trim()
+        : "Class";
+      const rosterCount = classRosterCounts.get(classId) || 0;
+      return schedule.rows
+        .filter((row: TeacherScheduleRow) => row.status === "published" && row.examDate && row.examDate <= end)
+        .filter((row: TeacherScheduleRow) =>
+          subjectsByClass.get(classId)?.has(String(refId(row.subjectId)))
+        )
+        .map((row: TeacherScheduleRow) => {
+          const subject = refValue(row.subjectId);
+          return { schedule, row, classId, className, rosterCount, subject };
+        });
+    });
+    const taskRows = await Promise.all(scheduleTasks.map(async (task) => {
+      const exam = await Exam.findOne({
+        $or: [
+          { scheduleId: task.schedule._id, subjectId: task.subject._id ?? task.subject },
+          {
+            classId: task.classId,
+            subjectId: task.subject._id ?? task.subject,
+            date: task.row.examDate,
+          },
+        ],
+      }).select("results").lean();
+      const resultCount = new Set((exam?.results || []).map((result: { studentId: unknown }) => String(result.studentId))).size;
+      const missingMarks = Math.max(task.rosterCount - resultCount, 0);
+      return {
+        scheduleId: String(task.schedule._id),
+        classId: task.classId,
+        className: task.className,
+        subjectId: String(refId(task.subject as ScheduleRef)),
+        subjectName: task.subject.name || "Subject",
+        date: task.row.examDate,
+        maxMarks: task.row.totalMarks,
+        missingMarks,
+        students: task.rosterCount,
+        examType: refValue(task.schedule.examTypeId)?.key || "final",
+        termLabel: refValue(task.schedule.termId)?.name || "",
+        academicYear: task.schedule.academicYear,
+      };
+    }));
+    const pendingMarks = taskRows.filter((task) => task.missingMarks > 0).slice(0, 8);
+    const upcomingExams = teacherSchedules.flatMap((schedule: TeacherSchedule) => {
+      const classRef = refValue(schedule.classId);
+      return schedule.rows
+        .filter((row: TeacherScheduleRow) => row.status === "published" && row.examDate && row.examDate >= start)
+        .filter((row: TeacherScheduleRow) =>
+          subjectsByClass.get(String(refId(schedule.classId) ?? schedule.classId))
+            ?.has(String(refId(row.subjectId)))
+        )
+        .map((row: TeacherScheduleRow) => ({
+          _id: `${String(schedule._id)}-${String(refId(row.subjectId))}`,
+          scheduleId: String(schedule._id),
+          date: row.examDate,
+          title: refValue(row.subjectId).name || "Examination",
+          startTime: row.startTime || "",
+          endTime: row.endTime || "",
+          maxMarks: row.totalMarks,
+          room: row.room || "",
+          classId: { name: classRef.name || "Class", section: classRef.section || "" },
+          subjectId: row.subjectId,
+          examType: refValue(schedule.examTypeId).name || "",
+          term: refValue(schedule.termId).name || "",
+        }));
+    }).sort((a, b) =>
+      new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime()
+    ).slice(0, 6);
+
     return {
       role: "teacher" as const,
       linked: true,
@@ -289,6 +444,8 @@ export const dashboardService = {
         name: `${teacher.firstName} ${teacher.lastName}`,
         employeeId: teacher.employeeId,
         qualification: teacher.qualification || "",
+        designation: teacher.designation || "",
+        department: teacher.department || "",
         branchCode: teacher.branchCode || "",
       },
       stats: {
@@ -298,16 +455,26 @@ export const dashboardService = {
         courses: courses.length,
         attendanceRate: rate(present, marked),
         pendingAttendance: pendingClasses.length,
+        pendingMarks: pendingMarks.length,
       },
-      classes: (teacher.classes || []).map((c: { _id: unknown; name: string; section: string; room?: string }) => ({
+      classes: assignedClasses.map((c: { _id: unknown; name: string; section: string; room?: string; subjects?: { _id: unknown; name: string; code?: string }[] }) => ({
         _id: String(c._id),
         name: c.name,
         section: c.section,
         room: c.room || "",
+        subjects: (c.subjects || []).map((s: { _id: unknown; name: string; code?: string }) => ({
+          _id: String(s._id),
+          name: s.name,
+          code: s.code,
+        })),
         markedToday: markedClassIds.has(String(c._id)),
       })),
       subjects: teacher.subjects || [],
+      timetable,
+      pendingMarks,
       upcomingExams,
+      attendanceActivity,
+      marksActivity: assignedMarksActivity,
       courses: courses.map((c) => ({
         ...c,
         learners: enrollMap.get(String(c._id))?.learners ?? 0,
@@ -335,7 +502,7 @@ export const dashboardService = {
     const monthAgo = new Date(start);
     monthAgo.setDate(monthAgo.getDate() - 29);
 
-    const [sheets, fees, exams, enrollments, diplomas, notices] = await Promise.all([
+    const [sheets, fees, feeTotals, exams, enrollments, diplomas, notices] = await Promise.all([
       Attendance.find({
         classId: student.classId?._id ?? student.classId,
         date: { $gte: monthAgo, $lt: end },
@@ -343,6 +510,34 @@ export const dashboardService = {
         .sort({ date: -1 })
         .lean(),
       Fee.find({ studentId: student._id }).sort({ dueDate: -1 }).limit(8).lean(),
+      Fee.aggregate([
+        { $match: { studentId: student._id } },
+        {
+          $group: {
+            _id: null,
+            billed: { $sum: "$amount" },
+            paid: { $sum: "$paidAmount" },
+            overdue: {
+              $sum: {
+                $cond: [
+                  { $eq: ["$status", "overdue"] },
+                  { $max: [{ $subtract: ["$amount", "$paidAmount"] }, 0] },
+                  0,
+                ],
+              },
+            },
+            fineAmount: {
+              $sum: {
+                $cond: [
+                  "$lateFeeApplied",
+                  { $ifNull: ["$lateFeeAmount", 0] },
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
       Exam.find({ "results.studentId": student._id })
         .sort({ date: -1 })
         .limit(6)
@@ -374,11 +569,10 @@ export const dashboardService = {
       if (history.length < 10) history.push({ date: sheet.date, status: mine.status });
     }
 
-    const billed = fees.reduce((sum, f) => sum + f.amount, 0);
-    const paid = fees.reduce((sum, f) => sum + f.paidAmount, 0);
-    const overdue = fees
-      .filter((f) => f.status === "overdue")
-      .reduce((sum, f) => sum + (f.amount - f.paidAmount), 0);
+    const feeSummary = feeTotals[0] || { billed: 0, paid: 0, overdue: 0, fineAmount: 0 };
+    const billed = feeSummary.billed;
+    const paid = feeSummary.paid;
+    const overdue = feeSummary.overdue;
 
     const results = exams.map((exam) => {
       const mine = (exam.results ?? []).find(
@@ -434,6 +628,7 @@ export const dashboardService = {
         paid,
         due: Math.max(billed - paid, 0),
         overdue,
+        fineAmount: feeSummary.fineAmount,
         courses: enrollments.length,
         diplomas: diplomas.length,
         avgScore: scored.length

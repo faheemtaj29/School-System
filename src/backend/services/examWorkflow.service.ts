@@ -1,8 +1,15 @@
 import { dbConnect } from "@/backend/config/database";
 import { ClassModel } from "@/backend/models/Class";
 import { Subject } from "@/backend/models/Subject";
-import { ExamSchedule, ExamTerm, ExamTypeMaster } from "@/backend/models/ExamWorkflow";
+import {
+  ExamSchedule,
+  ExamTerm,
+  ExamTypeMaster,
+  type IExamScheduleRow,
+} from "@/backend/models/ExamWorkflow";
 import { ServiceError } from "@/backend/types";
+import { teacherService } from "@/backend/services/teacher.service";
+import type { SessionUser } from "@/backend/types";
 import type {
   ExamScheduleInput,
   ExamTermInput,
@@ -228,15 +235,52 @@ export const examWorkflowService = {
     academicYear?: string | null;
     termId?: string | null;
     classId?: string | null;
+    teacher?: SessionUser;
   }) {
     await dbConnect();
-    const query = { institutionCode: normalizeInstitution(filters.institutionCode) } as Record<
-      string,
-      unknown
-    >;
+    const query = (filters.teacher
+      ? {}
+      : { institutionCode: normalizeInstitution(filters.institutionCode) }) as Record<string, unknown>;
     if (filters.academicYear) query.academicYear = filters.academicYear;
     if (filters.termId) query.termId = filters.termId;
-    if (filters.classId) query.classId = filters.classId;
+    if (filters.teacher) {
+      const classes = await teacherService.assignedClasses(filters.teacher);
+      const assignedIds = classes.map((item) => String(item._id));
+      if (filters.classId && !assignedIds.includes(filters.classId)) {
+        throw new ServiceError("FORBIDDEN", "This class is not assigned to your teacher account", 403);
+      }
+      query.classId = filters.classId || { $in: assignedIds };
+      query.status = "published";
+      const assignedSubjectsByClass = new Map(
+        classes.map((item) => [
+          String(item._id),
+          new Set((item.subjects || []).map((subject: { _id: unknown }) => String(subject._id))),
+        ])
+      );
+      const schedules = await ExamSchedule.find(query)
+        .populate("termId", "name academicYear status startDate endDate")
+        .populate("examTypeId", "key name category")
+        .populate("classId", "name section academicYear")
+        .populate("rows.subjectId", "name code")
+        .populate("rows.invigilatorId", "firstName lastName employeeId")
+        .sort({ academicYear: -1, updatedAt: -1 })
+        .lean();
+      return schedules.map((schedule) => ({
+        ...schedule,
+        rows: schedule.rows.filter((row: IExamScheduleRow) => {
+          const classId = String(
+            ((schedule.classId as { _id?: unknown })._id) ?? schedule.classId
+          );
+          const subjectId = String(
+            ((row.subjectId as { _id?: unknown })._id) ?? row.subjectId
+          );
+          return row.status === "published" && assignedSubjectsByClass.get(classId)?.has(subjectId);
+        }
+        ),
+      }));
+    } else if (filters.classId) {
+      query.classId = filters.classId;
+    }
     return ExamSchedule.find(query)
       .populate("termId", "name academicYear status startDate endDate")
       .populate("examTypeId", "key name category")
@@ -283,8 +327,8 @@ export const examWorkflowService = {
       institutionCode,
       rows: rows.map((r) => ({
         ...r,
-        examDate: r.examDate ? new Date(r.examDate) : undefined,
-        invigilatorId: r.invigilatorId || undefined,
+        examDate: "examDate" in r && r.examDate ? new Date(r.examDate) : undefined,
+        invigilatorId: "invigilatorId" in r ? r.invigilatorId || undefined : undefined,
       })),
       createdBy: userId || undefined,
       updatedBy: userId || undefined,
@@ -316,8 +360,8 @@ export const examWorkflowService = {
         institutionCode: normalizeInstitution(data.institutionCode),
         rows: rows.map((r) => ({
           ...r,
-          examDate: r.examDate ? new Date(r.examDate) : undefined,
-          invigilatorId: r.invigilatorId || undefined,
+          examDate: "examDate" in r && r.examDate ? new Date(r.examDate) : undefined,
+          invigilatorId: "invigilatorId" in r ? r.invigilatorId || undefined : undefined,
         })),
         updatedBy: userId || undefined,
         publishedAt: data.status === "published" ? new Date() : undefined,

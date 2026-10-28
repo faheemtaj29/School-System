@@ -1,4 +1,4 @@
-import mongoose, { Schema, models, model, Types } from "mongoose";
+import { Schema, models, model, Types } from "mongoose";
 
 /** Breakdown of how marks are distributed across components for a subject. */
 export interface IMarkComponents {
@@ -25,6 +25,7 @@ export interface IExam {
   classId: Types.ObjectId;
   subjectId: Types.ObjectId;
   teacherId?: Types.ObjectId;
+  scheduleId?: Types.ObjectId;
   date: Date;
   maxMarks: number;
   /** Max marks per component (defines which components are used). */
@@ -53,6 +54,7 @@ const ExamSchema = new Schema<IExam>(
     classId: { type: Schema.Types.ObjectId, ref: "Class", required: true },
     subjectId: { type: Schema.Types.ObjectId, ref: "Subject", required: true },
     teacherId: { type: Schema.Types.ObjectId, ref: "Teacher" },
+    scheduleId: { type: Schema.Types.ObjectId, ref: "ExamSchedule" },
     date: { type: Date, required: true },
     maxMarks: { type: Number, required: true },
     markComponents: { type: markComponentsSchema, default: undefined },
@@ -67,6 +69,11 @@ const ExamSchema = new Schema<IExam>(
     ],
   },
   { timestamps: true }
+);
+
+ExamSchema.index(
+  { scheduleId: 1, subjectId: 1 },
+  { unique: true, partialFilterExpression: { scheduleId: { $type: "objectId" } } }
 );
 
 export const Exam = models.Exam || model<IExam>("Exam", ExamSchema);

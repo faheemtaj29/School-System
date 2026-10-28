@@ -57,11 +57,17 @@ const populate = [
 ];
 
 export const studentService = {
-  async list(classId?: string | null, branchCode?: string | null) {
+  async list(
+    classId?: string | string[] | null,
+    branchCode?: string | null,
+    activeOnly = false
+  ) {
     await dbConnect();
     const filter: Record<string, unknown> = {};
-    if (classId) filter.classId = classId;
+    if (Array.isArray(classId)) filter.classId = { $in: classId };
+    else if (classId) filter.classId = classId;
     if (branchCode) filter.branchCode = branchCode.toUpperCase();
+    if (activeOnly) filter.status = "active";
     return Student.find(filter).populate(populate).sort({ firstName: 1 }).lean();
   },
 
@@ -97,6 +103,21 @@ export const studentService = {
       admissionDate: parseOptionalDate(data.admissionDate),
     };
     const item = await Student.findByIdAndUpdate(id, payload, { new: true }).populate(populate);
+    if (!item) throw new ServiceError("NOT_FOUND", "Student not found", 404);
+    return item;
+  },
+
+  async updateProfilePhoto(id: string, profilePhoto: string) {
+    await dbConnect();
+    const item = await Student.findByIdAndUpdate(
+      id,
+      profilePhoto
+        ? { $set: { profilePhoto } }
+        : { $unset: { profilePhoto: 1 } },
+      { new: true }
+    )
+      .populate(populate)
+      .lean();
     if (!item) throw new ServiceError("NOT_FOUND", "Student not found", 404);
     return item;
   },

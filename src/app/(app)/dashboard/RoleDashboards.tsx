@@ -3,13 +3,20 @@
 /** Personal dashboards for teacher and student sessions. */
 import Link from "next/link";
 import { EmptyState, Panel, StatusBadge } from "@/components/ui";
-import { dayMonth, formatNumber, prettyDate } from "@/lib/types";
+import { formatNumber, prettyDate } from "@/lib/types";
 
 type Ref = { _id: string; name?: string; code?: string; title?: string; section?: string };
 
 export type TeacherData = {
   linked: boolean;
-  profile: { name: string; employeeId: string; qualification: string; branchCode: string };
+  profile: {
+    name: string;
+    employeeId: string;
+    designation: string;
+    department: string;
+    qualification: string;
+    branchCode: string;
+  };
   stats: {
     classes: number;
     subjects: number;
@@ -17,10 +24,70 @@ export type TeacherData = {
     courses: number;
     attendanceRate: number;
     pendingAttendance: number;
+    pendingMarks: number;
   };
-  classes: { _id: string; name: string; section: string; room: string; markedToday: boolean }[];
+  classes: {
+    _id: string;
+    name: string;
+    section: string;
+    room: string;
+    markedToday: boolean;
+    subjects: Ref[];
+  }[];
   subjects: Ref[];
-  upcomingExams: { _id: string; title: string; date: string; classId?: Ref; subjectId?: Ref }[];
+  timetable: {
+    _id: string;
+    period: number;
+    startTime?: string;
+    endTime?: string;
+    room?: string;
+    kind: string;
+    classId?: Ref;
+    subjectId?: Ref;
+  }[];
+  upcomingExams: {
+    _id: string;
+    scheduleId: string;
+    title: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    maxMarks: number;
+    room: string;
+    classId?: Ref;
+    subjectId?: Ref;
+    term: string;
+    examType: string;
+  }[];
+  pendingMarks: {
+    scheduleId: string;
+    classId: string;
+    className: string;
+    subjectId: string;
+    subjectName: string;
+    date: string;
+    maxMarks: number;
+    missingMarks: number;
+    students: number;
+    examType: string;
+    termLabel: string;
+    academicYear: string;
+  }[];
+  attendanceActivity: {
+    _id: string;
+    date: string;
+    classId?: Ref;
+    records: { status: string }[];
+  }[];
+  marksActivity: {
+    _id: string;
+    title: string;
+    date: string;
+    updatedAt: string;
+    classId?: Ref;
+    subjectId?: Ref;
+    results: { studentId: string; marks: number; grade?: string }[];
+  }[];
   courses: {
     _id: string;
     code: string;
@@ -63,6 +130,7 @@ export type StudentData = {
     paid: number;
     due: number;
     overdue: number;
+    fineAmount: number;
     courses: number;
     diplomas: number;
     avgScore: number;
@@ -128,61 +196,63 @@ export function UnlinkedNotice({ role }: { role: string }) {
           message={`Ask the school administrator to connect your login to your ${role} profile. Once linked, your classes, attendance, fees and courses appear here.`}
         />
       </Panel>
-    </>
   );
 }
 
 export function TeacherDashboard({ data }: { data: TeacherData }) {
   const { profile, stats } = data;
   return (
-    <>
-      <div className="hero">
+    <div className="role-dashboard teacher-role-dashboard">
+      <div className="hero role-dashboard-hero">
         <div className="hero-text">
           <h1>
             {greeting()}, {profile.name.split(" ")[0]}
           </h1>
           <div className="sub">
-            {profile.employeeId} · {stats.classes} classes · {stats.students} students
+            {profile.employeeId}
+            {profile.designation ? ` · ${profile.designation}` : ""}
+            {profile.department ? ` · ${profile.department}` : ""}
             <span className="live">{profile.branchCode || "MAIN"}</span>
           </div>
+          {profile.qualification ? <div className="sub">{profile.qualification}</div> : null}
         </div>
         <div style={{ display: "flex", gap: 10, position: "relative", zIndex: 1, flexWrap: "wrap" }}>
-          <Link href="/attendance" className="btn-primary">Mark Attendance</Link>
-          <Link
-            href="/exams"
-            className="btn-primary"
-            style={{ background: "rgba(255,255,255,.18)", color: "#fff", boxShadow: "none" }}
-          >
-            Enter Results
+          <Link href="/attendance" className="btn-primary">Take Attendance</Link>
+          <Link href="/exams?tab=schedules" className="btn-primary" style={{ background: "rgba(255,255,255,.18)", color: "#fff", boxShadow: "none" }}>
+            View Exam Schedule
+          </Link>
+          <Link href="/exams?tab=results" className="btn-primary" style={{ background: "rgba(255,255,255,.18)", color: "#fff", boxShadow: "none" }}>
+            View Results
           </Link>
         </div>
       </div>
 
-      <div className="kpi-row four colorful">
-        <Link href="/classes" className="kpi c1">
-          <div className="tag">My Classes</div>
-          <div className="num">{stats.classes}</div>
+      <div className="role-summary-grid">
+        <Link href="/students" className="role-summary-card jade">
+          <span>Assigned classes</span>
+          <b>{stats.classes}</b>
+          <small>{stats.subjects} subjects assigned</small>
         </Link>
-        <Link href="/students" className="kpi c2">
-          <div className="tag">My Students</div>
-          <div className="num">{stats.students}</div>
+        <Link href="/students" className="role-summary-card blue">
+          <span>Assigned students</span>
+          <b>{stats.students}</b>
+          <small>Across your class rosters</small>
         </Link>
-        <Link href="/attendance" className="kpi c3">
-          <div className="tag">Attendance (30d)</div>
-          <div className="num">{stats.attendanceRate}%</div>
+        <Link href="/attendance" className="role-summary-card amber">
+          <span>Attendance pending</span>
+          <b>{stats.pendingAttendance}</b>
+          <small>Class registers to complete today</small>
         </Link>
-        <Link href="/distance-learning" className="kpi c6">
-          <div className="tag">My Courses</div>
-          <div className="num">{stats.courses}</div>
+        <Link href="/exams?tab=schedules" className="role-summary-card red">
+          <span>Marks entry pending</span>
+          <b>{stats.pendingMarks}</b>
+          <small>Published exam tasks</small>
         </Link>
       </div>
 
-      <div className="grid-2">
+      <div className="grid-2 role-dashboard-grid">
         <div>
-          <Panel
-            title="Today's Register"
-            meta={stats.pendingAttendance ? `${stats.pendingAttendance} PENDING` : "ALL MARKED"}
-          >
+          <Panel title="My Classes & Subjects" meta={`${stats.students} STUDENTS`}>
             {!data.classes.length ? (
               <EmptyState message="No classes assigned to you yet." />
             ) : (
@@ -193,147 +263,166 @@ export function TeacherDashboard({ data }: { data: TeacherData }) {
                       {c.name} - {c.section}
                     </div>
                     <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
-                      {c.room || "No room"}
+                      {c.subjects.map((subject) => subject.name).join(" · ") || "No assigned subjects"}
                     </div>
                   </div>
-                  {c.markedToday ? (
-                    <StatusBadge status="present" />
-                  ) : (
-                    <Link href="/attendance" className="link-btn">
-                      Mark now
-                    </Link>
-                  )}
+                  <Link href={`/students?classId=${encodeURIComponent(c._id)}`} className="link-btn">View roster</Link>
                 </div>
               ))
             )}
           </Panel>
 
-          <Panel title="My Courses" meta={`${data.courses.length} ACTIVE`}>
-            {!data.courses.length ? (
-              <EmptyState message="No distance learning courses assigned." />
+          <Panel title="Today's Timetable" meta={`${data.timetable.length} PERIODS`}>
+            {!data.timetable.length ? (
+              <EmptyState message="No timetable periods are assigned for today." />
             ) : (
-              data.courses.map((course) => (
-                <div className="course-row" key={course._id}>
-                  <div className="course-head">
-                    <div>
-                      <div className="dname">{course.title}</div>
-                      <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
-                        {course.code} · {course.mode} · {course.learners}/{course.maxSeats} learners
-                      </div>
+              data.timetable.map((slot) => (
+                <div className="deadline-row" key={slot._id}>
+                  <div>
+                    <div className="dname">
+                      {slot.startTime && slot.endTime ? `${slot.startTime}–${slot.endTime} · ` : `Period ${slot.period} · `}
+                      {slot.subjectId?.name || slot.kind}
                     </div>
-                    <StatusBadge status={course.status} />
+                    <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
+                      {slot.classId ? `${slot.classId.name} - ${slot.classId.section || ""}` : "—"}
+                      {slot.room ? ` · Room ${slot.room}` : ""}
+                    </div>
                   </div>
-                  <Progress value={course.avgProgress} />
-                  <div className="course-foot">Average progress {course.avgProgress}%</div>
+                  <span className="d">P{slot.period}</span>
                 </div>
               ))
             )}
           </Panel>
 
-          <Panel title="Upcoming Exams" meta="NEXT 6">
+          <Panel title="Upcoming Published Exams" meta="NEXT 6">
             {!data.upcomingExams.length ? (
-              <EmptyState message="No exams scheduled for your classes." />
+              <EmptyState message="No published exams are scheduled for your assigned subjects." />
             ) : (
-              data.upcomingExams.map((exam) => {
-                const d = dayMonth(exam.date);
-                return (
-                  <div className="deadline-row" key={exam._id}>
+              data.upcomingExams.map((exam) => (
+                <div className="deadline-row" key={exam._id}>
+                  <div>
+                    <div className="dname">{exam.subjectId?.name || exam.title}</div>
+                    <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
+                      {exam.classId ? `${exam.classId.name} - ${exam.classId.section}` : "—"}
+                      {exam.term ? ` · ${exam.term}` : ""}
+                      {exam.startTime ? ` · ${exam.startTime}${exam.endTime ? `–${exam.endTime}` : ""}` : ""}
+                    </div>
+                  </div>
+                  <span className="d">{prettyDate(exam.date)}</span>
+                </div>
+              ))
+            )}
+          </Panel>
+
+          <Panel title="Recent Teaching Activity">
+            {!data.attendanceActivity.length && !data.marksActivity.length ? (
+              <EmptyState message="No attendance or marks activity recorded yet." />
+            ) : (
+              <>
+                {data.attendanceActivity.map((sheet) => (
+                  <div className="deadline-row" key={`attendance-${sheet._id}`}>
                     <div>
-                      <div className="dname">{exam.title}</div>
+                      <div className="dname">Attendance · {sheet.classId?.name || "Class"} {sheet.classId?.section || ""}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>{prettyDate(sheet.date)} · {sheet.records.length} students marked</div>
+                    </div>
+                    <StatusBadge status="saved" />
+                  </div>
+                ))}
+                {data.marksActivity.map((exam) => (
+                  <div className="deadline-row" key={`marks-${exam._id}`}>
+                    <div>
+                      <div className="dname">{exam.subjectId?.name || exam.title} · Marks saved</div>
                       <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
-                        {exam.classId ? `${exam.classId.name} - ${exam.classId.section}` : "—"}
-                        {exam.subjectId ? ` · ${exam.subjectId.name}` : ""}
+                        {exam.classId?.name || "Class"} {exam.classId?.section || ""} · {prettyDate(exam.updatedAt || exam.date)} · {exam.results.length} records
                       </div>
                     </div>
-                    <span className="d">
-                      {d.day} {d.month}
-                    </span>
+                    <Link href="/exams?tab=results" className="link-btn">View</Link>
                   </div>
-                );
-              })
+                ))}
+              </>
             )}
           </Panel>
         </div>
 
         <div>
-          <Panel title="Live & Scheduled Lectures">
-            {!data.lectures.length ? (
-              <EmptyState message="No upcoming lectures." />
+          <Panel title="Pending Attendance" meta={`${stats.pendingAttendance} TO DO`}>
+            {!data.classes.some((item) => !item.markedToday) ? (
+              <EmptyState message="All assigned class registers are saved for today." />
             ) : (
-              data.lectures.map((lecture) => (
-                <div className="deadline-row" key={lecture._id}>
+              data.classes.filter((item) => !item.markedToday).map((c) => (
+                <div className="deadline-row" key={c._id}>
                   <div>
-                    <div className="dname">{lecture.title}</div>
-                    <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
-                      {lecture.courseId?.code} · {prettyDate(lecture.scheduledAt)}
-                    </div>
+                    <div className="dname">{c.name} - {c.section}</div>
+                    <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>{c.room || "No room assigned"}</div>
                   </div>
-                  {lecture.meetingUrl ? (
-                    <a className="link-btn" href={lecture.meetingUrl} target="_blank" rel="noreferrer">
-                      Join
-                    </a>
-                  ) : (
-                    <StatusBadge status={lecture.status} />
-                  )}
+                  <Link href={`/attendance?classId=${encodeURIComponent(c._id)}`} className="link-btn">Take Attendance</Link>
                 </div>
               ))
             )}
           </Panel>
 
-          <Panel title="My Subjects">
-            {!data.subjects.length ? (
-              <EmptyState message="No subjects assigned." />
+          <Panel title="Marks Entry & Result Preparation" meta={`${data.pendingMarks.length} PENDING`}>
+            {!data.pendingMarks.length ? (
+              <EmptyState message="No published exam is awaiting marks entry." />
             ) : (
-              <div className="chips">
-                {data.subjects.map((s) => (
-                  <span className="chip" key={s._id}>
-                    {s.name} {s.code ? `(${s.code})` : ""}
-                  </span>
-                ))}
-              </div>
-            )}
-          </Panel>
-
-          <Panel title="Payslips" meta="LATEST 4">
-            {!data.payslips.length ? (
-              <EmptyState message="No payslips issued yet." />
-            ) : (
-              data.payslips.map((p) => (
-                <div className="deadline-row" key={p._id}>
-                  <div className="dname">{p.month}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span className="num">{formatNumber(p.net)}</span>
-                    <StatusBadge status={p.status} />
-                  </div>
-                </div>
-              ))
-            )}
-          </Panel>
-
-          <Panel title="Leave Requests">
-            {!data.leaves.length ? (
-              <EmptyState message="No leave requests." />
-            ) : (
-              data.leaves.map((l) => (
-                <div className="deadline-row" key={l._id}>
+              data.pendingMarks.map((task) => (
+                <div className="deadline-row" key={`${task.scheduleId}-${task.subjectId}`}>
                   <div>
-                    <div className="dname" style={{ textTransform: "capitalize" }}>
-                      {l.leaveType} · {l.days}d
-                    </div>
+                    <div className="dname">{task.subjectName} · {task.className}</div>
                     <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
-                      From {prettyDate(l.fromDate)}
+                      {task.termLabel} · {prettyDate(task.date)} · {task.missingMarks} of {task.students} marks missing
                     </div>
                   </div>
-                  <StatusBadge status={l.status} />
+                  <Link
+                    href={`/exams?tab=marksheet&classId=${encodeURIComponent(task.classId)}&scheduleId=${encodeURIComponent(task.scheduleId)}&subjectId=${encodeURIComponent(task.subjectId)}&date=${encodeURIComponent(new Date(task.date).toISOString().slice(0, 10))}&term=${encodeURIComponent(task.termLabel)}&examType=${encodeURIComponent(task.examType.toLowerCase())}`}
+                    className="link-btn"
+                  >Enter Marks</Link>
                 </div>
               ))
             )}
           </Panel>
 
           <NoticeBoard notices={data.notices} />
+
+          {data.courses.length ? (
+            <Panel title="Other Teaching Work" meta={`${data.courses.length} COURSES`}>
+              {data.courses.slice(0, 3).map((course) => (
+                <div className="deadline-row" key={course._id}>
+                  <div>
+                    <div className="dname">{course.title}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-dim)" }}>{course.code} · {course.learners} learners</div>
+                  </div>
+                  <Link href="/distance-learning" className="link-btn">Open</Link>
+                </div>
+              ))}
+            </Panel>
+          ) : null}
+
+          <Panel title="My Teaching Responsibilities">
+            <div className="deadline-row">
+              <div>
+                <div className="dname">30-day attendance rate</div>
+                <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>Across assigned classes</div>
+              </div>
+              <strong>{stats.attendanceRate}%</strong>
+            </div>
+            <div className="deadline-row">
+              <div>
+                <div className="dname">Assigned students</div>
+                <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>Active class roster</div>
+              </div>
+              <strong>{stats.students}</strong>
+            </div>
+            <div className="deadline-row">
+              <div>
+                <div className="dname">Browse published schedules and results</div>
+              </div>
+              <Link href="/exams?tab=schedules" className="link-btn">Open Exams</Link>
+            </div>
+          </Panel>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -342,8 +431,8 @@ export function StudentDashboard({ data }: { data: StudentData }) {
   const paidPct = stats.billed ? Math.round((stats.paid / stats.billed) * 100) : 0;
 
   return (
-    <>
-      <div className="hero">
+    <div className="role-dashboard student-role-dashboard">
+      <div className="hero role-dashboard-hero">
         <div className="hero-text">
           <h1>
             {greeting()}, {profile.name.split(" ")[0]}
@@ -367,26 +456,30 @@ export function StudentDashboard({ data }: { data: StudentData }) {
         </div>
       </div>
 
-      <div className="kpi-row four colorful">
-        <div className="kpi c1">
-          <div className="tag">Attendance</div>
-          <div className="num">{stats.attendanceRate}%</div>
+      <div className="role-summary-grid student-fee-summary">
+        <div className="role-summary-card jade">
+          <span>Total Fee</span>
+          <b>{formatNumber(stats.billed)}</b>
+          <small>All issued challans</small>
         </div>
-        <div className="kpi c3">
-          <div className="tag">Average Score</div>
-          <div className="num">{stats.avgScore}%</div>
+        <div className="role-summary-card blue">
+          <span>Paid Amount</span>
+          <b>{formatNumber(stats.paid)}</b>
+          <small>{paidPct}% of billed fees</small>
         </div>
-        <div className="kpi c5">
-          <div className="tag">Fee Due</div>
-          <div className="num">{formatNumber(stats.due)}</div>
+        <div className="role-summary-card amber">
+          <span>Pending Amount</span>
+          <b>{formatNumber(stats.due)}</b>
+          <small>Remaining fee balance</small>
         </div>
-        <div className="kpi c6">
-          <div className="tag">Courses</div>
-          <div className="num">{stats.courses}</div>
+        <div className="role-summary-card red">
+          <span>Fine Amount</span>
+          <b>{formatNumber(stats.fineAmount)}</b>
+          <small>Applied late fees</small>
         </div>
       </div>
 
-      <div className="grid-2">
+      <div className="grid-2 role-dashboard-grid">
         <div>
           <Panel title="My Courses" meta={`${data.enrollments.length} ENROLLED`}>
             {!data.enrollments.length ? (
@@ -457,7 +550,7 @@ export function StudentDashboard({ data }: { data: StudentData }) {
             )}
           </Panel>
 
-          <Panel title="Fee Vouchers" meta={`${paidPct}% PAID`}>
+          <Panel title="Fees & Payments" meta={`${paidPct}% PAID`}>
             {!data.fees.length ? (
               <EmptyState message="No fee vouchers issued." />
             ) : (
@@ -492,6 +585,35 @@ export function StudentDashboard({ data }: { data: StudentData }) {
         </div>
 
         <div>
+          <Panel title="Student Information" meta={profile.branchCode || "STUDENT PROFILE"}>
+            <div className="student-profile-summary">
+              <div>
+                <span>Class / Section</span>
+                <strong>{profile.className}</strong>
+              </div>
+              <div>
+                <span>Roll number</span>
+                <strong>{profile.rollNumber || "—"}</strong>
+              </div>
+              <div>
+                <span>Admission number</span>
+                <strong>{profile.admissionNo}</strong>
+              </div>
+              <div>
+                <span>Average result</span>
+                <strong>{stats.avgScore}%</strong>
+              </div>
+              <div>
+                <span>Courses enrolled</span>
+                <strong>{stats.courses}</strong>
+              </div>
+              <div>
+                <span>Certificates earned</span>
+                <strong>{stats.diplomas}</strong>
+              </div>
+            </div>
+          </Panel>
+
           <Panel title="Attendance" meta={`${stats.presentDays}/${stats.markedDays} DAYS`}>
             <Progress value={stats.attendanceRate} />
             <div className="attend-dots">
@@ -557,7 +679,7 @@ export function StudentDashboard({ data }: { data: StudentData }) {
           <NoticeBoard notices={data.notices} />
         </div>
       </div>
-    </>
+    </div>
   );
 }
 

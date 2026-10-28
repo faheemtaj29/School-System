@@ -1,9 +1,17 @@
 import { z } from "zod";
 
+export const studentPhotoSchema = z.object({
+  profilePhoto: z
+    .string()
+    .regex(/^\/uploads\/profiles\/[a-f0-9-]+\.(jpg|png|webp)$/i)
+    .or(z.literal("")),
+});
+
 export const studentSchema = z.object({
   admissionNo: z.string().optional().or(z.literal("")),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
+  profilePhoto: z.string().regex(/^\/uploads\/profiles\/[a-f0-9-]+\.(jpg|png|webp)$/i).optional().or(z.literal("")),
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional(),
   gender: z.enum(["male", "female", "other"]).optional(),

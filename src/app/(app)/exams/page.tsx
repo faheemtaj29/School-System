@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { EmptyState, Hero, NameCell, Panel, StatusBadge, inputClass } from "@/components/ui";
 import { ExamForm } from "@/components/forms/SchoolForms";
 import {
@@ -100,6 +101,7 @@ type ExamScheduleItem = {
   status: "draft" | "published";
   rows: ExamScheduleRowItem[];
 };
+type CurrentRole = "admin" | "teacher" | "staff" | "student" | "parent";
 
 /* ─── helpers ────────────────────────────────────────────────── */
 function gradeTone(percent: number) {
@@ -135,6 +137,7 @@ const emptyTermForm = {
 /* ─── component ──────────────────────────────────────────────── */
 export default function ExamsPage() {
   const [tab, setTab] = useState<WorkflowTab>("marksheet");
+  const [userRole, setUserRole] = useState<CurrentRole | null>(null);
 
   // basic data
   const [exams, setExams] = useState<ExamItem[]>([]);
@@ -160,6 +163,8 @@ export default function ExamsPage() {
 
   // mark sheet state
   const [sheetClassId, setSheetClassId] = useState("");
+  const [sheetSubjectId, setSheetSubjectId] = useState("");
+  const [sheetScheduleId, setSheetScheduleId] = useState("");
   const [sheetExamType, setSheetExamType] = useState<"quiz" | "midterm" | "final" | "assignment">("final");
   const [sheetDate, setSheetDate] = useState("");
   const [sheetTermLabel, setSheetTermLabel] = useState("");
@@ -169,6 +174,7 @@ export default function ExamsPage() {
   const [sheetLoading, setSheetLoading] = useState(false);
   const [sheetSaving, setSheetSaving] = useState(false);
   const [sheetMsg, setSheetMsg] = useState("");
+  const [savedStudentIds, setSavedStudentIds] = useState<string[]>([]);
 
   const currentAcademicYear = useMemo(() => {
     const now = new Date().getFullYear();
@@ -210,7 +216,34 @@ export default function ExamsPage() {
   useEffect(() => {
     load();
     loadWorkflow();
+    fetch("/api/auth/me")
+      .then((response) => response.json())
+      .then((data) => setUserRole(data.user?.role || null))
+      .catch(() => setUserRole(null));
   }, [load, loadWorkflow]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedTab = params.get("tab");
+    if (requestedTab && ["results", "marksheet", "schedules", "types", "terms"].includes(requestedTab)) {
+      setTab(requestedTab as WorkflowTab);
+    }
+    setSheetClassId(params.get("classId") || "");
+    setSheetSubjectId(params.get("subjectId") || "");
+    setSheetScheduleId(params.get("scheduleId") || "");
+    const examType = params.get("examType")?.toLowerCase();
+    if (examType && ["quiz", "midterm", "final", "assignment"].includes(examType)) {
+      setSheetExamType(examType as typeof sheetExamType);
+    }
+    setSheetDate(params.get("date") || "");
+    setSheetTermLabel(params.get("term") || "");
+  }, []);
+
+  useEffect(() => {
+    if (userRole === "teacher" && (tab === "types" || tab === "terms")) {
+      setTab("schedules");
+    }
+  }, [userRole, tab]);
 
   async function remove(id: string) {
     if (!confirm("Delete this exam?")) return;
@@ -233,18 +266,23 @@ export default function ExamsPage() {
     if (!sheetClassId) return;
     setSheetLoading(true);
     setSheetMsg("");
-    const res = await fetch(`/api/exams/marksheet?classId=${sheetClassId}`);
+    const params = new URLSearchParams({ classId: sheetClassId });
+    if (sheetSubjectId) params.set("subjectId", sheetSubjectId);
+    if (sheetScheduleId) params.set("scheduleId", sheetScheduleId);
+    const res = await fetch(`/api/exams/marksheet?${params}`);
     const data = await res.json();
     setSheetLoading(false);
     if (!res.ok) { setSheetMsg(data.error || "Failed to load sheet"); return; }
 
-    const classSubjects: SubjectItem[] = (data.cls?.subjects || []);
+    const classSubjects: SubjectItem[] = data.subjects || data.cls?.subjects || [];
     const classSubs: SheetSubject[] = classSubjects.map((s) => ({
       subjectId: s._id,
       name: s.name,
       code: s.code,
-      maxMarks: 100,
-      markComponents: { ...DEFAULT_COMP },
+      maxMarks: data.scheduleRow?.totalMarks || 100,
+      markComponents: data.scheduleRow
+        ? { theory: data.scheduleRow.totalMarks, viva: 0, assignment: 0, attendance: 0, project: 0 }
+        : { ...DEFAULT_COMP },
     }));
 
     const classStudents: { _id: string; firstName: string; lastName: string; rollNumber?: string; admissionNo: string }[] = data.students || [];
@@ -291,6 +329,11 @@ export default function ExamsPage() {
 
     setSheetSubjects(classSubs);
     setSheetRows(rows);
+    setSavedStudentIds(
+      [...new Set(existingExams.flatMap((exam) => exam.results.map((result) =>
+        typeof result.studentId === "object" ? result.studentId._id : result.studentId
+      )))]
+    );
     setSheetLoaded(true);
     if (!sheetDate) setSheetDate(new Date().toISOString().slice(0, 10));
   }
@@ -318,6 +361,7 @@ export default function ExamsPage() {
     const sheetClassObj = classes.find((c) => c._id === sheetClassId);
     const payload = {
       classId: sheetClassId,
+      scheduleId: sheetScheduleId || undefined,
       academicYear: sheetClassObj?.academicYear || currentAcademicYear,
       termLabel: sheetTermLabel || undefined,
       examType: sheetExamType,
@@ -340,6 +384,7 @@ export default function ExamsPage() {
     const data = await res.json();
     setSheetSaving(false);
     if (!res.ok) { setSheetMsg(data.error || "Save failed"); return; }
+    await loadSheet();
     setSheetMsg(`Saved ${data.saved} subject(s). Marks recorded.`);
     load();
   }
@@ -451,33 +496,26 @@ export default function ExamsPage() {
     await loadWorkflow();
   }
 
-  /* ─── derived ────────────────────────────────────────────────── */
-  // Group classes by name to show sections count
-  const classByName = useMemo(() => {
-    const map = new Map<string, ClassItem[]>();
-    for (const c of classes) {
-      const key = `${c.name}||${c.academicYear}`;
-      map.set(key, [...(map.get(key) ?? []), c]);
-    }
-    return map;
-  }, [classes]);
-
   /* ─── render ─────────────────────────────────────────────────── */
   return (
     <>
       <Hero
         title="Exams & Results"
         subtitle="Schedule exams · Enter marks by component · View result sheets"
-        actionLabel={tab === "results" ? "Quick Exam" : undefined}
-        onAction={tab === "results" ? () => { setEditing(null); setOpen(true); } : undefined}
+        actionLabel={userRole === "admin" && tab === "results" ? "Quick Exam" : undefined}
+        onAction={userRole === "admin" && tab === "results" ? () => { setEditing(null); setOpen(true); } : undefined}
       />
 
       <div className="tabs">
         <button type="button" className={`tab${tab === "marksheet" ? " active" : ""}`} onClick={() => setTab("marksheet")}>Mark Sheet</button>
         <button type="button" className={`tab${tab === "schedules" ? " active" : ""}`} onClick={() => setTab("schedules")}>Exam Schedule</button>
         <button type="button" className={`tab${tab === "results" ? " active" : ""}`} onClick={() => setTab("results")}>Results Register</button>
-        <button type="button" className={`tab${tab === "types" ? " active" : ""}`} onClick={() => setTab("types")}>Exam Types</button>
-        <button type="button" className={`tab${tab === "terms" ? " active" : ""}`} onClick={() => setTab("terms")}>Terms</button>
+        {userRole !== "teacher" ? (
+          <>
+            <button type="button" className={`tab${tab === "types" ? " active" : ""}`} onClick={() => setTab("types")}>Exam Types</button>
+            <button type="button" className={`tab${tab === "terms" ? " active" : ""}`} onClick={() => setTab("terms")}>Terms</button>
+          </>
+        ) : null}
       </div>
 
       {workflowErr ? <div className="alert err">{workflowErr}</div> : null}
@@ -494,7 +532,8 @@ export default function ExamsPage() {
                   className={inputClass}
                   style={{ minWidth: 200 }}
                   value={sheetClassId}
-                  onChange={(e) => { setSheetClassId(e.target.value); setSheetLoaded(false); setSheetMsg(""); }}
+                  disabled={userRole === "teacher" && Boolean(sheetScheduleId)}
+                  onChange={(e) => { setSheetClassId(e.target.value); setSheetScheduleId(""); setSheetSubjectId(""); setSheetLoaded(false); setSheetMsg(""); }}
                 >
                   <option value="">— select class —</option>
                   {classes.map((c) => (
@@ -514,7 +553,7 @@ export default function ExamsPage() {
 
               <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
                 Exam Type
-                <select className={inputClass} value={sheetExamType} onChange={(e) => setSheetExamType(e.target.value as typeof sheetExamType)}>
+                <select className={inputClass} value={sheetExamType} disabled={userRole === "teacher"} onChange={(e) => setSheetExamType(e.target.value as typeof sheetExamType)}>
                   <option value="final">Final</option>
                   <option value="midterm">Midterm</option>
                   <option value="quiz">Quiz</option>
@@ -524,18 +563,18 @@ export default function ExamsPage() {
 
               <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
                 Term / Label
-                <input className={inputClass} placeholder="e.g. Annual 2025" value={sheetTermLabel} onChange={(e) => setSheetTermLabel(e.target.value)} />
+                <input className={inputClass} placeholder="e.g. Annual 2025" value={sheetTermLabel} disabled={userRole === "teacher"} onChange={(e) => setSheetTermLabel(e.target.value)} />
               </label>
 
               <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
                 Exam Date
-                <input type="date" className={inputClass} value={sheetDate} onChange={(e) => setSheetDate(e.target.value)} />
+                <input type="date" className={inputClass} value={sheetDate} disabled={userRole === "teacher"} onChange={(e) => setSheetDate(e.target.value)} />
               </label>
 
               <button
                 type="button"
                 className="btn-primary"
-                disabled={!sheetClassId || sheetLoading}
+                disabled={!sheetClassId || sheetLoading || (userRole === "teacher" && !sheetScheduleId)}
                 onClick={loadSheet}
                 style={{ alignSelf: "flex-end" }}
               >
@@ -543,6 +582,10 @@ export default function ExamsPage() {
               </button>
             </div>
           </Panel>
+
+          {userRole === "teacher" && !sheetScheduleId ? (
+            <div className="alert">Select a published exam from the <Link href="/exams?tab=schedules">exam schedule</Link> to enter marks for its assigned subject.</div>
+          ) : null}
 
           {sheetLoaded && sheetSubjects.length > 0 && (
             <>
@@ -583,10 +626,10 @@ export default function ExamsPage() {
               {/* Marks entry grid */}
               <Panel
                 title={`Marks Entry — ${sheetClass?.name}-${sheetClass?.section}`}
-                meta={`${sheetRows.length} STUDENTS · ${sheetSubjects.length} SUBJECTS`}
+                meta={`${sheetRows.length} STUDENTS · ${sheetSubjects.length} SUBJECTS · ${sheetRows.filter((row) => !savedStudentIds.includes(row.studentId)).length} MISSING`}
               >
                 {sheetMsg && (
-                  <div className={`alert ${sheetMsg.startsWith("Save") ? "ok" : sheetMsg.startsWith("Saved") ? "ok" : ""}`} style={{ marginBottom: 12 }}>{sheetMsg}</div>
+                  <div className={`alert ${sheetMsg.startsWith("Saved") ? "ok" : sheetMsg.startsWith("Error:") ? "err" : ""}`} style={{ marginBottom: 12 }}>{sheetMsg}</div>
                 )}
                 <div className="table-scroll">
                   <table className="reg" style={{ fontSize: 11.5, minWidth: 900 }}>
@@ -686,7 +729,7 @@ export default function ExamsPage() {
       {/* ── EXAM SCHEDULE TAB ──────────────────────────────────── */}
       {tab === "schedules" ? (
         <>
-          <Panel title={editingScheduleId ? "Edit Schedule" : "New Exam Schedule"}>
+          {userRole === "admin" ? <Panel title={editingScheduleId ? "Edit Schedule" : "New Exam Schedule"}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end", marginBottom: 14 }}>
               <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
                 Class *
@@ -809,9 +852,9 @@ export default function ExamsPage() {
             ) : (
               <EmptyState message="Select a class and click Auto-load Subjects to build the exam timetable." />
             )}
-          </Panel>
+          </Panel> : null}
 
-          <Panel title="Schedule Register" meta={`${schedules.length} SCHEDULES`}>
+          <Panel title={userRole === "teacher" ? "Published Exam Schedule" : "Schedule Register"} meta={`${schedules.length} SCHEDULES`}>
             {!schedules.length ? (
               <EmptyState message="No schedules created yet." />
             ) : (
@@ -823,8 +866,9 @@ export default function ExamsPage() {
                       <th>Term</th>
                       <th>Academic Year</th>
                       <th className="right">Subjects</th>
+                      {userRole === "teacher" ? <th>Exam Details</th> : null}
                       <th className="right">Status</th>
-                      <th className="right">Actions</th>
+                      {userRole === "admin" ? <th className="right">Actions</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -837,13 +881,36 @@ export default function ExamsPage() {
                           <td>{trm ? trm.name : String(s.termId)}</td>
                           <td className="num">{s.academicYear}</td>
                           <td className="num">{s.rows?.length || 0}</td>
+                          {userRole === "teacher" ? (
+                            <td>
+                              {s.rows.map((row, index) => {
+                                const subject = typeof row.subjectId === "object" ? row.subjectId : null;
+                                const examDate = row.examDate ? new Date(row.examDate).toISOString().slice(0, 10) : "";
+                                const examType = typeof s.examTypeId === "object" && s.examTypeId ? s.examTypeId.key : "final";
+                                return (
+                                  <div key={`${s._id}-${index}`} style={{ marginBottom: 6 }}>
+                                    <div>{subject?.name || String(row.subjectId)} · {examDate ? prettyDate(examDate) : "Date pending"}</div>
+                                    <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
+                                      {row.startTime || "—"}{row.endTime ? `–${row.endTime}` : ""} · {row.totalMarks} marks{row.room ? ` · ${row.room}` : ""}
+                                    </div>
+                                    {row.status === "published" && subject && (
+                                      <Link
+                                        className="link-btn"
+                                        href={`/exams?tab=marksheet&classId=${encodeURIComponent(cls?._id || String(s.classId))}&scheduleId=${encodeURIComponent(s._id)}&subjectId=${encodeURIComponent(subject._id)}${examDate ? `&date=${encodeURIComponent(examDate)}` : ""}&term=${encodeURIComponent(trm?.name || "")}&examType=${encodeURIComponent(examType.toLowerCase())}`}
+                                      >Enter Marks</Link>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </td>
+                          ) : null}
                           <td className="right"><StatusBadge status={s.status} /></td>
-                          <td>
+                          {userRole === "admin" ? <td>
                             <div className="row-actions">
                               <button type="button" className="link-btn" onClick={() => editSchedule(s)}>Edit</button>
                               <button type="button" className="link-btn danger" onClick={() => removeSchedule(s._id)}>Delete</button>
                             </div>
-                          </td>
+                          </td> : null}
                         </tr>
                       );
                     })}
@@ -873,8 +940,12 @@ export default function ExamsPage() {
                     </div>
                     <span className={`badge ${upcoming ? "leave" : "present"}`}>{upcoming ? "upcoming" : exam.examType}</span>
                     <div className="row-actions">
-                      <button type="button" className="link-btn" onClick={(ev) => { ev.stopPropagation(); setEditing(exam); setOpen(true); }}>Edit</button>
-                      <button type="button" className="link-btn danger" onClick={(ev) => { ev.stopPropagation(); remove(exam._id); }}>Delete</button>
+                      {userRole === "admin" ? (
+                        <>
+                          <button type="button" className="link-btn" onClick={(ev) => { ev.stopPropagation(); setEditing(exam); setOpen(true); }}>Edit</button>
+                          <button type="button" className="link-btn danger" onClick={(ev) => { ev.stopPropagation(); remove(exam._id); }}>Delete</button>
+                        </>
+                      ) : null}
                     </div>
                   </div>
                 );

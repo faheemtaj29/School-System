@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import {
   EmptyState,
@@ -14,6 +13,7 @@ import {
 } from "@/components/ui";
 import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
 import { useSchoolBranding } from "@/components/SchoolBranding";
+import { printVoucherDocument, type VoucherPrintSection } from "@/lib/voucher-print";
 
 type Account = {
   _id: string;
@@ -233,6 +233,7 @@ export default function AccountingPage() {
   } | null>(null);
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [voucherSearch, setVoucherSearch] = useState("");
   const [voucherOpen, setVoucherOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [voucherForm, setVoucherForm] = useState(voucherBlank);
@@ -409,8 +410,25 @@ export default function AccountingPage() {
         )
       );
     }
+    const query = voucherSearch.trim().toLocaleLowerCase();
+    if (query) {
+      rows = rows.filter((voucher) =>
+        [
+          voucher.number,
+          voucherLabels[voucher.voucherType] || voucher.voucherType,
+          voucher.narration,
+          voucher.partyName,
+          voucher.reference,
+          voucher.branchCode,
+          voucher.sourceType,
+          ...voucher.lines.flatMap((line) => [line.accountCode, line.accountName, line.narration]),
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLocaleLowerCase().includes(query))
+      );
+    }
     return rows;
-  }, [vouchers, voucherTypeByNode, navMode]);
+  }, [vouchers, voucherTypeByNode, navMode, voucherSearch]);
 
   const effectiveVoucherTypeFilter = voucherTypeByNode || typeFilter;
 
@@ -1050,7 +1068,7 @@ export default function AccountingPage() {
     load();
   }
 
-  function exportVoucherExcel(voucher: Voucher) {
+  function exportVoucherCsv(voucher: Voucher) {
     const rows = [
       ["Voucher No", voucher.number],
       ["Voucher Type", voucherLabels[voucher.voucherType] || voucher.voucherType],
@@ -1061,6 +1079,19 @@ export default function AccountingPage() {
       ["Reference", voucher.reference || ""],
       ["Narration", voucher.narration || ""],
       [],
+      ...(voucher.items?.length
+        ? [
+            ["Invoice Items"],
+            ["Description", "Quantity", `Rate (${voucher.currency})`, `Amount (${voucher.currency})`],
+            ...voucher.items.map((item) => [
+              item.description,
+              item.quantity,
+              Number(item.rate || 0).toFixed(2),
+              Number(item.amount ?? item.quantity * item.rate).toFixed(2),
+            ]),
+            [],
+          ]
+        : []),
       ["Account Code", "Account Name", "Debit", "Credit", "Line Narration"],
       ...voucher.lines.map((line) => [
         line.accountCode,
@@ -1074,25 +1105,27 @@ export default function AccountingPage() {
       .map((row) =>
         row
           .map((cell) => {
-            const value = String(cell ?? "");
-            return /[",\n]/.test(value)
+            const rawValue = String(cell ?? "");
+            const value = typeof cell === "string" && /^[\s]*[=+\-@]/.test(rawValue)
+              ? `'${rawValue}`
+              : rawValue;
+            return /[",\r\n]/.test(value)
               ? `"${value.replace(/"/g, '""')}"`
               : value;
           })
           .join(",")
       )
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      .join("\r\n");
+    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `${voucher.number}.csv`;
+    anchor.download = `${voucher.number.replace(/[^\w.-]+/g, "_")}.csv`;
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
     anchor.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function openVoucherPdf(voucher: Voucher) {
-    printVoucher(voucher);
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   function shareVoucherWhatsApp(voucher: Voucher) {
@@ -1217,72 +1250,74 @@ export default function AccountingPage() {
   }
 
   function printVoucher(voucher: Voucher) {
-    const popup = window.open("", "_blank", "noopener,noreferrer,width=960,height=760");
-    if (!popup) {
-      alert("Allow pop-ups to open the printable voucher.");
-      return;
-    }
-    const escapeHtml = (value: unknown) =>
-      String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    const lines = voucher.lines
-      .map(
-        (line) => `
-          <tr>
-            <td><strong>${escapeHtml(line.accountCode)}</strong><br><span>${escapeHtml(line.accountName)}</span></td>
-            <td>${escapeHtml(line.narration || voucher.narration)}</td>
-            <td class="amount">${line.debit ? formatNumber(line.debit) : "-"}</td>
-            <td class="amount">${line.credit ? formatNumber(line.credit) : "-"}</td>
-          </tr>`
-      )
-      .join("");
-    const items = voucher.items?.length
-      ? `
-        <h3>Invoice Items</h3>
-        <table><thead><tr><th>Description</th><th class="amount">Qty</th><th class="amount">Rate</th><th class="amount">Amount</th></tr></thead>
-        <tbody>${voucher.items
-          .map(
-            (item) => `<tr><td>${escapeHtml(item.description)}</td><td class="amount">${formatNumber(item.quantity)}</td><td class="amount">${formatNumber(item.rate)}</td><td class="amount">${formatNumber(item.amount || item.quantity * item.rate)}</td></tr>`
-          )
-          .join("")}</tbody></table>`
-      : "";
     const debitTotal = voucher.lines.reduce((sum, line) => sum + Number(line.debit || 0), 0);
     const creditTotal = voucher.lines.reduce((sum, line) => sum + Number(line.credit || 0), 0);
     const branchName = branches.find((branch) => branch.code === voucher.branchCode)?.name || voucher.branchCode;
-    const schoolLogo = branding.logoUrl
-      ? `<img class="school-logo" src="${escapeHtml(branding.logoUrl)}" alt="">`
-      : "";
+    const currencyAmount = (value: number) => `${voucher.currency} ${formatNumber(value)}`;
+    const sections: VoucherPrintSection[] = [];
+    if (voucher.items?.length) {
+      sections.push({
+        title: "Invoice items",
+        columns: [
+          { label: "Description" },
+          { label: "Quantity", align: "right" as const },
+          { label: "Rate", align: "right" as const },
+          { label: "Amount", align: "right" as const },
+        ],
+        rows: voucher.items.map((item) => [
+          item.description,
+          formatNumber(item.quantity),
+          currencyAmount(item.rate),
+          currencyAmount(item.amount ?? item.quantity * item.rate),
+        ]),
+      });
+    }
+    sections.push({
+      title: "Double-entry posting",
+      columns: [
+        { label: "Account" },
+        { label: "Narration" },
+        { label: "Debit", align: "right" as const },
+        { label: "Credit", align: "right" as const },
+      ],
+      rows: [
+        ...voucher.lines.map((line) => [
+          `${line.accountCode} — ${line.accountName || ""}`,
+          line.narration || voucher.narration,
+          line.debit ? currencyAmount(line.debit) : "—",
+          line.credit ? currencyAmount(line.credit) : "—",
+        ]),
+        ["TOTAL", "", currencyAmount(debitTotal), currencyAmount(creditTotal)],
+      ],
+    });
 
-    popup.document.write(`<!doctype html>
-      <html><head><title>${escapeHtml(branding.schoolName)} - ${escapeHtml(voucher.number)}</title>
-      <style>
-        @page { size: A4; margin: 14mm; }
-        * { box-sizing: border-box; }
-        body { margin: 0; color: #17241d; font: 12px Arial, sans-serif; }
-        .document { max-width: 190mm; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; gap: 20px; padding-bottom: 16px; border-bottom: 3px solid #157a5c; }.school-brand { display:flex; align-items:center; gap:12px; }.school-logo { width:56px; height:56px; object-fit:contain; }
-        h1 { margin: 0; font: 700 25px Georgia, serif; } h2 { margin: 0; font: 700 17px Georgia, serif; text-align: right; }
-        h3 { margin: 23px 0 8px; color: #157a5c; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
-        .muted { color: #627369; margin-top: 5px; } .number { font: 700 13px 'Courier New', monospace; margin-top: 6px; }
-        .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 18px 0; padding: 12px; background: #f3f7f3; border: 1px solid #dce7dd; }
-        .meta span { display:block; color:#64746b; font-size:9px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:3px; }.meta b { font-size:12px; }
-        .narration { padding: 10px 12px; border-left: 3px solid #e8992e; background:#fffaf1; line-height:1.5; }
-        table { width:100%; border-collapse:collapse; margin-top:8px; } th { background:#15332a; color:#fff; padding:9px 8px; font-size:9px; text-align:left; letter-spacing:.06em; text-transform:uppercase; } td { padding:9px 8px; border-bottom:1px solid #dfe7df; vertical-align:top; } td span { color:#64746b; font-size:10px; } .amount { text-align:right; font-family:'Courier New', monospace; } .total td { border-top:2px solid #15332a; border-bottom:none; font-weight:bold; }
-        .summary { margin-left:auto; width:310px; margin-top:16px; border:1px solid #dce7dd; }.summary div { display:flex; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #e5ece5; }.summary div:last-child { border:0; background:#e3f2ec; font-weight:700; font-size:13px; }
-        .signatures { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-top:70px; }.signatures div { border-top:1px solid #44534a; padding-top:7px; text-align:center; font-size:10px; color:#4e5e55; }
-      </style></head><body><main class="document">
-        <header class="header"><div class="school-brand">${schoolLogo}<div><h1>${escapeHtml(branding.schoolName)}</h1><p class="muted">${escapeHtml(branchName)}</p></div></div><div><h2>${escapeHtml(voucherLabels[voucher.voucherType] || voucher.voucherType)}</h2><div class="number">${escapeHtml(voucher.number)}</div></div></header>
-        <section class="meta"><div><span>Date</span><b>${escapeHtml(prettyDate(voucher.date))}</b></div><div><span>Party</span><b>${escapeHtml(voucher.partyName || "- ")}</b></div><div><span>Status</span><b>${escapeHtml(voucher.status.toUpperCase())}</b></div><div><span>Reference</span><b>${escapeHtml(voucher.reference || "- ")}</b></div><div><span>Branch</span><b>${escapeHtml(voucher.branchCode)}</b></div><div><span>Currency</span><b>${escapeHtml(voucher.currency)}</b></div></section>
-        <div class="narration"><strong>Narration:</strong> ${escapeHtml(voucher.narration)}</div>
-        ${items}<h3>Double-entry Posting</h3><table><thead><tr><th>Account</th><th>Narration</th><th class="amount">Debit</th><th class="amount">Credit</th></tr></thead><tbody>${lines}<tr class="total"><td colspan="2">TOTAL</td><td class="amount">${formatNumber(debitTotal)}</td><td class="amount">${formatNumber(creditTotal)}</td></tr></tbody></table>
-        <section class="summary"><div><span>Subtotal</span><strong>${formatNumber(voucher.subtotal)}</strong></div><div><span>Discount</span><strong>${formatNumber(voucher.discountAmount)}</strong></div><div><span>Tax</span><strong>${formatNumber(voucher.taxAmount)}</strong></div><div><span>Grand Total</span><strong>${escapeHtml(voucher.currency)} ${formatNumber(voucher.grandTotal)}</strong></div></section>
-        <footer class="signatures"><div>Prepared by</div><div>Checked by</div><div>Approved by</div><div>Received by</div></footer>
-      </main><script>window.onload = () => window.print();</script></body></html>`);
-    popup.document.close();
+    printVoucherDocument({
+      schoolName: branding.schoolName,
+      logoUrl: branding.logoUrl,
+      documentTitle: `${voucherLabels[voucher.voucherType] || voucher.voucherType} — ${voucher.number}`,
+      voucherNumber: voucher.number,
+      voucherType: voucherLabels[voucher.voucherType] || voucher.voucherType,
+      status: voucher.status,
+      branchName: `${branchName} (${voucher.branchCode})`,
+      fields: [
+        { label: "Date", value: prettyDate(voucher.date) },
+        { label: "Due date", value: voucher.dueDate ? prettyDate(voucher.dueDate) : "—" },
+        { label: "Party", value: voucher.partyName || "—" },
+        { label: "Reference", value: voucher.reference || "—" },
+        { label: "Currency", value: voucher.currency },
+        { label: "Source", value: voucher.sourceType },
+      ],
+      narration: voucher.narration,
+      sections,
+      totals: voucher.items?.length
+        ? [
+            { label: "Subtotal", value: currencyAmount(voucher.subtotal) },
+            { label: "Discount", value: currencyAmount(voucher.discountAmount) },
+            { label: voucher.taxName || "Tax", value: currencyAmount(voucher.taxAmount) },
+            { label: "Grand total", value: currencyAmount(voucher.grandTotal), emphasis: true },
+          ]
+        : [],
+    });
   }
 
   return (
@@ -1567,13 +1602,21 @@ export default function AccountingPage() {
       ) : null}
 
       {activeTab === "vouchers" ? (
-        <Panel title={pageHeaderTitle.includes("Voucher") ? pageHeaderTitle : "Voucher Register"} meta={`${visibleVouchers.length} RECORDS`}>
+        <Panel title={pageHeaderTitle.includes("Voucher") ? pageHeaderTitle : "Voucher Register"} meta={`${visibleVouchers.length}${voucherSearch.trim() ? ` / ${vouchers.length}` : ""} RECORDS`}>
           <div className="voucher-register-toolbar no-print">
             <div className="voucher-register-label">
-              <strong>Filter register</strong>
-              <span>Choose a voucher type or posting status</span>
+              <strong>Find a voucher</strong>
+              <span>Search voucher number, party, narration, reference or account</span>
             </div>
             <div className="voucher-register-filters">
+              <input
+                className={inputClass}
+                type="search"
+                aria-label="Search accounting vouchers"
+                placeholder="Search vouchers…"
+                value={voucherSearch}
+                onChange={(e) => setVoucherSearch(e.target.value)}
+              />
               <select className={inputClass} aria-label="Filter by voucher type" value={effectiveVoucherTypeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
                 <option value="">All voucher types</option>
                 {Object.entries(voucherLabels).map(([value, label]) => (
@@ -1591,10 +1634,23 @@ export default function AccountingPage() {
                 <option value="reversed">Reversed</option>
                 <option value="void">Void</option>
               </select>
+              {voucherSearch || statusFilter || typeFilter ? (
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={() => {
+                    setVoucherSearch("");
+                    setStatusFilter("");
+                    setTypeFilter("");
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
             </div>
           </div>
           {!visibleVouchers.length ? (
-            <EmptyState message={voucherEmptyMessage} />
+            <EmptyState message={voucherSearch.trim() || statusFilter || typeFilter ? "No vouchers match these filters. Try a different search or clear the filters." : voucherEmptyMessage} />
           ) : (
             <div className="table-scroll">
               <table className="reg">
@@ -1632,9 +1688,8 @@ export default function AccountingPage() {
                           {v.status === "draft" ? (
                             <button type="button" className="link-btn" onClick={() => openVoucherForEdit(v)}>Edit</button>
                           ) : null}
-                          <button type="button" className="link-btn" onClick={() => printVoucher(v)}>Print</button>
-                          <button type="button" className="link-btn" onClick={() => openVoucherPdf(v)}>PDF</button>
-                          <button type="button" className="link-btn" onClick={() => exportVoucherExcel(v)}>Excel</button>
+                          <button type="button" className="link-btn" onClick={() => printVoucher(v)}>Print / Save PDF</button>
+                          <button type="button" className="link-btn" onClick={() => exportVoucherCsv(v)}>CSV</button>
                            {v.status === "draft" || v.status === "pending_approval" ? (
                              <>
                                <button type="button" className="link-btn" onClick={() => voucherAction(v, "approve")}>Approve</button>
@@ -2100,13 +2155,10 @@ export default function AccountingPage() {
               </button>
             ) : null}
             <button type="button" className="btn-ghost" onClick={() => printVoucher(selected)}>
-              Print
+              Print / Save PDF
             </button>
-            <button type="button" className="btn-ghost" onClick={() => openVoucherPdf(selected)}>
-              PDF
-            </button>
-            <button type="button" className="btn-ghost" onClick={() => exportVoucherExcel(selected)}>
-              Export Excel
+            <button type="button" className="btn-ghost" onClick={() => exportVoucherCsv(selected)}>
+              Export CSV
             </button>
             <button type="button" className="btn-ghost" onClick={() => shareVoucherWhatsApp(selected)}>
               WhatsApp
@@ -2548,7 +2600,6 @@ export default function AccountingPage() {
         )}
       </ModalForm>
 
-      {selected ? <VoucherPrint voucher={selected} branches={branches} schoolName={branding.schoolName} logoUrl={branding.logoUrl} /> : null}
     </>
   );
 }
@@ -2701,42 +2752,6 @@ function VoucherLinesTable({ voucher }: { voucher: Voucher }) {
           <tr><td colSpan={2}><strong>TOTAL</strong></td><td className="num"><strong>{formatNumber(voucher.lines.reduce((s, l) => s + l.debit, 0))}</strong></td><td className="num"><strong>{formatNumber(voucher.lines.reduce((s, l) => s + l.credit, 0))}</strong></td></tr>
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function VoucherPrint({ voucher, branches, schoolName, logoUrl }: { voucher: Voucher; branches: Branch[]; schoolName: string; logoUrl: string }) {
-  return (
-    <div className="print-only voucher-print">
-      <div className="voucher-print-head">
-        <div className="voucher-print-brand">
-          {logoUrl ? <Image src={logoUrl} alt="" width={52} height={52} unoptimized /> : null}
-          <div><h1>{schoolName}</h1><p>{branches.find((b) => b.code === voucher.branchCode)?.name || voucher.branchCode}</p></div>
-        </div>
-        <div><h2>{voucherLabels[voucher.voucherType]}</h2><div className="num">{voucher.number}</div></div>
-      </div>
-      <div className="voucher-print-meta">
-        <span><b>Date:</b> {prettyDate(voucher.date)}</span>
-        <span><b>Due:</b> {prettyDate(voucher.dueDate)}</span>
-        <span><b>Party:</b> {voucher.partyName || "—"}</span>
-        <span><b>Reference:</b> {voucher.reference || "—"}</span>
-        <span><b>Status:</b> {voucher.status.toUpperCase()}</span>
-      </div>
-      <p><b>Narration:</b> {voucher.narration}</p>
-      {voucher.items?.length ? (
-        <table className="reg">
-          <thead><tr><th>Description</th><th className="right">Qty</th><th className="right">Rate</th><th className="right">Amount</th></tr></thead>
-          <tbody>{voucher.items.map((item, i) => <tr key={i}><td>{item.description}</td><td className="num">{item.quantity}</td><td className="num">{formatNumber(item.rate)}</td><td className="num">{formatNumber(item.amount || item.quantity * item.rate)}</td></tr>)}</tbody>
-        </table>
-      ) : null}
-      <VoucherLinesTable voucher={voucher} />
-      <div className="invoice-totals">
-        <span>Subtotal <strong>{formatNumber(voucher.subtotal)}</strong></span>
-        <span>Discount <strong>{formatNumber(voucher.discountAmount)}</strong></span>
-        <span>Tax <strong>{formatNumber(voucher.taxAmount)}</strong></span>
-        <span>Grand Total <strong>{voucher.currency} {formatNumber(voucher.grandTotal)}</strong></span>
-      </div>
-      <div className="voucher-signatures"><span>Prepared by</span><span>Checked by</span><span>Approved by</span><span>Received by</span></div>
     </div>
   );
 }

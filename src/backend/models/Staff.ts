@@ -8,6 +8,7 @@ export interface IStaff {
   employeeId: string;
   firstName: string;
   lastName: string;
+  profilePhoto?: string;
   email: string;
   phone?: string;
   department: string;
@@ -25,6 +26,7 @@ const StaffSchema = new Schema<IStaff>(
     employeeId: { type: String, required: true, unique: true, trim: true },
     firstName: { type: String, required: true, trim: true },
     lastName: { type: String, required: true, trim: true },
+    profilePhoto: { type: String, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     phone: String,
     department: { type: String, required: true, trim: true },

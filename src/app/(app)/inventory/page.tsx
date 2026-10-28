@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import {
   EmptyState,
@@ -15,6 +14,7 @@ import {
 } from "@/components/ui";
 import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
 import { useSchoolBranding } from "@/components/SchoolBranding";
+import { printVoucherDocument } from "@/lib/voucher-print";
 
 type Item = {
   _id: string;
@@ -202,9 +202,11 @@ export default function InventoryPage() {
   const [vouchers, setVouchers] = useState<StockVoucher[]>([]);
   const [stats, setStats] = useState({ total: 0, low: 0, out: 0, stockValue: 0 });
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [currency, setCurrency] = useState("PKR");
   const [branch, setBranch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [voucherSearch, setVoucherSearch] = useState("");
   const [itemOpen, setItemOpen] = useState(false);
   const [voucherOpen, setVoucherOpen] = useState(false);
   const [editing, setEditing] = useState<Item | null>(null);
@@ -313,6 +315,24 @@ export default function InventoryPage() {
   }, [navNode]);
 
   const effectiveVoucherTypeFilter = nodeVoucherType || (typeFilter as VoucherType | "");
+  const visibleStockVouchers = useMemo(() => {
+    const query = voucherSearch.trim().toLocaleLowerCase();
+    if (!query) return vouchers;
+    return vouchers.filter((voucher) =>
+      [
+        voucher.number,
+        VOUCHERS[voucher.voucherType]?.label,
+        voucher.narration,
+        voucher.partyName,
+        voucher.reference,
+        voucher.branchCode,
+        voucher.toBranchCode,
+        ...voucher.items.flatMap((item) => [item.sku, item.name]),
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLocaleLowerCase().includes(query))
+    );
+  }, [vouchers, voucherSearch]);
   const isVoucherFocusedNode = nodeVoucherType !== null;
   const isInventoryDashboardNode = navNode === "inventory-dashboard";
   const isMasterNode = ["products", "categories", "warehouses", "barcode", "product-ledger"].includes(navNode);
@@ -419,6 +439,7 @@ export default function InventoryPage() {
     setStats(data.stats || { total: 0, low: 0, out: 0, stockValue: 0 });
     const list: Branch[] = settings.settings?.branches || [];
     setBranches(list);
+    setCurrency(settings.settings?.currency || "PKR");
     const fallback = settings.settings?.defaultBranchCode || list[0]?.code || "MAIN";
     setVoucherForm((form) => (form.branchCode ? form : { ...form, branchCode: fallback }));
     setItemForm((form) => (form.branchCode ? form : { ...form, branchCode: fallback }));
@@ -555,32 +576,114 @@ export default function InventoryPage() {
   }
 
   function printVoucher(voucher: StockVoucher) {
-    const popup = window.open("", "_blank", "noopener,noreferrer,width=960,height=760");
-    if (!popup) {
-      alert("Allow pop-ups to open the printable stock voucher.");
-      return;
-    }
-    const escapeHtml = (value: unknown) =>
-      String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
     const config = VOUCHERS[voucher.voucherType];
     const branchName = branches.find((branch) => branch.code === voucher.branchCode)?.name || voucher.branchCode;
-    const schoolLogo = branding.logoUrl
-      ? `<img class="school-logo" src="${escapeHtml(branding.logoUrl)}" alt="">`
-      : "";
-    const items = voucher.items
-      .map(
-        (item) => `<tr><td><strong>${escapeHtml(item.sku || "-")}</strong><br><span>${escapeHtml(item.name)}</span></td><td>${escapeHtml(item.unit || "pcs")}</td><td class="amount">${formatNumber(item.quantity)}</td><td class="amount">${formatNumber(item.rate)}</td><td class="amount">${formatNumber(item.amount || item.quantity * item.rate)}</td></tr>`
+    const currencyAmount = (value: number) => `${currency} ${formatNumber(value)}`;
+
+    printVoucherDocument({
+      schoolName: branding.schoolName,
+      logoUrl: branding.logoUrl,
+      documentTitle: `${config.label} — ${voucher.number}`,
+      voucherNumber: voucher.number,
+      voucherType: config.label,
+      status: voucher.status,
+      branchName: `${branchName} (${voucher.branchCode})`,
+      fields: [
+        { label: "Date", value: prettyDate(voucher.date) },
+        { label: "Movement", value: config.effect },
+        { label: "From campus", value: `${branchName} (${voucher.branchCode})` },
+        ...(voucher.toBranchCode
+          ? [{ label: "To campus", value: branches.find((branch) => branch.code === voucher.toBranchCode)?.name || voucher.toBranchCode }]
+          : []),
+        { label: config.party || "Party", value: voucher.partyName || "—" },
+        { label: config.money ? "Bill / invoice no." : "Reference", value: voucher.reference || "—" },
+      ],
+      narration: voucher.narration,
+      sections: [
+        {
+          title: "Stock items",
+          columns: [
+            { label: "SKU" },
+            { label: "Product" },
+            { label: "Quantity", align: "right" },
+            { label: "Rate", align: "right" },
+            { label: "Amount", align: "right" },
+          ],
+          rows: voucher.items.map((item) => [
+            item.sku || "—",
+            item.name || "—",
+            `${formatNumber(item.quantity)} ${item.unit || "pcs"}`,
+            currencyAmount(item.rate),
+            currencyAmount(item.amount ?? Math.abs(item.quantity) * item.rate),
+          ]),
+        },
+      ],
+      totals: config.money
+        ? [
+            { label: "Subtotal", value: currencyAmount(voucher.subtotal) },
+            { label: "Discount", value: currencyAmount(voucher.discountAmount) },
+            { label: "Tax", value: currencyAmount(voucher.taxAmount) },
+            { label: "Grand total", value: currencyAmount(voucher.grandTotal), emphasis: true },
+          ]
+        : [
+            { label: "Line items", value: formatNumber(voucher.items.length) },
+            { label: "Estimated stock value", value: currencyAmount(voucher.grandTotal), emphasis: true },
+          ],
+    });
+  }
+
+  function exportVoucherCsv(voucher: StockVoucher) {
+    const config = VOUCHERS[voucher.voucherType];
+    const rows: (string | number)[][] = [
+      ["Voucher No.", voucher.number],
+      ["Voucher Type", config.label],
+      ["Date", prettyDate(voucher.date)],
+      ["Status", voucher.status],
+      ["Movement", config.effect],
+      ["Campus", voucher.branchCode],
+      ["Destination Campus", voucher.toBranchCode || ""],
+      ["Party", voucher.partyName || ""],
+      ["Reference", voucher.reference || ""],
+      ["Narration", voucher.narration || ""],
+      [],
+      ["SKU", "Product", "Unit", "Quantity", `Rate (${currency})`, `Amount (${currency})`],
+      ...voucher.items.map((item) => [
+        item.sku || "",
+        item.name || "",
+        item.unit || "pcs",
+        item.quantity,
+        item.rate,
+        item.amount ?? Math.abs(item.quantity) * item.rate,
+      ]),
+      [],
+      ["Subtotal", voucher.subtotal],
+      ["Discount", voucher.discountAmount],
+      ["Tax", voucher.taxAmount],
+      ["Grand Total", voucher.grandTotal],
+    ];
+    const csv = rows
+      .map((row) =>
+        row
+          .map((cell) => {
+            const rawValue = String(cell ?? "");
+            const value = typeof cell === "string" && /^[\s]*[=+\-@]/.test(rawValue)
+              ? `'${rawValue}`
+              : rawValue;
+            return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+          })
+          .join(",")
       )
-      .join("");
-    popup.document.write(`<!doctype html><html><head><title>${escapeHtml(branding.schoolName)} - ${escapeHtml(voucher.number)}</title><style>
-      @page { size: A4; margin: 14mm; } * { box-sizing:border-box; } body { margin:0; color:#17241d; font:12px Arial,sans-serif; } .document { max-width:190mm; margin:0 auto; } .header { display:flex; justify-content:space-between; gap:20px; padding-bottom:16px; border-bottom:3px solid #157a5c; } .school-brand { display:flex; align-items:center; gap:12px; } .school-logo { width:56px; height:56px; object-fit:contain; } h1 { margin:0; font:700 25px Georgia,serif; } h2 { margin:0; font:700 17px Georgia,serif; text-align:right; } h3 { margin:23px 0 8px; color:#157a5c; font-size:11px; letter-spacing:.08em; text-transform:uppercase; } .muted { color:#627369; margin-top:5px; } .number { font:700 13px 'Courier New',monospace; margin-top:6px; } .meta { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:18px 0; padding:12px; background:#f3f7f3; border:1px solid #dce7dd; } .meta span { display:block; color:#64746b; font-size:9px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:3px; } .meta b { font-size:12px; } .narration { padding:10px 12px; border-left:3px solid #e8992e; background:#fffaf1; line-height:1.5; } table { width:100%; border-collapse:collapse; margin-top:8px; } th { background:#15332a; color:#fff; padding:9px 8px; font-size:9px; text-align:left; letter-spacing:.06em; text-transform:uppercase; } td { padding:9px 8px; border-bottom:1px solid #dfe7df; vertical-align:top; } td span { color:#64746b; font-size:10px; } .amount { text-align:right; font-family:'Courier New',monospace; } .summary { margin-left:auto; width:310px; margin-top:16px; border:1px solid #dce7dd; } .summary div { display:flex; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #e5ece5; } .summary div:last-child { border:0; background:#e3f2ec; font-weight:700; font-size:13px; } .signatures { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-top:70px; } .signatures div { border-top:1px solid #44534a; padding-top:7px; text-align:center; font-size:10px; color:#4e5e55; }
-      </style></head><body><main class="document"><header class="header"><div class="school-brand">${schoolLogo}<div><h1>${escapeHtml(branding.schoolName)}</h1><p class="muted">${escapeHtml(branchName)}</p></div></div><div><h2>${escapeHtml(config.label)}</h2><div class="number">${escapeHtml(voucher.number)}</div></div></header><section class="meta"><div><span>Date</span><b>${escapeHtml(prettyDate(voucher.date))}</b></div><div><span>Party</span><b>${escapeHtml(voucher.partyName || "-")}</b></div><div><span>Status</span><b>${escapeHtml(voucher.status.toUpperCase())}</b></div><div><span>Movement</span><b>${escapeHtml(config.effect)}</b></div><div><span>Campus</span><b>${escapeHtml(voucher.toBranchCode ? `${voucher.branchCode} to ${voucher.toBranchCode}` : voucher.branchCode)}</b></div><div><span>Reference</span><b>${escapeHtml(voucher.reference || "-")}</b></div></section><div class="narration"><strong>Narration:</strong> ${escapeHtml(voucher.narration)}</div><h3>Stock Items</h3><table><thead><tr><th>Item</th><th>Unit</th><th class="amount">Quantity</th><th class="amount">Rate</th><th class="amount">Amount</th></tr></thead><tbody>${items}</tbody></table><section class="summary"><div><span>Subtotal</span><strong>${formatNumber(voucher.subtotal)}</strong></div><div><span>Discount</span><strong>${formatNumber(voucher.discountAmount)}</strong></div><div><span>Tax</span><strong>${formatNumber(voucher.taxAmount)}</strong></div><div><span>Grand Total</span><strong>PKR ${formatNumber(voucher.grandTotal)}</strong></div></section><footer class="signatures"><div>Prepared by</div><div>Checked by</div><div>Approved by</div><div>Received by</div></footer></main><script>window.onload=()=>window.print();</script></body></html>`);
-    popup.document.close();
+      .join("\r\n");
+    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${voucher.number.replace(/[^\w.-]+/g, "_")}.csv`;
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   function openCreateItem() {
@@ -811,13 +914,21 @@ export default function InventoryPage() {
       ) : null}
 
       {showVoucherRegister ? (
-        <Panel title={voucherRegisterTitle} meta={`${vouchers.length} RECORDS`}>
+        <Panel title={voucherRegisterTitle} meta={`${visibleStockVouchers.length}${voucherSearch.trim() ? ` / ${vouchers.length}` : ""} RECORDS`}>
           <div className="voucher-register-toolbar no-print">
             <div className="voucher-register-label">
-              <strong>Filter register</strong>
-              <span>Choose a stock voucher type or posting status</span>
+              <strong>Find a stock voucher</strong>
+              <span>Search voucher number, product, supplier, campus or reference</span>
             </div>
             <div className="voucher-register-filters">
+              <input
+                className={inputClass}
+                type="search"
+                aria-label="Search stock vouchers"
+                placeholder="Search vouchers…"
+                value={voucherSearch}
+                onChange={(e) => setVoucherSearch(e.target.value)}
+              />
               <select className={inputClass} aria-label="Filter by voucher type" value={effectiveVoucherTypeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
                 <option value="">All voucher types</option>
                 {(Object.keys(VOUCHERS) as VoucherType[]).map((type) => (
@@ -830,10 +941,23 @@ export default function InventoryPage() {
                 <option value="posted">Posted</option>
                 <option value="void">Void / Cancelled</option>
               </select>
+              {voucherSearch || statusFilter || typeFilter ? (
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={() => {
+                    setVoucherSearch("");
+                    setStatusFilter("");
+                    setTypeFilter("");
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
             </div>
           </div>
-          {!vouchers.length ? (
-            <EmptyState message={voucherEmptyMessage} />
+          {!visibleStockVouchers.length ? (
+            <EmptyState message={voucherSearch.trim() || statusFilter || typeFilter ? "No stock vouchers match these filters. Try a different search or clear the filters." : voucherEmptyMessage} />
           ) : (
             <div className="table-scroll">
               <table className="reg">
@@ -850,7 +974,7 @@ export default function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {vouchers.map((v) => (
+                  {visibleStockVouchers.map((v) => (
                     <tr key={v._id}>
                       <td className="num">{v.number}</td>
                       <td>{prettyDate(v.date)}</td>
@@ -872,7 +996,7 @@ export default function InventoryPage() {
                       <td>
                         <div className="row-actions">
                           <button type="button" className="link-btn" onClick={() => setSelected(v)}>View</button>
-                          <button type="button" className="link-btn" onClick={() => printVoucher(v)}>Print</button>
+                          <button type="button" className="link-btn" onClick={() => printVoucher(v)}>Print / Save PDF</button>
                           {v.status === "draft" ? (
                             <>
                               <button type="button" className="link-btn" onClick={() => voucherAction(v, "post")}>Post</button>
@@ -1165,7 +1289,13 @@ export default function InventoryPage() {
           title={`${selected.number} — ${VOUCHERS[selected.voucherType]?.label}`}
           meta={selected.status.toUpperCase()}
         >
-          <div className="form-actions no-print" style={{ marginTop: 0, marginBottom: 12 }}>
+          <div className="form-actions no-print inventory-voucher-actions" style={{ marginTop: 0, marginBottom: 12 }}>
+            <button type="button" className="btn-ghost" onClick={() => printVoucher(selected)}>
+              Print / Save PDF
+            </button>
+            <button type="button" className="btn-ghost" onClick={() => exportVoucherCsv(selected)}>
+              Export CSV
+            </button>
             {selected.status !== "void" ? (
               <button type="button" className="btn-ghost" style={{ color: "var(--red)" }} onClick={() => deleteVoucher(selected)}>
                 Delete
@@ -1472,7 +1602,6 @@ export default function InventoryPage() {
         </div>
       </ModalForm>
 
-      {selected ? <StockVoucherPrint voucher={selected} branches={branches} schoolName={branding.schoolName} logoUrl={branding.logoUrl} /> : null}
     </>
   );
 }
@@ -1506,49 +1635,6 @@ function StockItemsTable({ voucher }: { voucher: StockVoucher }) {
           </tr>
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function StockVoucherPrint({ voucher, branches, schoolName, logoUrl }: { voucher: StockVoucher; branches: Branch[]; schoolName: string; logoUrl: string }) {
-  return (
-    <div className="print-only voucher-print">
-      <div className="voucher-print-head">
-        <div>
-          <div className="voucher-print-brand">
-            {logoUrl ? <Image src={logoUrl} alt="" width={52} height={52} unoptimized /> : null}
-            <div>
-              <h1>{schoolName}</h1>
-              <p>{branches.find((b) => b.code === voucher.branchCode)?.name || voucher.branchCode}</p>
-            </div>
-          </div>
-        </div>
-        <div>
-          <h2>{VOUCHERS[voucher.voucherType]?.label}</h2>
-          <div className="num">{voucher.number}</div>
-        </div>
-      </div>
-      <div className="voucher-print-meta">
-        <span><b>Date:</b> {prettyDate(voucher.date)}</span>
-        <span><b>Campus:</b> {voucher.branchCode}{voucher.toBranchCode ? ` → ${voucher.toBranchCode}` : ""}</span>
-        <span><b>Party:</b> {voucher.partyName || "—"}</span>
-        <span><b>Reference:</b> {voucher.reference || "—"}</span>
-        <span><b>Status:</b> {voucher.status.toUpperCase()}</span>
-      </div>
-      <p><b>Narration:</b> {voucher.narration}</p>
-      <StockItemsTable voucher={voucher} />
-      <div className="invoice-totals">
-        <span>Subtotal <strong>{formatNumber(voucher.subtotal)}</strong></span>
-        <span>Discount <strong>{formatNumber(voucher.discountAmount)}</strong></span>
-        <span>Tax <strong>{formatNumber(voucher.taxAmount)}</strong></span>
-        <span>Grand Total <strong>{formatNumber(voucher.grandTotal)}</strong></span>
-      </div>
-      <div className="voucher-signatures">
-        <span>Prepared by</span>
-        <span>Store keeper</span>
-        <span>Approved by</span>
-        <span>Received by</span>
-      </div>
     </div>
   );
 }

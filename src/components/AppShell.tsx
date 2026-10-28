@@ -371,9 +371,15 @@ export function AppShell({
       <div className="main">
         <div className="topbar">
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div className="menu-btn" onClick={() => setOpen((v) => !v)}>
+            <button
+              type="button"
+              className="menu-btn"
+              aria-label={open ? "Close navigation menu" : "Open navigation menu"}
+              aria-expanded={open}
+              onClick={() => setOpen((v) => !v)}
+            >
               <MenuIcon />
-            </div>
+            </button>
             <div className="search">
               <SearchIcon />
               Search students, roll no, class, fees…

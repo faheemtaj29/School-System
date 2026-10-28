@@ -9,6 +9,7 @@ import {
   NameCell,
   Panel,
   PortalAccessButton,
+  ProfilePhotoField,
   StatusBadge,
   inputClass,
 } from "@/components/ui";
@@ -19,6 +20,7 @@ type StaffItem = {
   employeeId: string;
   firstName: string;
   lastName: string;
+  profilePhoto?: string;
   email: string;
   phone?: string;
   department: string;
@@ -33,6 +35,7 @@ const blank = {
   idMode: "auto",
   firstName: "",
   lastName: "",
+  profilePhoto: "",
   email: "",
   phone: "",
   department: "Administration",
@@ -73,6 +76,7 @@ export default function StaffPage() {
         idMode: "manual",
         firstName: editing.firstName,
         lastName: editing.lastName,
+        profilePhoto: editing.profilePhoto || "",
         email: editing.email,
         phone: editing.phone || "",
         department: editing.department,
@@ -168,7 +172,7 @@ export default function StaffPage() {
                 {filtered.length ? filtered.map((s) => (
                   <tr key={s._id}>
                     <td>
-                      <NameCell name={fullName(s)} sub={s.email} />
+                      <NameCell name={fullName(s)} sub={s.email} imageUrl={s.profilePhoto} />
                     </td>
                     <td className="num">{s.employeeId}</td>
                     <td>{s.department}</td>
@@ -226,6 +230,12 @@ export default function StaffPage() {
         submitLabel={editing ? "Save" : "Create"}
       >
         {error ? <div className="alert err">{error}</div> : null}
+        <div className="form-section-title">Staff Profile Photo</div>
+        <ProfilePhotoField
+          name={`${form.firstName} ${form.lastName}`}
+          value={form.profilePhoto}
+          onChange={(profilePhoto) => setForm((prev) => ({ ...prev, profilePhoto }))}
+        />
         <div className="form-grid">
           <Field label="Employee ID" required>
             <div style={{ display: "grid", gap: 6 }}>

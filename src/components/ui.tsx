@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { FormEvent, ReactNode, useEffect, useState } from "react";
 import { PlusIcon } from "@/components/Icons";
 
@@ -249,7 +250,14 @@ const badgeTone: Record<string, string> = {
 };
 
 export function StatusBadge({ status }: { status: string }) {
-  return <span className={`badge ${badgeTone[status] ?? ""}`}>{status}</span>;
+  const label: Record<string, string> = {
+    partial: "Partially Paid",
+    paid: "Paid",
+    pending: "Pending",
+    overdue: "Overdue",
+    reversed: "Reversed",
+  };
+  return <span className={`badge ${badgeTone[status] ?? ""}`}>{label[status] || status}</span>;
 }
 
 /** Creates or resets the portal login for a teacher/student record. */
@@ -300,25 +308,103 @@ export function PortalAccessButton({
   );
 }
 
-export function MiniAvatar({ name }: { name: string }) {
+export function MiniAvatar({ name, imageUrl }: { name: string; imageUrl?: string }) {
   const text = name
     .split(" ")
     .filter(Boolean)
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase())
     .join("");
-  return <div className="mini-avatar">{text || "?"}</div>;
+  return (
+    <div className="mini-avatar">
+      {imageUrl ? (
+        <Image src={imageUrl} alt="" width={40} height={40} unoptimized className="avatar-image" />
+      ) : text || "?"}
+    </div>
+  );
 }
 
-export function NameCell({ name, sub }: { name: string; sub?: string }) {
+export function NameCell({ name, sub, imageUrl }: { name: string; sub?: string; imageUrl?: string }) {
   return (
     <div className="name-cell">
-      <MiniAvatar name={name} />
+      <MiniAvatar name={name} imageUrl={imageUrl} />
       <div>
         <div style={{ fontWeight: 600 }}>{name}</div>
         {sub ? (
-          <div style={{ fontSize: 10.5, color: "var(--text-dim)" }}>{sub}</div>
+          <div style={{ fontSize: 12, color: "var(--text-dim)" }}>{sub}</div>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+export function ProfilePhotoField({
+  value,
+  name,
+  onChange,
+}: {
+  value: string;
+  name: string;
+  onChange: (url: string) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function upload(file?: File) {
+    if (!file) return;
+    setError("");
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Choose a JPG, PNG, or WebP image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Photo must be 5 MB or smaller.");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const response = await fetch("/api/uploads/profile", { method: "POST", body });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error || "Could not upload photo.");
+        return;
+      }
+      onChange(data.url);
+    } catch {
+      setError("Photo upload failed. Check your connection and try again.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="profile-photo-field">
+      <MiniAvatar name={name} imageUrl={value || undefined} />
+      <div className="profile-photo-controls">
+        <label className="profile-photo-button">
+          {uploading ? "Uploading photo…" : value ? "Change photo" : "Upload photo"}
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            disabled={uploading}
+            onChange={(event) => {
+              void upload(event.currentTarget.files?.[0]);
+              event.currentTarget.value = "";
+            }}
+          />
+        </label>
+        <span className="profile-photo-hint">
+          Shown on the student profile and attendance list · JPG, PNG or WebP · max 5 MB
+        </span>
+        {value ? (
+          <button type="button" className="profile-photo-remove" disabled={uploading} onClick={() => onChange("")}>
+            Remove photo
+          </button>
+        ) : null}
+        {error ? <span className="profile-photo-error" role="alert">{error}</span> : null}
       </div>
     </div>
   );

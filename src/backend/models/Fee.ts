@@ -1,4 +1,4 @@
-import mongoose, { Schema, models, model, Types } from "mongoose";
+import { Schema, models, model, Types } from "mongoose";
 
 export interface IFeeLine {
   head: string;
@@ -75,3 +75,54 @@ const FeeSchema = new Schema<IFee>(
 );
 
 export const Fee = models.Fee || model<IFee>("Fee", FeeSchema);
+
+export type FeePaymentStatus = "posted" | "reversed";
+
+export interface IFeePayment {
+  feeId: Types.ObjectId;
+  studentId: Types.ObjectId;
+  receiptNumber: string;
+  idempotencyKey: string;
+  amount: number;
+  method: "cash" | "card" | "bank" | "online";
+  depositAccountCode: string;
+  paymentDate: Date;
+  transactionReference?: string;
+  voucherId: Types.ObjectId;
+  voucherNumber: string;
+  status: FeePaymentStatus;
+  receivedBy?: Types.ObjectId;
+  reversedAt?: Date;
+  reversedBy?: Types.ObjectId;
+  reversalReason?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const FeePaymentSchema = new Schema<IFeePayment>(
+  {
+    feeId: { type: Schema.Types.ObjectId, ref: "Fee", required: true },
+    studentId: { type: Schema.Types.ObjectId, ref: "Student", required: true },
+    receiptNumber: { type: String, required: true, unique: true, trim: true },
+    idempotencyKey: { type: String, required: true, unique: true, trim: true },
+    amount: { type: Number, required: true, min: 0.01 },
+    method: { type: String, enum: ["cash", "card", "bank", "online"], required: true },
+    depositAccountCode: { type: String, required: true, trim: true },
+    paymentDate: { type: Date, required: true },
+    transactionReference: { type: String, trim: true },
+    voucherId: { type: Schema.Types.ObjectId, ref: "Voucher", required: true },
+    voucherNumber: { type: String, required: true, trim: true },
+    status: { type: String, enum: ["posted", "reversed"], default: "posted", required: true },
+    receivedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    reversedAt: Date,
+    reversedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    reversalReason: String,
+  },
+  { timestamps: true }
+);
+
+FeePaymentSchema.index({ feeId: 1, paymentDate: -1 });
+FeePaymentSchema.index({ studentId: 1, paymentDate: -1 });
+
+export const FeePayment =
+  models.FeePayment || model<IFeePayment>("FeePayment", FeePaymentSchema);

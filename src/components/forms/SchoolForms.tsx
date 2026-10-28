@@ -515,13 +515,32 @@ export function FeeForm({
     notes: "",
     installments: 1,
   });
-  const [lines, setLines] = useState<{ head: string; amount: number }[]>([
+  const [lines, setLines] = useState<{ head: string; amount: number; accountCode?: string }[]>([
     { head: "Tuition Fee", amount: 0 },
   ]);
+  const [incomeAccounts, setIncomeAccounts] = useState<{ code: string; name: string }[]>([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!open) return;
+    fetch("/api/fees?view=income-accounts")
+      .then((res) => {
+        if (!res.ok) throw new Error("Unable to load Chart of Accounts");
+        return res.json();
+      })
+      .then((data) => {
+        setIncomeAccounts(
+          (data.accounts || [])
+            .filter((account: { isPosting: boolean; isActive: boolean; type: string }) =>
+              account.isPosting && account.isActive && account.type === "income"
+            )
+            .map((account: { code: string; name: string }) => ({
+              code: account.code,
+              name: account.name,
+            }))
+        );
+      })
+      .catch(() => setError("Unable to load Chart of Accounts; existing default fee income mapping will be used."));
     if (initial) {
       setForm({
         studentId: idOf(initial.studentId),
@@ -535,7 +554,11 @@ export function FeeForm({
       });
       setLines(
         initial.lines?.length
-          ? initial.lines.map((l) => ({ head: l.head, amount: l.amount }))
+          ? initial.lines.map((l) => ({
+              head: l.head,
+              amount: l.amount,
+              accountCode: l.accountCode,
+            }))
           : [{ head: initial.title, amount: initial.originalAmount ?? initial.amount }]
       );
     } else {
@@ -556,7 +579,7 @@ export function FeeForm({
 
   const gross = lines.reduce((sum, line) => sum + (Number(line.amount) || 0), 0);
 
-  function setLine(index: number, patch: Partial<{ head: string; amount: number }>) {
+  function setLine(index: number, patch: Partial<{ head: string; amount: number; accountCode?: string }>) {
     setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)));
   }
 
@@ -665,13 +688,21 @@ export function FeeForm({
       <div className="form-section-title" style={{ marginTop: 18 }}>
         Fee heads
       </div>
-      <div className="voucher-line-head fee-line-head">
+      <div
+        className="voucher-line-head fee-line-head"
+        style={{ gridTemplateColumns: incomeAccounts.length ? "minmax(180px, 2fr) 120px minmax(180px, 1fr) 70px" : undefined }}
+      >
         <span>Fee head</span>
         <span>Amount</span>
+        {incomeAccounts.length ? <span>Income account</span> : null}
         <span />
       </div>
       {lines.map((line, index) => (
-        <div className="voucher-line-row fee-line-row" key={index}>
+        <div
+          className="voucher-line-row fee-line-row"
+          key={index}
+          style={{ gridTemplateColumns: incomeAccounts.length ? "minmax(180px, 2fr) 120px minmax(180px, 1fr) 70px" : undefined }}
+        >
           <OptionSelect
             listKey="feeHeads"
             value={line.head}
@@ -688,6 +719,20 @@ export function FeeForm({
             onChange={(e) => setLine(index, { amount: Number(e.target.value) })}
             required
           />
+          {incomeAccounts.length ? (
+            <select
+              className={inputClass}
+              value={line.accountCode || ""}
+              onChange={(e) => setLine(index, { accountCode: e.target.value || undefined })}
+            >
+              <option value="">Default fee income</option>
+              {incomeAccounts.map((account) => (
+                <option key={account.code} value={account.code}>
+                  {account.code} · {account.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <button
             type="button"
             className="link-btn danger"
@@ -705,49 +750,6 @@ export function FeeForm({
         <div className="voucher-balance">Gross total · PKR {gross.toLocaleString()}</div>
       </div>
 
-      <div className="form-grid" style={{ marginTop: 16 }}>
-        <Field label="Paid Amount">
-          <input
-            type="number"
-            className={inputClass}
-            value={form.paidAmount}
-            onChange={(e) => setForm({ ...form, paidAmount: Number(e.target.value) })}
-          />
-        </Field>
-        <Field label="Payment Date">
-          <input
-            type="date"
-            className={inputClass}
-            value={form.paymentDate}
-            onChange={(e) => setForm({ ...form, paymentDate: e.target.value })}
-          />
-        </Field>
-        <Field label="Status">
-          <select
-            className={inputClass}
-            value={form.status}
-            onChange={(e) => setForm({ ...form, status: e.target.value })}
-          >
-            <option value="pending">Pending</option>
-            <option value="partial">Partial</option>
-            <option value="paid">Paid</option>
-            <option value="overdue">Overdue</option>
-          </select>
-        </Field>
-        <Field label="Payment Method">
-          <select
-            className={inputClass}
-            value={form.method}
-            onChange={(e) => setForm({ ...form, method: e.target.value })}
-          >
-            <option value="">Select</option>
-            <option value="cash">Cash</option>
-            <option value="card">Card</option>
-            <option value="bank">Bank</option>
-            <option value="online">Online</option>
-          </select>
-        </Field>
-      </div>
       <div style={{ marginTop: 16 }}>
         <Field label="Notes">
           <textarea

@@ -9,8 +9,15 @@ import {
   requireAuth,
 } from "@/backend/lib/http";
 import { feeService } from "@/backend/services/fee.service";
+import { accountingService } from "@/backend/services/accounting.service";
 import { resolveStudent } from "@/backend/lib/portal";
-import { bulkFeeSchema, feeSchema, installmentFeeSchema } from "@/backend/validators/fee.validator";
+import {
+  bulkFeeSchema,
+  feePaymentReversalSchema,
+  feePaymentSchema,
+  feeSchema,
+  installmentFeeSchema,
+} from "@/backend/validators/fee.validator";
 import { z } from "zod";
 
 const waiverSchema = z.object({
@@ -28,6 +35,17 @@ export const feeController = {
     if (error) return error;
     try {
       const { searchParams } = new URL(req.url);
+      const view = searchParams.get("view");
+      if (view === "income-accounts" || view === "deposit-accounts") {
+        if (session!.role !== "admin" && session!.role !== "staff") {
+          return jsonError("Forbidden", 403);
+        }
+        const accounts =
+          view === "income-accounts"
+            ? await accountingService.feeIncomeAccounts()
+            : await accountingService.feeReceiptAccounts();
+        return jsonOk({ accounts });
+      }
       let studentId = searchParams.get("studentId");
       if (session!.role === "student" || session!.role === "parent") {
         const student = await resolveStudent(session!);
@@ -38,7 +56,8 @@ export const feeController = {
         studentId,
         status: searchParams.get("status"),
       });
-      return jsonOk({ fees });
+      const ledger = studentId ? await feeService.studentLedger(studentId) : undefined;
+      return jsonOk({ fees, ledger });
     } catch (e) {
       return fromServiceError(e);
     }
@@ -87,6 +106,33 @@ export const feeController = {
       const parsed = feeSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
       return jsonOk({ fee: await feeService.update(id, parsed.data) });
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  async paymentAction(req: Request, ctx: Ctx) {
+    const { session, error } = await requireAuth(["admin", "staff"]);
+    if (error) return error;
+    try {
+      const { id } = await ctx.params;
+      const body = await req.json();
+      if (body.action === "collect") {
+        const parsed = feePaymentSchema.safeParse(body);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        return jsonOk(await feeService.collectPayment(id, parsed.data, session!), 201);
+      }
+      if (body.action === "reverse-payment") {
+        if (session!.role !== "admin") {
+          return jsonError("Only administrators can reverse fee receipts", 403);
+        }
+        const parsed = feePaymentReversalSchema.safeParse(body);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        return jsonOk(
+          await feeService.reversePayment(id, parsed.data.paymentId, parsed.data.reason, session!)
+        );
+      }
+      return jsonError("Unsupported fee payment action");
     } catch (e) {
       return fromServiceError(e);
     }

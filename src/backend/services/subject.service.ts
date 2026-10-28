@@ -7,14 +7,14 @@ import { ServiceError } from "@/backend/types";
 import type { SubjectInput } from "@/backend/validators/subject.validator";
 
 export const subjectService = {
-  async list() {
+  async list(ids?: string[]) {
     await dbConnect();
     /** Keeps the first visit consistent with the Classes screen. */
     if ((await Subject.estimatedDocumentCount()) === 0) {
       const { classService } = await import("@/backend/services/class.service");
       await classService.list();
     }
-    return Subject.find().sort({ stage: 1, name: 1 }).lean();
+    return Subject.find(ids ? { _id: { $in: ids } } : {}).sort({ stage: 1, name: 1 }).lean();
   },
 
   async create(data: SubjectInput) {
