@@ -65,6 +65,7 @@ export default function MessagesPage() {
   const [days, setDays] = useState(3);
   const [termId, setTermId] = useState("");
   const [text, setText] = useState("");
+  const [batch, setBatch] = useState("");
   // list
   const [rows, setRows] = useState<Row[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -90,14 +91,16 @@ export default function MessagesPage() {
     if (q.get("classIds")) setClassIds(q.get("classIds")!.split(",").filter(Boolean));
     // Opened from the Exam Center: /messages?kind=result&termId=…&classIds=…
     if (q.get("termId")) setTermId(q.get("termId")!);
+    // Opened right after generating challans: /messages?kind=fee&batch=…
+    if (q.get("batch")) setBatch(q.get("batch")!);
     // Opened from a notice: /messages?kind=custom&text=…
     if (q.get("text")) setText(q.get("text")!);
   }, []);
 
   const kind: Kind | null = ["absence", "fee", "result", "datesheet", "custom"].includes(tab) ? (tab as Kind) : null;
   const filters = useMemo(
-    () => ({ kind, date, classIds, feeScope, dueWithinDays: days, termId, text }),
-    [kind, date, classIds, feeScope, days, termId, text]
+    () => ({ kind, date, classIds, feeScope, dueWithinDays: days, termId, text, batch: kind === "fee" && batch ? batch : undefined }),
+    [kind, date, classIds, feeScope, days, termId, text, batch]
   );
 
   const loadLog = useCallback(() => {
@@ -209,7 +212,13 @@ export default function MessagesPage() {
                 <input type="date" className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
               </label>
             ) : null}
-            {kind === "fee" ? (
+            {kind === "fee" && batch ? (
+              <div className="alert ok" style={{ flexBasis: "100%", margin: 0 }}>
+                Only the challans just generated (batch {batch}).{" "}
+                <button type="button" className="link-btn" onClick={() => setBatch("")}>Show all unpaid instead</button>
+              </div>
+            ) : null}
+            {kind === "fee" && !batch ? (
               <>
                 <label>
                   <span>Who</span>

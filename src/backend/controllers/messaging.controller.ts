@@ -15,6 +15,7 @@ const prepareSchema = z.object({
   dueWithinDays: z.coerce.number().int().min(1).max(60).optional(),
   termId: z.string().optional(),
   text: z.string().max(1000).optional(),
+  batch: z.string().regex(/^[A-Z0-9]{4,30}$/).optional(),
 });
 const actionSchema = prepareSchema.extend({
   action: z.enum(["prepare", "send"]),

@@ -9,7 +9,7 @@ import { Fee, type IFeePayment } from "@/backend/models/Fee";
 import { Settings } from "@/backend/models/Settings";
 import { Student } from "@/backend/models/Student";
 import { allocateCode } from "@/backend/services/numbering.service";
-import { feeService, syncFeeLedger } from "@/backend/services/fee.service";
+import { feeService, newBatch, syncFeeLedger } from "@/backend/services/fee.service";
 import { ServiceError, type SessionUser } from "@/backend/types";
 import type { AdvanceFeeInput, CollectFeeInput, FeeStructureInput } from "@/backend/validators/fee.validator";
 
@@ -171,6 +171,8 @@ export const feeBillingService = {
     const query: Record<string, unknown> = { "feeStructure.0": { $exists: true } };
     if (classIds?.length) query._id = { $in: classIds };
     const classes = await ClassModel.find(query).select("name section feeStructure").lean();
+    // One batch for the whole run, so its challans can be printed / sent together afterwards.
+    const issueBatch = newBatch();
 
     const results = [];
     let created = 0;
@@ -184,6 +186,7 @@ export const feeBillingService = {
           title: `Monthly Fee · ${monthLabel(month)}`,
           dueDate,
           billingMonth: month,
+          issueBatch,
         });
         created += r.created;
         skipped += r.skipped;
@@ -204,7 +207,7 @@ export const feeBillingService = {
         });
       }
     }
-    return { month, monthLabel: monthLabel(month), dueDate, classes: results, created, skipped, billedAmount: round(billed) };
+    return { month, monthLabel: monthLabel(month), dueDate, classes: results, created, skipped, billedAmount: round(billed), issueBatch };
   },
 
   /**
@@ -473,17 +476,18 @@ export const feeBillingService = {
   },
 
   /** Challans to print in bulk, with each student's earlier unpaid balance as arrears. */
-  async challans(filters: { month?: string; classId?: string; status?: string; ids?: string[] }) {
+  async challans(filters: { month?: string; classId?: string; status?: string; ids?: string[]; batch?: string }) {
     await dbConnect();
     const query: Record<string, unknown> = {};
     if (filters.ids?.length) query._id = { $in: filters.ids };
+    if (filters.batch) query.issueBatch = filters.batch;
     if (filters.month) query.billingMonth = filters.month;
     if (filters.status === "unpaid") query.status = { $in: ["pending", "partial", "overdue"] };
     if (filters.classId) {
       const students = await Student.find({ classId: filters.classId }).select("_id").lean();
       query.studentId = { $in: students.map((s) => s._id) };
     }
-    if (!filters.ids?.length && !filters.month && !filters.classId) {
+    if (!filters.ids?.length && !filters.month && !filters.classId && !filters.batch) {
       throw new ServiceError("VALIDATION", "Pick a month or class to print", 400);
     }
     const header = await schoolHeader();

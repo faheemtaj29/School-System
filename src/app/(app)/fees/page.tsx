@@ -13,6 +13,7 @@ import {
 } from "@/components/ui";
 import { FeeForm } from "@/components/forms/SchoolForms";
 import { FeeCollections } from "@/components/fees/FeeCollections";
+import { BatchActions } from "@/components/fees/BatchActions";
 import { AdvanceFeeModal, CollectModal, FeeStructurePanel, monthName, type CollectTarget } from "@/components/fees/FeeTools";
 import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import {
@@ -68,6 +69,8 @@ export default function FeesPage() {
   // Counter collection (opens the 2-copy receipt)
   const [collecting, setCollecting] = useState<CollectTarget | null>(null);
   const [advanceOpen, setAdvanceOpen] = useState(false);
+  // Challans just generated: print them all and send them on WhatsApp in one go.
+  const [lastBatch, setLastBatch] = useState<{ batch: string; count: number } | null>(null);
   const [filterMonth, setFilterMonth] = useState("");
 
   // Voucher print
@@ -130,6 +133,7 @@ export default function FeesPage() {
         });
         const data = await res.json();
         setBuilderMsg(res.ok ? `Voucher created for student.` : data.error || "Failed");
+        setLastBatch(res.ok && data.fee?.issueBatch ? { batch: data.fee.issueBatch, count: 1 } : null);
       } else {
         const res = await fetch("/api/fees", {
           method: "POST",
@@ -137,6 +141,7 @@ export default function FeesPage() {
           body: JSON.stringify({ kind: "bulk", classId: builderClassId || null, dueDate: builderDue, title: builderTitle || undefined, lines }),
         });
         const data = await res.json();
+        setLastBatch(res.ok && data.created ? { batch: data.issueBatch, count: data.created } : null);
         if (res.ok) {
           const cls = classes.find((c) => c._id === builderClassId);
           setBuilderMsg(
@@ -388,6 +393,7 @@ export default function FeesPage() {
         <Panel title="Fee Voucher Builder" meta="Design the fee, then apply to a class or a single student">
           <form onSubmit={applyFees}>
             {builderMsg ? <div className="alert" style={{ marginBottom: 14 }}>{builderMsg}</div> : null}
+            {lastBatch ? <BatchActions batch={lastBatch.batch} count={lastBatch.count} /> : null}
 
             {/* Target selector */}
             <div className="chips" style={{ marginBottom: 18 }}>

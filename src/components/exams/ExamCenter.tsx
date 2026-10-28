@@ -739,6 +739,12 @@ function SlipsStep({ termId, overview, isAdmin, reload }: { termId: string; over
           >
             Print date sheet
           </button>
+          <a
+            className={`wa-btn${selected.length ? "" : " disabled"}`}
+            href={selected.length ? `/messages?kind=datesheet&termId=${termId}&classIds=${selected.join(",")}` : undefined}
+          >
+            Send date sheet on WhatsApp
+          </a>
         </div>
       </Panel>
     </div>
@@ -1112,6 +1118,12 @@ function ResultsStep({ termId, overview }: { termId: string; overview: Overview 
           <button type="button" className="btn-ghost" disabled={!selected.length} onClick={() => openPrint(`/print/result-sheet?${q}`)}>
             Print class result sheet
           </button>
+          <a
+            className={`wa-btn${selected.length ? "" : " disabled"}`}
+            href={selected.length ? `/messages?kind=result&termId=${termId}&classIds=${selected.join(",")}` : undefined}
+          >
+            Send results on WhatsApp
+          </a>
         </div>
       </Panel>
       {batches?.map((b) => {

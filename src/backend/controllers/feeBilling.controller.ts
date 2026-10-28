@@ -83,6 +83,7 @@ export const feeBillingController = {
         classId: url.searchParams.get("classId") || undefined,
         status: url.searchParams.get("status") || undefined,
         ids,
+        batch: url.searchParams.get("batch") || undefined,
       }));
     } catch (e) {
       return fromServiceError(e);

@@ -42,6 +42,8 @@ export interface IFee {
   billingMonth?: string;
   receiptNo?: string;
   payments?: IFeePayment[];
+  /** Challans raised in one go share this, so they can be printed / sent together. */
+  issueBatch?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -95,6 +97,7 @@ const FeeSchema = new Schema<IFee>(
     billingMonth: { type: String, match: /^\d{4}-(0[1-9]|1[0-2])$/ },
     receiptNo: { type: String, trim: true },
     payments: { type: [FeePaymentSchema], default: [] },
+    issueBatch: { type: String, trim: true, index: true },
   },
   { timestamps: true }
 );

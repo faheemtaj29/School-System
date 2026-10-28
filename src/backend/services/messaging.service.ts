@@ -41,6 +41,8 @@ export type PrepareInput = {
   dueWithinDays?: number;
   termId?: string;
   text?: string;
+  /** Fee messages for exactly the challans raised in one go. */
+  batch?: string;
   /** Public address of this app (for challan links), e.g. https://school.example.com */
   baseUrl?: string;
 };
@@ -184,6 +186,7 @@ export const messagingService = {
     } else if (input.kind === "fee") {
       const now = new Date();
       const query: Record<string, unknown> = { status: { $in: ["pending", "partial", "overdue"] } };
+      if (input.batch) query.issueBatch = input.batch;
       if (input.feeScope === "overdue") query.dueDate = { $lt: now };
       if (input.feeScope === "due_soon") {
         query.dueDate = { $gte: now, $lte: new Date(now.getTime() + (input.dueWithinDays || 3) * 86400000) };

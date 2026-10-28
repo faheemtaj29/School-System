@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { BatchActions } from "@/components/fees/BatchActions";
 import { EmptyState, Field, Panel, inputClass } from "@/components/ui";
 import { formatNumber } from "@/lib/types";
 
@@ -39,6 +40,8 @@ const hint = { fontSize: 11.5, color: "var(--text-dim)", marginTop: 4 } as const
 
 /** Monthly fee structure per class + automatic monthly billing. */
 export function FeeStructurePanel({ onGenerated }: { onGenerated: () => void }) {
+  // Challans raised by "Generate now": print them all / send them on WhatsApp in one go.
+  const [batch, setBatch] = useState<{ batch: string; count: number } | null>(null);
   const [data, setData] = useState<Structure | null>(null);
   const [rows, setRows] = useState<StructureClass[]>([]);
   const [auto, setAuto] = useState({ autoMonthlyFees: false, feeGenerateDay: 1, feeDueDay: 10 });
@@ -147,6 +150,7 @@ export function FeeStructurePanel({ onGenerated }: { onGenerated: () => void }) 
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Could not generate");
+      setBatch(d.created ? { batch: d.issueBatch, count: d.created } : null);
       setMsg(
         `${monthName(month)}: ${d.created} challan(s) raised, ${d.skipped} already billed · ${data?.settings.currency} ${formatNumber(d.billedAmount)} receivable · due ${d.dueDate}.`
       );
@@ -165,6 +169,7 @@ export function FeeStructurePanel({ onGenerated }: { onGenerated: () => void }) 
     <div className="stack-lg">
       {err ? <div className="alert err">{err}</div> : null}
       {msg ? <div className="alert ok">{msg}</div> : null}
+      {batch ? <BatchActions batch={batch.batch} count={batch.count} /> : null}
 
       <Panel title="Monthly billing" meta={data.settings.lastAutoFeeMonth ? `LAST AUTO RUN ${monthName(data.settings.lastAutoFeeMonth).toUpperCase()}` : "NOT RUN YET"}>
         <div className="form-grid ec-grid-4">

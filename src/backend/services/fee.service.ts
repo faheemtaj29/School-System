@@ -107,6 +107,11 @@ function toPayload(
   };
 }
 
+/** Id shared by challans raised in one go (print all / send all of exactly those). */
+export function newBatch() {
+  return `B${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
+}
+
 export async function syncFeeLedger(fee: {
   _id: { toString(): string };
   title: string;
@@ -215,16 +220,17 @@ export const feeService = {
         ? `${data.notes ? `${data.notes} · ` : ""}${priced.discountType} ${priced.discountPercent}% off`
         : data.notes;
 
-    const item = await Fee.create(
-      toPayload({
+    const item = await Fee.create({
+      ...toPayload({
         ...data,
         title,
         lines,
         ...priced,
         notes: note,
         branchCode: data.branchCode || student.branchCode,
-      })
-    );
+      }),
+      issueBatch: newBatch(),
+    });
     await syncFeeLedger(item);
     return Fee.findById(item._id).populate(studentPopulate).lean();
   },
@@ -315,8 +321,9 @@ export const feeService = {
    * Raises a multi-head challan for every active student of a class.
    * Re-running the same summary title in the same month is skipped.
    */
-  async generateBulk(data: BulkFeeInput & { studentId?: string }) {
+  async generateBulk(data: BulkFeeInput & { studentId?: string; issueBatch?: string }) {
     await dbConnect();
+    const issueBatch = data.issueBatch || newBatch();
     const lines = cleanLines(data.lines);
     const gross = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
     const title = titleFromLines(lines, data.title);
@@ -370,12 +377,14 @@ export const feeService = {
               : undefined,
           branchCode:
             (data.branchCode || student.branchCode || "").toUpperCase() || undefined,
+          issueBatch,
         };
       });
       await Fee.insertMany(docs);
     }
 
     return {
+      issueBatch,
       created: pending.length,
       skipped: students.length - pending.length,
       students: students.length,
