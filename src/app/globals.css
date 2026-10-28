@@ -692,8 +692,54 @@ table.reg td.num {
 .row-actions {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
+  align-items: center;
+}
+img.mini-avatar.photo {
+  object-fit: cover;
+  background: var(--paper);
+}
+.cell-sub {
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+.name-link {
+  font-weight: 600;
+  color: inherit;
+  text-decoration: none;
+}
+.name-link:hover {
+  color: var(--jade-dark);
+  text-decoration: underline;
+}
+a.link-btn {
+  text-decoration: none;
+}
+.row-menu {
+  position: relative;
+}
+.row-menu-pop {
+  position: fixed;
+  z-index: 60;
+  min-width: 160px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.row-menu-pop .link-btn {
+  border: 0;
+  text-align: left;
+  width: 100%;
+  border-radius: 6px;
+}
+.row-menu-pop .link-btn:hover {
+  background: var(--paper);
 }
 .link-btn {
   background: #fff;
@@ -1231,16 +1277,34 @@ textarea.inp {
 }
 
 /* ---- Fee voucher ---- */
-.pay-stat-row {
+/* One stat-card look for every module (fees, payroll, attendance, notices…). */
+.pay-stat-row,
+.stat-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 14px;
   margin-bottom: 20px;
 }
-.pay-stat {
+.pay-stat,
+.stat-tile {
   background: var(--paper);
+  border: 1px solid var(--line);
   border-radius: 12px;
   padding: 14px 16px;
+}
+.content > .pay-stat-row .pay-stat,
+.content > .stat-row .stat-tile {
+  background: var(--card);
+}
+.stat-tile .st-lab {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+.stat-tile .st-val {
+  font-family: var(--font-mono), monospace;
+  font-size: 19px;
+  font-weight: 700;
 }
 .pay-stat .tag {
   font-size: 11px;
@@ -1501,8 +1565,9 @@ textarea.inp {
   }
   .form-grid,
   .form-grid.three,
-  .pay-stat-row {
-    grid-template-columns: 1fr;
+  .pay-stat-row,
+  .stat-row {
+    grid-template-columns: repeat(2, 1fr);
   }
   .content {
     padding: 20px 16px 50px;
@@ -2937,8 +3002,6 @@ table.qbp-je { width: 100%; border-collapse: collapse; margin-top: 22px; font-si
 .tp-info { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px dashed var(--line, #e3e5e8); font-size: 13px; }
 .tp-info span { color: var(--text-dim); }
 .tp-info b { text-align: right; font-weight: 600; }
-.name-link { color: inherit; text-decoration: none; }
-.name-link:hover { text-decoration: underline; }
 @media (max-width: 640px) { .tp-hero { padding: 18px; } .tp-hero-stats { grid-template-columns: 1fr 1fr; flex-basis: 100%; } }
 
 /* ================= STUDENT PROFILE: TRACK RECORD + ATTENDANCE CALENDAR ================= */
@@ -2990,3 +3053,9 @@ table.qbp-je { width: 100%; border-collapse: collapse; margin-top: 22px; font-si
 .msg-table tr.msg-done td { opacity: .65; }
 .wa-btn { background: #25d366; color: #fff; border: none; border-radius: 18px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .wa-btn:hover { background: #1da851; }
+
+/* Photo strip at the top of the admission / staff forms */
+.form-photo-row { display: flex; align-items: center; gap: 18px; padding: 4px 0 8px; }
+.form-photo-row .pp-actions { justify-content: center; }
+.form-photo-note { display: grid; gap: 4px; font-size: 12px; color: var(--text-dim); max-width: 420px; }
+.form-photo-note b { color: var(--text); font-size: 13px; }

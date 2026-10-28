@@ -308,26 +308,74 @@ export function PortalAccessButton({
   );
 }
 
-export function MiniAvatar({ name }: { name: string }) {
+export function MiniAvatar({ name, photo }: { name: string; photo?: string | null }) {
   const text = name
     .split(" ")
     .filter(Boolean)
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase())
     .join("");
+  if (photo) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img className="mini-avatar photo" src={photo} alt="" loading="lazy" />;
+  }
   return <div className="mini-avatar">{text || "?"}</div>;
 }
 
-export function NameCell({ name, sub }: { name: string; sub?: string }) {
+export function NameCell({ name, sub, photo, href }: { name: string; sub?: string; photo?: string | null; href?: string }) {
   return (
     <div className="name-cell">
-      <MiniAvatar name={name} />
+      <MiniAvatar name={name} photo={photo} />
       <div>
-        <div style={{ fontWeight: 600 }}>{name}</div>
+        {href ? (
+          <a href={href} className="name-link">{name}</a>
+        ) : (
+          <div style={{ fontWeight: 600 }}>{name}</div>
+        )}
         {sub ? (
           <div style={{ fontSize: 10.5, color: "var(--text-dim)" }}>{sub}</div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/** Secondary row actions folded into one "More" menu so table rows stay on one line. */
+export function RowMenu({ children }: { children: ReactNode }) {
+  // Fixed position so the menu is not clipped by scrolling table wrappers.
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  useEffect(() => {
+    if (!pos) return;
+    const close = () => setPos(null);
+    // Defer so the click that opened the menu does not close it straight away.
+    const t = setTimeout(() => document.addEventListener("click", close), 0);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("click", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [pos]);
+  return (
+    <div className="row-menu">
+      <button
+        type="button"
+        className="link-btn"
+        aria-expanded={!!pos}
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setPos((p) => (p ? null : { top: r.bottom + 4, right: window.innerWidth - r.right }));
+        }}
+      >
+        More ▾
+      </button>
+      {pos ? (
+        <div className="row-menu-pop" style={{ top: pos.top, right: pos.right }}>
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { PersonPhoto, savePickedPhoto } from "@/components/PersonPhoto";
 import { Field, ModalForm, OptionSelect, inputClass } from "@/components/ui";
 import {
   ClassItem,
@@ -8,6 +9,7 @@ import {
   SubjectItem,
   TeacherItem,
   idOf,
+  photoSrc,
   toDateInput,
 } from "@/lib/types";
 
@@ -79,6 +81,8 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
   // Admission fee lines (only for new admissions)
   const [feeLines, setFeeLines] = useState<FeeLine[]>([]);
   const [feeDue, setFeeDue] = useState("");
+  // Photo picked before a new admission is saved; uploaded once the record exists.
+  const [pickedPhoto, setPickedPhoto] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -187,6 +191,8 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
         }
       }
     }
+    if (!initial) await savePickedPhoto("student", data.student?._id, pickedPhoto);
+    setPickedPhoto(null);
     setFeeLines([]);
     setFeeDue("");
     onSaved();
@@ -204,6 +210,22 @@ export function StudentForm({ open, onClose, onSaved, initial, classes }: Props)
       submitLabel={initial ? "Update Student" : "Enroll Student"}
     >
       {error ? <div className="alert err">{error}</div> : null}
+
+      <div className="form-photo-row">
+        <PersonPhoto
+          kind="student"
+          id={initial?._id}
+          url={photoSrc("student", initial ?? { _id: "" })}
+          name={`${form.firstName} ${form.lastName}`}
+          size={84}
+          editable
+          onPicked={setPickedPhoto}
+        />
+        <div className="form-photo-note">
+          <b>Student photo</b>
+          <span>Shown on the profile, student list, ID card and result cards. A phone picture is fine — it is resized automatically.</span>
+        </div>
+      </div>
 
       <div className="form-section-title">Personal Information</div>
       <div className="form-grid">
@@ -577,6 +599,7 @@ export function TeacherForm({
   const [form, setForm] = useState(teacherEmpty);
   const [error, setError] = useState("");
   const branches = useBranches();
+  const [pickedPhoto, setPickedPhoto] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -663,6 +686,8 @@ export function TeacherForm({
       setError(data.error || "Failed to save teacher");
       return;
     }
+    if (!initial) await savePickedPhoto("teacher", data.teacher?._id, pickedPhoto);
+    setPickedPhoto(null);
     onSaved();
     onClose();
   }
@@ -678,6 +703,22 @@ export function TeacherForm({
       submitLabel={initial ? "Update Staff" : "Add Staff"}
     >
       {error ? <div className="alert err">{error}</div> : null}
+
+      <div className="form-photo-row">
+        <PersonPhoto
+          kind="teacher"
+          id={initial?._id}
+          url={photoSrc("teacher", initial ?? { _id: "" })}
+          name={`${form.firstName} ${form.lastName}`}
+          size={84}
+          editable
+          onPicked={setPickedPhoto}
+        />
+        <div className="form-photo-note">
+          <b>Staff photo</b>
+          <span>Shown on the staff profile, staff list and ID card. It is resized automatically.</span>
+        </div>
+      </div>
 
       <div className="form-section-title">Staff Information</div>
       <div className="form-grid">

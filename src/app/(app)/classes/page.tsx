@@ -84,7 +84,8 @@ export default function ClassesPage() {
     const activeYear = settings.activeSession?.name || settings.settings?.academicYear;
     if (activeYear) {
       setYear(activeYear);
-      setYearFilter((f) => f || activeYear);
+      // Only pre-filter when the active session actually has classes; otherwise show everything.
+      if ((c.classes || []).some((x: ClassItem) => x.academicYear === activeYear)) setYearFilter((f) => f || activeYear);
     }
     setSessions(sess.sessions || []);
   }, []);
@@ -464,6 +465,15 @@ export default function ClassesPage() {
       {pageTab === "classes" ? (
         <>
           {!classes.length ? <EmptyState message="No classes yet. Import the curriculum library above or add a class manually." /> : null}
+          {classes.length && !grouped.length ? (
+            <div className="empty">
+              No classes match {yearFilter ? `session ${yearFilter}` : "these filters"}
+              {stageFilter ? ` and stage ${STAGE_LABEL[stageFilter] ?? stageFilter}` : ""}.{" "}
+              <button type="button" className="link-btn" onClick={() => { setYearFilter(""); setStageFilter(""); }}>
+                Show all classes
+              </button>
+            </div>
+          ) : null}
           {grouped.map((group) => (
             <div key={group.key} style={{ marginBottom: 8 }}>
             <div className="stage-title">

@@ -123,7 +123,13 @@ export type StudentItem = {
   leavingDate?: string;
   leavingReason?: string;
   conductRemark?: string;
+  photoUpdatedAt?: string;
 };
+
+/** Photo URL for a student/teacher record, or null when no photo has been uploaded. */
+export function photoSrc(kind: "student" | "teacher", rec: { _id: string; photoUpdatedAt?: string }) {
+  return rec.photoUpdatedAt ? `/api/${kind}s/${rec._id}/photo?v=${new Date(rec.photoUpdatedAt).getTime()}` : null;
+}
 
 /** Campus selected in the top bar (shared across admin pages). */
 export function activeBranch() {

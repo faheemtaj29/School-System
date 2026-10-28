@@ -8,12 +8,13 @@ import {
   NameCell,
   Panel,
   PortalAccessButton,
+  RowMenu,
   StatusBadge,
   inputClass,
   Field,
 } from "@/components/ui";
 import { StudentForm } from "@/components/forms/PeopleForms";
-import { ClassItem, StudentItem, fullName, labelOfClass, prettyDate, toDateInput } from "@/lib/types";
+import { ClassItem, StudentItem, fullName, labelOfClass, photoSrc, prettyDate, toDateInput } from "@/lib/types";
 
 type DocTab = "admission" | "tc";
 
@@ -265,6 +266,7 @@ export default function StudentsPage() {
                   <th>Guardian</th>
                   <th>Class</th>
                   <th>Admission No.</th>
+                  <th>CNIC / B-Form</th>
                   <th>Concession</th>
                   <th className="right">Status</th>
                   <th className="right">Actions</th>
@@ -275,11 +277,20 @@ export default function StudentsPage() {
                   <tr key={s._id}>
                     <td className="num">{s.rollNumber || "—"}</td>
                     <td>
-                      <NameCell name={fullName(s)} sub={s.phone || undefined} />
+                      <NameCell
+                        name={fullName(s)}
+                        sub={s.phone || undefined}
+                        photo={photoSrc("student", s)}
+                        href={`/students/${s._id}`}
+                      />
                     </td>
-                    <td>{s.parentName || "—"}</td>
-                    <td>{labelOfClass(s.classId as never)}</td>
+                    <td>
+                      {s.parentName || "—"}
+                      {s.parentPhone ? <div className="cell-sub">{s.parentPhone}</div> : null}
+                    </td>
+                    <td style={{ whiteSpace: "nowrap" }}>{labelOfClass(s.classId as never)}</td>
                     <td className="num">{s.admissionNo}</td>
+                    <td className="num">{s.cnic || "—"}</td>
                     <td>
                       {s.discountType && s.discountType !== "none"
                         ? `${s.discountPercent || 0}% ${String(s.discountType).replace(/_/g, " ")}`
@@ -296,13 +307,6 @@ export default function StudentsPage() {
                         <button
                           type="button"
                           className="link-btn"
-                          onClick={() => openDoc(s)}
-                        >
-                          Docs
-                        </button>
-                        <button
-                          type="button"
-                          className="link-btn"
                           onClick={() => {
                             setEditing(s);
                             setOpen(true);
@@ -310,25 +314,19 @@ export default function StudentsPage() {
                         >
                           Edit
                         </button>
-                        <PortalAccessButton
-                          kind="student"
-                          id={s._id}
-                          email={s.email}
-                          name={fullName(s)}
-                        />
-                        <PortalAccessButton
-                          kind="parent"
-                          id={s._id}
-                          email={s.parentEmail}
-                          name={fullName(s)}
-                        />
-                        <button
-                          type="button"
-                          className="link-btn danger"
-                          onClick={() => remove(s._id)}
-                        >
-                          Delete
-                        </button>
+                        <RowMenu>
+                          <button type="button" className="link-btn" onClick={() => openDoc(s)}>
+                            Admission form / TC
+                          </button>
+                          <Link href={`/fees?q=${encodeURIComponent(s.admissionNo)}`} className="link-btn">
+                            Fee vouchers
+                          </Link>
+                          <PortalAccessButton kind="student" id={s._id} email={s.email} name={fullName(s)} />
+                          <PortalAccessButton kind="parent" id={s._id} email={s.parentEmail} name={fullName(s)} />
+                          <button type="button" className="link-btn danger" onClick={() => remove(s._id)}>
+                            Delete
+                          </button>
+                        </RowMenu>
                       </div>
                     </td>
                   </tr>

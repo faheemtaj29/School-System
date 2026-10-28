@@ -8,11 +8,12 @@ import {
   NameCell,
   Panel,
   PortalAccessButton,
+  RowMenu,
   StatusBadge,
   inputClass,
 } from "@/components/ui";
 import { TeacherForm } from "@/components/forms/PeopleForms";
-import { ClassItem, SubjectItem, TeacherItem, fullName } from "@/lib/types";
+import { ClassItem, SubjectItem, TeacherItem, fullName, photoSrc } from "@/lib/types";
 
 export default function TeachersPage() {
   const [teachers, setTeachers] = useState<TeacherItem[]>([]);
@@ -106,9 +107,12 @@ export default function TeachersPage() {
                 {visible.map((t) => (
                   <tr key={t._id}>
                     <td>
-                      <Link href={`/teachers/${t._id}`} className="name-link">
-                        <NameCell name={fullName(t)} sub={t.designation || t.email} />
-                      </Link>
+                      <NameCell
+                        name={fullName(t)}
+                        sub={[t.designation, t.phone || t.email].filter(Boolean).join(" · ")}
+                        photo={photoSrc("teacher", t)}
+                        href={`/teachers/${t._id}`}
+                      />
                     </td>
                     <td className="num">{t.employeeId}</td>
                     <td>
@@ -138,19 +142,12 @@ export default function TeachersPage() {
                         >
                           Edit
                         </button>
-                        <PortalAccessButton
-                          kind="teacher"
-                          id={t._id}
-                          email={t.email}
-                          name={fullName(t)}
-                        />
-                        <button
-                          type="button"
-                          className="link-btn danger"
-                          onClick={() => remove(t._id)}
-                        >
-                          Delete
-                        </button>
+                        <RowMenu>
+                          <PortalAccessButton kind="teacher" id={t._id} email={t.email} name={fullName(t)} />
+                          <button type="button" className="link-btn danger" onClick={() => remove(t._id)}>
+                            Delete
+                          </button>
+                        </RowMenu>
                       </div>
                     </td>
                   </tr>

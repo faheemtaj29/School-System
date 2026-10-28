@@ -25,7 +25,8 @@ async function shrink(file: File, max = 600): Promise<string> {
 
 /**
  * Round profile photo for a student or teacher, with "change / remove" when editable.
- * Falls back to initials when there is no photo.
+ * Falls back to initials when there is no photo. Without an `id` (a record not saved
+ * yet) the picked photo is only previewed and handed to `onPicked`, to upload after saving.
  */
 export function PersonPhoto({
   kind,
@@ -35,18 +36,23 @@ export function PersonPhoto({
   size = 112,
   editable = false,
   onChanged,
+  onPicked,
 }: {
   kind: "student" | "teacher";
-  id: string;
+  id?: string;
   url?: string | null;
   name: string;
   size?: number;
   editable?: boolean;
   onChanged?: (url: string | null) => void;
+  onPicked?: (dataUrl: string | null) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  // Local override of `url` after a change here; undefined = show what the parent passed.
+  const [local, setLocal] = useState<string | null | undefined>(undefined);
+  const shown = local === undefined ? url : local;
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -60,6 +66,11 @@ export function PersonPhoto({
     setBusy(true);
     try {
       const dataUrl = await shrink(file);
+      if (!id) {
+        setLocal(dataUrl);
+        onPicked?.(dataUrl);
+        return;
+      }
       const res = await fetch(`/api/${kind}s/${id}/photo`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -67,6 +78,7 @@ export function PersonPhoto({
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Upload failed");
+      setLocal(d.photoUrl);
       onChanged?.(d.photoUrl);
     } catch (e) {
       setErr((e as Error).message);
@@ -77,19 +89,25 @@ export function PersonPhoto({
   }
 
   async function remove() {
+    if (!id) {
+      setLocal(null);
+      onPicked?.(null);
+      return;
+    }
     if (!confirm("Remove this photo?")) return;
     setBusy(true);
     await fetch(`/api/${kind}s/${id}/photo`, { method: "DELETE" });
     setBusy(false);
+    setLocal(null);
     onChanged?.(null);
   }
 
   return (
     <div className="pp" style={{ width: size }}>
       <div className="pp-circle" style={{ width: size, height: size, fontSize: size / 2.8 }}>
-        {url ? (
+        {shown ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt={name} />
+          <img src={shown} alt={name} />
         ) : (
           <span>{initials || "?"}</span>
         )}
@@ -98,13 +116,23 @@ export function PersonPhoto({
       {editable ? (
         <div className="pp-actions no-print">
           <button type="button" className="link-btn" onClick={() => input.current?.click()}>
-            {url ? "Change photo" : "Add photo"}
+            {shown ? "Change photo" : "Add photo"}
           </button>
-          {url ? <button type="button" className="link-btn" onClick={remove}>Remove</button> : null}
+          {shown ? <button type="button" className="link-btn" onClick={remove}>Remove</button> : null}
           <input ref={input} type="file" accept="image/*" capture="user" hidden onChange={(e) => upload(e.target.files?.[0])} />
         </div>
       ) : null}
       {err ? <div className="pp-err">{err}</div> : null}
     </div>
   );
+}
+
+/** Uploads a photo picked on a not-yet-saved record, once it has an id. */
+export async function savePickedPhoto(kind: "student" | "teacher", id: string | undefined, dataUrl: string | null) {
+  if (!id || !dataUrl) return;
+  await fetch(`/api/${kind}s/${id}/photo`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dataUrl }),
+  });
 }
