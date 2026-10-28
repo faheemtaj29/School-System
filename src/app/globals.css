@@ -3301,3 +3301,19 @@ tr.def-hot td { background: #fff6f5; }
   .panel-head { flex-wrap: wrap; align-items: center; }
   .panel-head .meta { white-space: normal; max-width: 100%; }
 }
+
+/* Settings → Platform → Start fresh */
+.fresh { margin-top: 28px; padding: 18px; border: 1.5px solid var(--red-light); border-radius: 14px; background: #fffafa; }
+.fresh h3 { margin: 0 0 6px; font-size: 16px; color: var(--red); }
+.fresh-lead { font-size: 12.5px; color: var(--text-dim); margin: 0 0 14px; line-height: 1.55; }
+.fresh-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin-bottom: 14px; }
+.fresh-group { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); cursor: pointer; }
+.fresh-group.on { border-color: var(--red); background: #fff3f2; }
+.fresh-group b { display: block; font-size: 13px; }
+.fresh-group em { font-style: normal; font-size: 11px; color: var(--red); margin-left: 4px; }
+.fresh-group small { display: block; font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.fresh-steps { display: grid; gap: 10px; font-size: 13px; margin-bottom: 12px; }
+.fresh-confirm { width: 120px !important; display: inline-block; margin-left: 6px; font-family: var(--font-mono), monospace; }
+.fresh-ok { color: var(--jade-dark); font-weight: 700; font-size: 12px; }
+.btn-danger { background: var(--red); color: #fff; border: 0; border-radius: 10px; padding: 11px 18px; font-weight: 700; cursor: pointer; }
+.btn-danger:disabled { opacity: .45; cursor: not-allowed; }

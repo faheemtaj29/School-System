@@ -1,5 +1,6 @@
 "use client";
 
+import { StartFresh } from "@/components/settings/StartFresh";
 import { CampusLogo } from "@/components/settings/CampusLogo";
 import { DEFAULT_CHALLAN_TERMS } from "@/lib/challanTerms";
 import { CURRENCIES, normalizeCurrency } from "@/lib/currency";
@@ -1435,6 +1436,7 @@ export default function SettingsPage() {
                   </tbody>
                 </table>
               </div>
+              <StartFresh />
             </>
           ) : null}
 
