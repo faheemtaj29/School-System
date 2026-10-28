@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { SalaryTaxSettings } from "@/components/hr/SalaryTaxSettings";
 import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import { EmptyState, Field, Hero, ModalForm, NameCell, Panel, StatusBadge, inputClass } from "@/components/ui";
 import { TeacherItem, formatNumber, fullName, prettyDate, toDateInput } from "@/lib/types";
@@ -22,6 +24,9 @@ type Payslip = {
   month: string;
   basic: number;
   allowances: number;
+  exemptAllowance?: number;
+  taxableIncome?: number;
+  incomeTax?: number;
   deductions: number;
   net: number;
   status: string;
@@ -39,7 +44,7 @@ function escapeHtml(value: string) {
 
 export default function HrPage() {
   const { currency: cur } = useSchoolProfile();
-  const [tab, setTab] = useState<"payroll" | "leave">("payroll");
+  const [tab, setTab] = useState<"payroll" | "leave" | "tax">("payroll");
   const [teachers, setTeachers] = useState<TeacherItem[]>([]);
   const [leaves, setLeaves] = useState<Leave[]>([]);
   const [payslips, setPayslips] = useState<Payslip[]>([]);
@@ -62,6 +67,9 @@ export default function HrPage() {
     basic: 50000,
     allowances: 0,
     deductions: 0,
+    /** Empty = worked out from the tax rules. */
+    exemptAllowance: "",
+    incomeTax: "",
     status: "pending",
     notes: "",
   });
@@ -116,7 +124,11 @@ export default function HrPage() {
     const res = await fetch("/api/hr/payslips", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payForm),
+      body: JSON.stringify({
+        ...payForm,
+        exemptAllowance: payForm.exemptAllowance === "" ? undefined : Number(payForm.exemptAllowance),
+        incomeTax: payForm.incomeTax === "" ? undefined : Number(payForm.incomeTax),
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -147,6 +159,8 @@ export default function HrPage() {
         basic: p.basic,
         allowances: p.allowances,
         deductions: p.deductions,
+        exemptAllowance: p.exemptAllowance ?? undefined,
+        incomeTax: p.incomeTax ?? undefined,
         status: "paid",
         paidOn: toDateInput(new Date()),
       }),
@@ -161,6 +175,8 @@ export default function HrPage() {
     const basic = Number(p.basic) || 0;
     const allowances = Number(p.allowances) || 0;
     const deductions = Number(p.deductions) || 0;
+    const tax = Number(p.incomeTax) || 0;
+    const money = (n: number) => `${escapeHtml(cur)} ${n.toLocaleString("en-IN")}`;
     const printWindow = window.open("", "_blank", "width=800,height=700");
     if (!printWindow) {
       setErr("Please allow pop-ups to print or save the payslip as PDF.");
@@ -174,10 +190,13 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
 <header><h1>Salary Slip</h1><p>Confidential employee payroll record</p></header>
 <div class="meta"><div><strong>Employee</strong><br>${escapeHtml(name)}</div><div><strong>Pay period</strong><br>${escapeHtml(p.month)}</div><div><strong>Status</strong><br>${escapeHtml(p.status)}</div></div>
 <table><tbody>
-<tr><td>Basic salary</td><td>PKR ${basic.toLocaleString("en-PK")}</td></tr>
-<tr><td>Allowances</td><td>PKR ${allowances.toLocaleString("en-PK")}</td></tr>
-<tr><td>Deductions</td><td>PKR ${deductions.toLocaleString("en-PK")}</td></tr>
-<tr class="net"><td>Net salary</td><td>PKR ${net.toLocaleString("en-PK")}</td></tr>
+<tr><td>Basic salary</td><td>${money(basic)}</td></tr>
+<tr><td>Allowances</td><td>${money(allowances)}</td></tr>
+<tr><td>Gross salary</td><td>${money(basic + allowances)}</td></tr>
+<tr><td>Taxable salary (after ${money(Number(p.exemptAllowance) || 0)} tax-free)</td><td>${money(Number(p.taxableIncome) || 0)}</td></tr>
+<tr><td>Income tax deducted</td><td>${money(tax)}</td></tr>
+<tr><td>Other deductions</td><td>${money(deductions)}</td></tr>
+<tr class="net"><td>Net salary</td><td>${money(net)}</td></tr>
 </tbody></table><footer>Generated from the School-System payroll records. Please contact HR if any detail needs correction.</footer>
 <script>window.onload=()=>window.print();</script></body></html>`);
     printWindow.document.close();
@@ -218,7 +237,15 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
       <div className="tabs">
         <button type="button" className={`tab${tab === "payroll" ? " active" : ""}`} onClick={() => setTab("payroll")}>Payroll</button>
         <button type="button" className={`tab${tab === "leave" ? " active" : ""}`} onClick={() => setTab("leave")}>Leave Requests</button>
+        <button type="button" className={`tab${tab === "tax" ? " active" : ""}`} onClick={() => setTab("tax")}>Salary Tax</button>
       </div>
+
+      {tab === "tax" ? <SalaryTaxSettings editable={portal === "admin"} /> : null}
+      {tab === "payroll" && portal === "teacher" ? (
+        <div className="alert ok no-print">
+          Your full salary history and yearly tax certificate are on <Link href="/teachers/me">My Profile → Salary &amp; Tax</Link>.
+        </div>
+      ) : null}
 
       {tab === "payroll" ? (
         <Panel title="Payslips" meta={`${payslips.length} RECORDS`}>
@@ -231,7 +258,8 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
                   <tr>
                     <th>Staff</th>
                     <th>Month</th>
-                    <th className="right">Basic</th>
+                    <th className="right">Gross</th>
+                    <th className="right">Income tax</th>
                     <th className="right">Net</th>
                     <th className="right">Status</th>
                     <th className="right">Actions</th>
@@ -242,9 +270,16 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
                     const t = typeof p.teacherId === "object" ? p.teacherId : null;
                     return (
                       <tr key={p._id}>
-                        <td><NameCell name={t ? fullName(t) : "—"} /></td>
+                        <td>
+                          {t ? (
+                            <Link href={portal === "teacher" ? "/teachers/me" : `/teachers/${t._id}`} className="name-link">
+                              <NameCell name={fullName(t)} />
+                            </Link>
+                          ) : "—"}
+                        </td>
                         <td className="num">{p.month}</td>
-                        <td className="num">{formatNumber(p.basic)}</td>
+                        <td className="num">{formatNumber(p.basic + p.allowances)}</td>
+                        <td className="num">{formatNumber(p.incomeTax || 0)}</td>
                         <td className="num">{formatNumber(p.net)}</td>
                         <td className="right"><StatusBadge status={p.status === "paid" ? "paid" : "pending"} /></td>
                         <td>
@@ -349,7 +384,20 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
         {err ? <div className="alert err">{err}</div> : null}
         <div className="form-grid">
           <Field label="Staff" required>
-            <select className={inputClass} value={payForm.teacherId} onChange={(e) => setPayForm({ ...payForm, teacherId: e.target.value })} required>
+            <select
+              className={inputClass}
+              value={payForm.teacherId}
+              onChange={(e) => {
+                const picked = teachers.find((t) => t._id === e.target.value);
+                setPayForm({
+                  ...payForm,
+                  teacherId: e.target.value,
+                  basic: picked?.basicSalary ?? payForm.basic,
+                  allowances: picked?.allowances ?? payForm.allowances,
+                });
+              }}
+              required
+            >
               <option value="">Select</option>
               {teachers.map((t) => (
                 <option key={t._id} value={t._id}>{fullName(t)}</option>
@@ -365,7 +413,13 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
           <Field label="Allowances">
             <input type="number" className={inputClass} value={payForm.allowances} onChange={(e) => setPayForm({ ...payForm, allowances: Number(e.target.value) })} />
           </Field>
-          <Field label="Deductions">
+          <Field label="Tax-free allowance (empty = automatic)">
+            <input type="number" min={0} className={inputClass} placeholder="auto" value={payForm.exemptAllowance} onChange={(e) => setPayForm({ ...payForm, exemptAllowance: e.target.value })} />
+          </Field>
+          <Field label="Income tax (empty = from tax slabs)">
+            <input type="number" min={0} className={inputClass} placeholder="auto" value={payForm.incomeTax} onChange={(e) => setPayForm({ ...payForm, incomeTax: e.target.value })} />
+          </Field>
+          <Field label="Other deductions">
             <input type="number" className={inputClass} value={payForm.deductions} onChange={(e) => setPayForm({ ...payForm, deductions: Number(e.target.value) })} />
           </Field>
           <Field label="Status">

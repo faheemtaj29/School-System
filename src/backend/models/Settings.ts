@@ -27,9 +27,30 @@ export interface ITheme {
 }
 
 /** Singleton-style school settings — profile, tax, branches, theme (lean hub). */
+export type SalaryTaxConfig = {
+  preset: string;
+  /** Month the tax year starts (7 = July for Pakistan, 4 = April for India). */
+  yearStartMonth: number;
+  /** Progressive brackets on yearly taxable salary: rate % applies to the part above `from`. */
+  slabs: { from: number; rate: number }[];
+  /** Taken off yearly salary before tax (e.g. India standard deduction). */
+  standardDeduction: number;
+  /** No tax when yearly taxable salary is at or below this (e.g. India rebate u/s 87A). */
+  rebateUpTo: number;
+  /** Added on top of the tax (e.g. India 4% health & education cess). */
+  cessPercent: number;
+  /** Medical allowance up to this % of basic is exempt (Pakistan: 10%). */
+  medicalExemptPercent: number;
+  certificateTitle: string;
+};
+
 export interface ISettings {
   schoolName: string;
   registrationNo?: string;
+  /** Employer tax number printed on salary tax certificates (NTN / TAN). */
+  employerTaxNumber?: string;
+  /** Salary income-tax rules used for payslips and the yearly certificate. */
+  salaryTax?: SalaryTaxConfig;
   academicYear: string;
   feeDueDay: number;
   autoMonthlyFees?: boolean;
@@ -106,6 +127,8 @@ const SettingsSchema = new Schema<ISettings>(
   {
     schoolName: { type: String, required: true, default: "Sabaq Model School" },
     registrationNo: String,
+    employerTaxNumber: String,
+    salaryTax: { type: Schema.Types.Mixed },
     academicYear: { type: String, default: "2026–27" },
     feeDueDay: { type: Number, default: 25, min: 1, max: 28 },
     autoMonthlyFees: { type: Boolean, default: false },

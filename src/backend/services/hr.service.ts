@@ -6,37 +6,74 @@ import type { z } from "zod";
 import type { leaveSchema, payslipSchema } from "@/backend/validators/modules.validator";
 import { accountingService } from "@/backend/services/accounting.service";
 import { platformService } from "@/backend/services/platform.service";
+import { salaryTaxService } from "@/backend/services/salaryTax.service";
+import { Teacher } from "@/backend/models/Teacher";
 
 type LeaveInput = z.infer<typeof leaveSchema>;
 type PayslipInput = z.infer<typeof payslipSchema>;
 
+/**
+ * A paid payslip posts: Dr Salaries (gross), Cr Bank (net pay), Cr Salary tax withheld,
+ * Cr Payroll deductions — so the tax shows as owed to the government until deposited.
+ */
 async function syncPayslipLedger(slip: {
   _id: { toString(): string };
   month: string;
+  basic: number;
+  allowances: number;
+  deductions: number;
+  incomeTax?: number;
   net: number;
   status: string;
   paidOn?: Date | null;
   branchCode?: string;
   teacherId: unknown;
 }) {
-  if (slip.status !== "paid" || slip.net <= 0) {
-    await accountingService.removeBySource("payslip", String(slip._id));
-    return;
-  }
-  await accountingService.upsertLinked({
-    type: "expense",
-    category: "Payroll",
-    title: `Salary ${slip.month}`,
-    amount: slip.net,
-    date: slip.paidOn || new Date(),
-    method: "bank",
-    reference: `PAY-${slip.month}`,
-    notes: "Auto-posted from paid payslip",
-    branchCode: slip.branchCode,
+  const id = String(slip._id);
+  await accountingService.removeBySource("payslip", id);
+  if (slip.status !== "paid" || slip.net <= 0) return;
+  const gross = Math.round((slip.basic + slip.allowances) * 100) / 100;
+  const [expense, bank, taxPayable, deductions] = await Promise.all([
+    accountingService.ensureAccount({ systemKey: "payrollExpense", code: "51010101", name: "Salaries & Wages", type: "expense", level: 5, parentCode: "510101", isPosting: true }),
+    accountingService.ensureAccount({ systemKey: "bank", code: "11010102", name: "Main Bank Account", type: "asset", level: 5, parentCode: "110101", isPosting: true }),
+    accountingService.ensureAccount({ systemKey: "salaryTaxPayable", code: "21020102", name: "Income Tax Withheld on Salaries", type: "liability", level: 5, parentCode: "210201", isPosting: true }),
+    accountingService.ensureAccount({ systemKey: "payrollDeductions", code: "21010102", name: "Payroll Deductions Payable", type: "liability", level: 5, parentCode: "210101", isPosting: true }),
+  ]);
+  const teacher = await Teacher.findById(slip.teacherId).select("firstName lastName").lean();
+  const who = teacher ? `${teacher.firstName} ${teacher.lastName}` : "Staff";
+  await accountingService.postLinkedJournal({
     sourceType: "payslip",
-    sourceId: String(slip._id),
-    skipTax: true,
+    sourceId: id,
+    date: slip.paidOn || new Date(),
+    branchCode: slip.branchCode || "MAIN",
+    narration: `Salary ${slip.month} — ${who}`,
+    reference: `PAY-${slip.month}`,
+    partyName: who,
+    lines: [
+      { accountCode: expense.code as string, debit: gross, credit: 0, narration: `Gross salary ${slip.month}` },
+      { accountCode: bank.code as string, debit: 0, credit: slip.net, narration: "Net pay" },
+      { accountCode: taxPayable.code as string, debit: 0, credit: slip.incomeTax || 0, narration: "Salary tax withheld" },
+      { accountCode: deductions.code as string, debit: 0, credit: slip.deductions || 0, narration: "Other deductions" },
+    ],
   });
+}
+
+/** Works out exempt allowance, taxable salary, income tax and net pay for a payslip. */
+async function payFigures(data: PayslipInput, excludeId?: string) {
+  const cfg = await salaryTaxService.config();
+  const exemptAllowance = Math.min(
+    data.allowances,
+    data.exemptAllowance ?? salaryTaxService.exemptFor(data.basic, data.allowances, cfg)
+  );
+  const gross = data.basic + data.allowances;
+  const taxableIncome = Math.max(0, gross - exemptAllowance);
+  const incomeTax =
+    data.incomeTax ??
+    (await salaryTaxService.monthlyTax({ teacherId: data.teacherId, month: data.month, taxable: taxableIncome, excludeId }));
+  if (data.deductions + incomeTax > gross) {
+    throw new ServiceError("VALIDATION", "Tax plus deductions cannot be more than the gross salary.", 400);
+  }
+  return { exemptAllowance, taxableIncome, incomeTax, net: Math.round((gross - data.deductions - incomeTax) * 100) / 100 };
 }
 
 export const hrService = {
@@ -126,13 +163,13 @@ export const hrService = {
 
   async createPayslip(data: PayslipInput) {
     await dbConnect();
-    const net = data.basic + data.allowances - data.deductions;
+    const figures = await payFigures(data);
     let slip;
     try {
       slip = await Payslip.create({
         ...data,
+        ...figures,
         branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
-        net,
         paidOn: parseOptionalDate(data.paidOn ?? undefined),
       });
     } catch (error) {
@@ -156,15 +193,15 @@ export const hrService = {
 
   async updatePayslip(id: string, data: PayslipInput) {
     await dbConnect();
-    const net = data.basic + data.allowances - data.deductions;
+    const figures = await payFigures(data, id);
     let item;
     try {
       item = await Payslip.findByIdAndUpdate(
         id,
         {
           ...data,
+          ...figures,
           branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
-          net,
           paidOn: parseOptionalDate(data.paidOn ?? undefined),
         },
         { new: true, runValidators: true }

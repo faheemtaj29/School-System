@@ -547,6 +547,21 @@ const teacherEmpty = {
   subjects: [] as string[],
   classes: [] as string[],
   qualification: "",
+  fatherName: "",
+  cnic: "",
+  taxNumber: "",
+  designation: "",
+  department: "",
+  experienceYears: "",
+  maritalStatus: "",
+  bloodGroup: "",
+  city: "",
+  emergencyName: "",
+  emergencyPhone: "",
+  basicSalary: "",
+  allowances: "",
+  bankName: "",
+  bankAccount: "",
   status: "active",
   branchCode: "",
 };
@@ -580,6 +595,21 @@ export function TeacherForm({
         subjects: (initial.subjects || []).map((s) => idOf(s as never)),
         classes: (initial.classes || []).map((c) => idOf(c as never)),
         qualification: initial.qualification ?? "",
+        fatherName: initial.fatherName != null ? String(initial.fatherName) : "",
+        cnic: initial.cnic != null ? String(initial.cnic) : "",
+        taxNumber: initial.taxNumber != null ? String(initial.taxNumber) : "",
+        designation: initial.designation != null ? String(initial.designation) : "",
+        department: initial.department != null ? String(initial.department) : "",
+        experienceYears: initial.experienceYears != null ? String(initial.experienceYears) : "",
+        maritalStatus: initial.maritalStatus != null ? String(initial.maritalStatus) : "",
+        bloodGroup: initial.bloodGroup != null ? String(initial.bloodGroup) : "",
+        city: initial.city != null ? String(initial.city) : "",
+        emergencyName: initial.emergencyName != null ? String(initial.emergencyName) : "",
+        emergencyPhone: initial.emergencyPhone != null ? String(initial.emergencyPhone) : "",
+        basicSalary: initial.basicSalary != null ? String(initial.basicSalary) : "",
+        allowances: initial.allowances != null ? String(initial.allowances) : "",
+        bankName: initial.bankName != null ? String(initial.bankName) : "",
+        bankAccount: initial.bankAccount != null ? String(initial.bankAccount) : "",
         status: initial.status,
         branchCode: initial.branchCode ?? "",
       });
@@ -613,8 +643,14 @@ export function TeacherForm({
     e.preventDefault();
     setError("");
     const { idMode, ...rest } = form;
+    // Empty optional fields are left out so they don't fail number / choice checks.
+    const cleaned = Object.fromEntries(
+      Object.entries(rest).filter(([, v]) => !(typeof v === "string" && v.trim() === ""))
+    );
     const payload = {
-      ...rest,
+      ...cleaned,
+      subjects: form.subjects,
+      classes: form.classes,
       employeeId: idMode === "auto" && !initial ? "" : form.employeeId,
     };
     const res = await fetch(initial ? `/api/teachers/${initial._id}` : "/api/teachers", {
@@ -715,6 +751,78 @@ export function TeacherForm({
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
+        </Field>
+      </div>
+
+      <div className="form-section-title">Bio-data</div>
+      <div className="form-grid">
+        <Field label="Father / Husband Name">
+          <input className={inputClass} value={form.fatherName} onChange={(e) => setForm({ ...form, fatherName: e.target.value })} />
+        </Field>
+        <Field label="Gender">
+          <select className={inputClass} value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
+            <option value="">—</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+          </select>
+        </Field>
+        <Field label="Date of Birth">
+          <input type="date" className={inputClass} value={form.dateOfBirth} onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })} />
+        </Field>
+        <Field label="CNIC / National ID">
+          <input className={inputClass} value={form.cnic} onChange={(e) => setForm({ ...form, cnic: e.target.value })} />
+        </Field>
+        <Field label="Tax No. (NTN / PAN)">
+          <input className={inputClass} value={form.taxNumber} onChange={(e) => setForm({ ...form, taxNumber: e.target.value })} />
+        </Field>
+        <Field label="Marital Status">
+          <select className={inputClass} value={form.maritalStatus} onChange={(e) => setForm({ ...form, maritalStatus: e.target.value })}>
+            <option value="">—</option>
+            <option value="single">Single</option>
+            <option value="married">Married</option>
+            <option value="other">Other</option>
+          </select>
+        </Field>
+        <Field label="Blood Group">
+          <input className={inputClass} value={form.bloodGroup} onChange={(e) => setForm({ ...form, bloodGroup: e.target.value })} placeholder="e.g. B+" />
+        </Field>
+        <Field label="City">
+          <input className={inputClass} value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+        </Field>
+        <Field label="Address">
+          <input className={inputClass} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+        </Field>
+        <Field label="Emergency Contact Name">
+          <input className={inputClass} value={form.emergencyName} onChange={(e) => setForm({ ...form, emergencyName: e.target.value })} />
+        </Field>
+        <Field label="Emergency Contact Phone">
+          <input className={inputClass} value={form.emergencyPhone} onChange={(e) => setForm({ ...form, emergencyPhone: e.target.value })} />
+        </Field>
+      </div>
+
+      <div className="form-section-title">Job, Salary &amp; Bank</div>
+      <div className="form-grid">
+        <Field label="Designation">
+          <input className={inputClass} value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} placeholder="e.g. Senior Teacher" />
+        </Field>
+        <Field label="Department">
+          <input className={inputClass} value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} placeholder="e.g. Science" />
+        </Field>
+        <Field label="Experience (years)">
+          <input type="number" min={0} className={inputClass} value={form.experienceYears} onChange={(e) => setForm({ ...form, experienceYears: e.target.value })} />
+        </Field>
+        <Field label="Basic Salary (monthly)">
+          <input type="number" min={0} className={inputClass} value={form.basicSalary} onChange={(e) => setForm({ ...form, basicSalary: e.target.value })} />
+        </Field>
+        <Field label="Allowances (monthly)">
+          <input type="number" min={0} className={inputClass} value={form.allowances} onChange={(e) => setForm({ ...form, allowances: e.target.value })} />
+        </Field>
+        <Field label="Bank Name">
+          <input className={inputClass} value={form.bankName} onChange={(e) => setForm({ ...form, bankName: e.target.value })} />
+        </Field>
+        <Field label="Bank Account / IBAN">
+          <input className={inputClass} value={form.bankAccount} onChange={(e) => setForm({ ...form, bankAccount: e.target.value })} />
         </Field>
       </div>
 

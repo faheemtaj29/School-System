@@ -43,6 +43,12 @@ export interface IPayslip {
   month: string;
   basic: number;
   allowances: number;
+  /** Part of allowances that is tax-free (e.g. medical allowance). */
+  exemptAllowance?: number;
+  /** basic + allowances − exempt allowance. */
+  taxableIncome?: number;
+  /** Salary income tax withheld this month. */
+  incomeTax?: number;
   deductions: number;
   net: number;
   status: "draft" | "paid" | "pending";
@@ -59,6 +65,9 @@ const PayslipSchema = new Schema<IPayslip>(
     month: { type: String, required: true },
     basic: { type: Number, required: true, min: 0 },
     allowances: { type: Number, default: 0 },
+    exemptAllowance: { type: Number, default: 0, min: 0 },
+    taxableIncome: { type: Number, default: 0, min: 0 },
+    incomeTax: { type: Number, default: 0, min: 0 },
     deductions: { type: Number, default: 0 },
     net: { type: Number, required: true },
     status: {

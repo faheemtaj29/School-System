@@ -71,6 +71,7 @@ const navGroups: NavGroup[] = [
     label: "People & HR",
     items: [
       { href: "/teachers", label: "Teachers", Icon: TeachersIcon, roles: ["admin"] },
+      { href: "/teachers/me", label: "My Profile", Icon: PersonIcon, roles: ["teacher"] },
       { href: "/staff", label: "Campus Staff", Icon: PersonIcon, roles: ["admin"] },
       { href: "/hr", label: "HR & Payroll", Icon: HrIcon, roles: ["admin", "teacher"] },
     ],

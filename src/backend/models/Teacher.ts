@@ -13,6 +13,26 @@ export interface ITeacher {
   subjects: Types.ObjectId[];
   classes: Types.ObjectId[];
   qualification?: string;
+  /** Bio-data */
+  fatherName?: string;
+  cnic?: string;
+  taxNumber?: string;
+  designation?: string;
+  department?: string;
+  experienceYears?: number;
+  maritalStatus?: "single" | "married" | "other";
+  bloodGroup?: string;
+  city?: string;
+  emergencyName?: string;
+  emergencyPhone?: string;
+  /** Salary defaults used when making payslips, and where it is paid. */
+  basicSalary?: number;
+  allowances?: number;
+  bankName?: string;
+  bankAccount?: string;
+  /** Photo as a data URL, served by /api/teachers/[id]/photo. */
+  photoData?: string;
+  photoUpdatedAt?: Date;
   status: "active" | "inactive";
   branchCode?: string;
   user?: Types.ObjectId;
@@ -34,6 +54,23 @@ const TeacherSchema = new Schema<ITeacher>(
     subjects: [{ type: Schema.Types.ObjectId, ref: "Subject" }],
     classes: [{ type: Schema.Types.ObjectId, ref: "Class" }],
     qualification: String,
+    fatherName: String,
+    cnic: String,
+    taxNumber: String,
+    designation: String,
+    department: String,
+    experienceYears: Number,
+    maritalStatus: { type: String, enum: ["single", "married", "other"] },
+    bloodGroup: String,
+    city: String,
+    emergencyName: String,
+    emergencyPhone: String,
+    basicSalary: { type: Number, min: 0 },
+    allowances: { type: Number, min: 0 },
+    bankName: String,
+    bankAccount: String,
+    photoData: { type: String, select: false },
+    photoUpdatedAt: Date,
     status: { type: String, enum: ["active", "inactive"], default: "active" },
     branchCode: { type: String, uppercase: true, trim: true },
     user: { type: Schema.Types.ObjectId, ref: "User" },

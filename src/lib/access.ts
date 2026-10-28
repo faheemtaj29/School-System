@@ -38,6 +38,8 @@ export function canOpenPage(role: string, pathname: string) {
   if (normalizedRole === "teacher") {
     if (hit(ACADEMIC_PAGES)) return true;
     if (pathname === "/hr" || pathname.startsWith("/hr/")) return true;
+    // A teacher's own profile (salary, tax certificate, classes).
+    if (pathname === "/teachers/me") return true;
     return false;
   }
 

@@ -281,6 +281,10 @@ export const payslipSchema = z
     basic: z.coerce.number().finite().min(0),
     allowances: z.coerce.number().finite().min(0).default(0),
     deductions: z.coerce.number().finite().min(0).default(0),
+    /** Leave empty to use the default tax-free part (e.g. medical allowance). */
+    exemptAllowance: z.coerce.number().finite().min(0).optional().nullable(),
+    /** Leave empty to work out this month's salary tax from the tax slabs. */
+    incomeTax: z.coerce.number().finite().min(0).optional().nullable(),
     status: z.enum(["draft", "paid", "pending"]).default("pending"),
     paidOn: z.string().optional().nullable(),
     notes: z.string().optional(),

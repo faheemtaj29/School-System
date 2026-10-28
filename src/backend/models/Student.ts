@@ -40,6 +40,9 @@ export interface IStudent {
   conductRemark?: string;
   /** Extensible key/value bag for CustomField definitions. */
   custom?: Record<string, unknown>;
+  /** Photo as a data URL, served by /api/students/[id]/photo. */
+  photoData?: string;
+  photoUpdatedAt?: Date;
   user?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -84,6 +87,8 @@ const StudentSchema = new Schema<IStudent>(
     leavingReason: String,
     conductRemark: String,
     custom: { type: Schema.Types.Mixed, default: {} },
+    photoData: { type: String, select: false },
+    photoUpdatedAt: Date,
     user: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }

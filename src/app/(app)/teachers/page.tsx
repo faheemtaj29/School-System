@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   EmptyState,
@@ -105,7 +106,9 @@ export default function TeachersPage() {
                 {visible.map((t) => (
                   <tr key={t._id}>
                     <td>
-                      <NameCell name={fullName(t)} sub={t.email} />
+                      <Link href={`/teachers/${t._id}`} className="name-link">
+                        <NameCell name={fullName(t)} sub={t.designation || t.email} />
+                      </Link>
                     </td>
                     <td className="num">{t.employeeId}</td>
                     <td>
@@ -122,6 +125,9 @@ export default function TeachersPage() {
                     </td>
                     <td>
                       <div className="row-actions">
+                        <Link href={`/teachers/${t._id}`} className="link-btn">
+                          Profile
+                        </Link>
                         <button
                           type="button"
                           className="link-btn"
