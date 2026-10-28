@@ -28,6 +28,10 @@ export interface ITeacher {
   /** Salary defaults used when making payslips, and where it is paid. */
   basicSalary?: number;
   allowances?: number;
+  /** Monthly salary structure: allowances and fixed deductions copied onto each payslip. */
+  salaryHeads?: { head: string; kind: "earning" | "deduction"; amount: number }[];
+  employmentType?: "permanent" | "contract" | "probation" | "visiting";
+  paymentMethod?: "bank" | "cash";
   bankName?: string;
   bankAccount?: string;
   /** Photo as a data URL, served by /api/teachers/[id]/photo. */
@@ -67,6 +71,21 @@ const TeacherSchema = new Schema<ITeacher>(
     emergencyPhone: String,
     basicSalary: { type: Number, min: 0 },
     allowances: { type: Number, min: 0 },
+    salaryHeads: {
+      type: [
+        new Schema(
+          {
+            head: { type: String, required: true, trim: true },
+            kind: { type: String, enum: ["earning", "deduction"], required: true },
+            amount: { type: Number, required: true, min: 0 },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+    employmentType: { type: String, enum: ["permanent", "contract", "probation", "visiting"] },
+    paymentMethod: { type: String, enum: ["bank", "cash"] },
     bankName: String,
     bankAccount: String,
     photoData: { type: String, select: false },

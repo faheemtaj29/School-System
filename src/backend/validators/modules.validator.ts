@@ -281,6 +281,16 @@ export const leaveSchema = z.object({
   status: z.enum(["pending", "approved", "rejected"]).default("pending"),
 });
 
+/** Name of the automatic deduction line for days without pay. */
+export const ABSENT_HEAD = "Absent / unpaid leave";
+
+const payLine = z.object({
+  head: z.string().trim().min(1, "Each line needs a name").max(60),
+  amount: z.coerce.number().finite().min(0),
+});
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 export const payslipSchema = z
   .object({
     teacherId: z.string().min(1),
@@ -288,6 +298,12 @@ export const payslipSchema = z
     basic: z.coerce.number().finite().min(0),
     allowances: z.coerce.number().finite().min(0).default(0),
     deductions: z.coerce.number().finite().min(0).default(0),
+    /** Itemised lines; when sent, their totals replace allowances / deductions. */
+    earnings: z.array(payLine).max(30).optional(),
+    deductionItems: z.array(payLine).max(30).optional(),
+    workingDays: z.coerce.number().int().min(0).max(31).optional().nullable(),
+    unpaidDays: z.coerce.number().min(0).max(31).optional().nullable(),
+    paymentMethod: z.enum(["bank", "cash"]).optional(),
     /** Leave empty to use the default tax-free part (e.g. medical allowance). */
     exemptAllowance: z.coerce.number().finite().min(0).optional().nullable(),
     /** Leave empty to work out this month's salary tax from the tax slabs. */
@@ -296,6 +312,24 @@ export const payslipSchema = z
     paidOn: z.string().optional().nullable(),
     notes: z.string().optional(),
     branchCode: z.string().optional(),
+  })
+  .transform((data) => {
+    const earnings = data.earnings?.filter((l) => l.amount > 0);
+    let deductionItems = data.deductionItems?.filter((l) => l.amount > 0 && !l.head.startsWith(ABSENT_HEAD));
+    // Days without pay come off the basic salary, pro rata.
+    const unpaid = data.unpaidDays || 0;
+    const days = data.workingDays || 0;
+    if (unpaid > 0 && days > 0) {
+      const cut = round2((data.basic / days) * Math.min(unpaid, days));
+      deductionItems = [...(deductionItems ?? []), { head: `${ABSENT_HEAD} (${unpaid} day${unpaid === 1 ? "" : "s"})`, amount: cut }];
+    }
+    return {
+      ...data,
+      earnings,
+      deductionItems,
+      allowances: earnings ? round2(earnings.reduce((t, l) => t + l.amount, 0)) : data.allowances,
+      deductions: deductionItems ? round2(deductionItems.reduce((t, l) => t + l.amount, 0)) : data.deductions,
+    };
   })
   .refine((data) => data.deductions <= data.basic + data.allowances, {
     message: "Total deductions cannot exceed basic salary plus allowances.",

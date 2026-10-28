@@ -283,6 +283,7 @@ export default function TeacherProfilePage() {
                     <th className="right">Other deductions</th>
                     <th className="right">Net pay</th>
                     <th className="right">Status</th>
+                    <th className="right no-print">Slip</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -298,6 +299,11 @@ export default function TeacherProfilePage() {
                       <td className="num">{formatNumber(p.deductions)}</td>
                       <td className="num"><strong>{formatNumber(p.net)}</strong></td>
                       <td className="right"><StatusBadge status={p.status} /></td>
+                      <td className="right no-print">
+                        <button type="button" className="link-btn" onClick={() => window.open(`/print/payslip?id=${p._id}`, "_blank")}>
+                          Print
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

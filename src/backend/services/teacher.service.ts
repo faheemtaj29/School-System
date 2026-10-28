@@ -9,8 +9,11 @@ import type { TeacherInput } from "@/backend/validators/teacher.validator";
 import { numberingService } from "@/backend/services/numbering.service";
 
 function toPayload(data: TeacherInput) {
+  // With a salary structure, the allowance total is the sum of its earning heads.
+  const earnings = data.salaryHeads?.filter((h) => h.kind === "earning");
   return {
     ...data,
+    ...(earnings ? { allowances: Math.round(earnings.reduce((t, h) => t + h.amount, 0) * 100) / 100 } : {}),
     employeeId: data.employeeId || undefined,
     branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
     dateOfBirth: parseOptionalDate(data.dateOfBirth),

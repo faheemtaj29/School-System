@@ -86,6 +86,9 @@ export type TeacherItem = {
   emergencyPhone?: string;
   basicSalary?: number;
   allowances?: number;
+  salaryHeads?: { head: string; kind: "earning" | "deduction"; amount: number }[];
+  employmentType?: string;
+  paymentMethod?: string;
   bankName?: string;
   bankAccount?: string;
   photoUpdatedAt?: string;

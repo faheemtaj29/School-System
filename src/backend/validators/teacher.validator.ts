@@ -26,6 +26,18 @@ export const teacherSchema = z.object({
   emergencyPhone: z.string().optional(),
   basicSalary: z.coerce.number().min(0).optional(),
   allowances: z.coerce.number().min(0).optional(),
+  salaryHeads: z
+    .array(
+      z.object({
+        head: z.string().trim().min(1, "Each salary head needs a name").max(60),
+        kind: z.enum(["earning", "deduction"]),
+        amount: z.coerce.number().min(0),
+      })
+    )
+    .max(30)
+    .optional(),
+  employmentType: z.enum(["permanent", "contract", "probation", "visiting"]).optional(),
+  paymentMethod: z.enum(["bank", "cash"]).optional(),
   bankName: z.string().optional(),
   bankAccount: z.string().optional(),
   status: z.enum(["active", "inactive"]).default("active"),

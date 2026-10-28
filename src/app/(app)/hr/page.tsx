@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { SalaryTaxSettings } from "@/components/hr/SalaryTaxSettings";
+import { DEDUCTION_HEADS, EARNING_HEADS, SalaryLines, cleanLines, lineTotal, type PayLine } from "@/components/hr/SalaryLines";
 import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import { EmptyState, Field, Hero, ModalForm, NameCell, Panel, StatusBadge, inputClass } from "@/components/ui";
 import { TeacherItem, formatNumber, fullName, prettyDate, toDateInput, photoSrc } from "@/lib/types";
@@ -28,18 +29,28 @@ type Payslip = {
   taxableIncome?: number;
   incomeTax?: number;
   deductions: number;
+  earnings?: { head: string; amount: number }[];
+  deductionItems?: { head: string; amount: number }[];
+  workingDays?: number;
+  unpaidDays?: number;
+  paymentMethod?: "bank" | "cash";
   net: number;
   status: string;
 };
 
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-  })[char] || char);
+const daysIn = (month: string) => {
+  const [y, m] = month.split("-").map(Number);
+  return y && m ? new Date(y, m, 0).getDate() : 30;
+};
+
+/** Salary lines from a staff member's structure; older records show their allowance total as one line. */
+function structureOf(t: TeacherItem | undefined) {
+  const heads = t?.salaryHeads || [];
+  const pick = (kind: "earning" | "deduction") => heads.filter((h) => h.kind === kind).map(({ head, amount }) => ({ head, amount }));
+  return {
+    earnings: heads.length ? pick("earning") : t?.allowances ? [{ head: "Allowances", amount: t.allowances }] : [],
+    deductionItems: pick("deduction"),
+  };
 }
 
 export default function HrPage() {
@@ -65,8 +76,11 @@ export default function HrPage() {
     teacherId: "",
     month: new Date().toISOString().slice(0, 7),
     basic: 50000,
-    allowances: 0,
-    deductions: 0,
+    earnings: [] as PayLine[],
+    deductionItems: [] as PayLine[],
+    workingDays: daysIn(new Date().toISOString().slice(0, 7)),
+    unpaidDays: 0,
+    paymentMethod: "bank" as "bank" | "cash",
     /** Empty = worked out from the tax rules. */
     exemptAllowance: "",
     incomeTax: "",
@@ -126,6 +140,8 @@ export default function HrPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...payForm,
+        earnings: cleanLines(payForm.earnings),
+        deductionItems: cleanLines(payForm.deductionItems),
         exemptAllowance: payForm.exemptAllowance === "" ? undefined : Number(payForm.exemptAllowance),
         incomeTax: payForm.incomeTax === "" ? undefined : Number(payForm.incomeTax),
       }),
@@ -159,6 +175,11 @@ export default function HrPage() {
         basic: p.basic,
         allowances: p.allowances,
         deductions: p.deductions,
+        earnings: p.earnings,
+        deductionItems: p.deductionItems,
+        workingDays: p.workingDays,
+        unpaidDays: p.unpaidDays,
+        paymentMethod: p.paymentMethod,
         exemptAllowance: p.exemptAllowance ?? undefined,
         incomeTax: p.incomeTax ?? undefined,
         status: "paid",
@@ -169,38 +190,45 @@ export default function HrPage() {
   }
 
   function printPayslip(p: Payslip) {
-    const teacher = typeof p.teacherId === "object" ? p.teacherId : null;
-    const name = teacher ? fullName(teacher) : "Staff member";
-    const net = Number(p.net) || 0;
-    const basic = Number(p.basic) || 0;
-    const allowances = Number(p.allowances) || 0;
-    const deductions = Number(p.deductions) || 0;
-    const tax = Number(p.incomeTax) || 0;
-    const money = (n: number) => `${escapeHtml(cur)} ${n.toLocaleString("en-IN")}`;
-    const printWindow = window.open("", "_blank", "width=800,height=700");
-    if (!printWindow) {
-      setErr("Please allow pop-ups to print or save the payslip as PDF.");
-      return;
-    }
-    printWindow.document.write(`<!doctype html>
-<html><head><meta charset="utf-8"><title>Salary Slip - ${escapeHtml(p.month)}</title>
-<style>
-body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2px solid #17212b;padding-bottom:16px;margin-bottom:24px}h1{font-size:24px;margin:0 0 8px}p{margin:4px 0;color:#526170}.meta{display:flex;justify-content:space-between;margin:20px 0}.box{border:1px solid #d6dde5;border-radius:8px;padding:16px;margin:12px 0}table{width:100%;border-collapse:collapse;margin-top:20px}td{padding:12px;border-bottom:1px solid #e5e9ef}td:last-child{text-align:right;font-variant-numeric:tabular-nums}.net{font-size:18px;font-weight:bold}footer{margin-top:40px;color:#526170;font-size:12px}@media print{body{margin:15mm}}
-</style></head><body>
-<header><h1>Salary Slip</h1><p>Confidential employee payroll record</p></header>
-<div class="meta"><div><strong>Employee</strong><br>${escapeHtml(name)}</div><div><strong>Pay period</strong><br>${escapeHtml(p.month)}</div><div><strong>Status</strong><br>${escapeHtml(p.status)}</div></div>
-<table><tbody>
-<tr><td>Basic salary</td><td>${money(basic)}</td></tr>
-<tr><td>Allowances</td><td>${money(allowances)}</td></tr>
-<tr><td>Gross salary</td><td>${money(basic + allowances)}</td></tr>
-<tr><td>Taxable salary (after ${money(Number(p.exemptAllowance) || 0)} tax-free)</td><td>${money(Number(p.taxableIncome) || 0)}</td></tr>
-<tr><td>Income tax deducted</td><td>${money(tax)}</td></tr>
-<tr><td>Other deductions</td><td>${money(deductions)}</td></tr>
-<tr class="net"><td>Net salary</td><td>${money(net)}</td></tr>
-</tbody></table><footer>Generated from the School-System payroll records. Please contact HR if any detail needs correction.</footer>
-<script>window.onload=()=>window.print();</script></body></html>`);
-    printWindow.document.close();
+    window.open(`/print/payslip?id=${p._id}`, "_blank");
   }
+
+  const [genMonth, setGenMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [genBusy, setGenBusy] = useState(false);
+  const [genMsg, setGenMsg] = useState("");
+  async function generatePayroll() {
+    setGenBusy(true);
+    setGenMsg("");
+    setErr("");
+    try {
+      const res = await fetch("/api/hr/payslips/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month: genMonth }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Could not generate payroll");
+      const failed = (d.failed || []).map((x: { name: string; error: string }) => `${x.name}: ${x.error}`).join("; ");
+      setGenMsg(
+        `${d.created} payslip${d.created === 1 ? "" : "s"} made for ${genMonth}` +
+          (d.skipped ? ` · ${d.skipped} already had one` : "") +
+          (failed ? ` · Not made — ${failed}` : "") +
+          (!d.created && !d.skipped && !failed ? " · No active staff with a basic salary set." : "")
+      );
+      load();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setGenBusy(false);
+    }
+  }
+
+  const payGross = payForm.basic + lineTotal(payForm.earnings);
+  const absentCut =
+    payForm.workingDays > 0 && payForm.unpaidDays > 0
+      ? Math.round((payForm.basic / payForm.workingDays) * Math.min(payForm.unpaidDays, payForm.workingDays) * 100) / 100
+      : 0;
+  const payDeductions = lineTotal(payForm.deductionItems) + absentCut;
 
   const leaveStats = useMemo(() => ({
     pending:  leaves.filter((l) => l.status === "pending").length,
@@ -246,6 +274,22 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
           Your full salary history and yearly tax certificate are on <Link href="/teachers/me">My Profile → Salary &amp; Tax</Link>.
         </div>
       ) : null}
+
+      {tab === "payroll" && portal === "admin" ? (
+        <div className="period-bar no-print">
+          <label>
+            <span>Payroll month</span>
+            <input type="month" className={inputClass} value={genMonth} onChange={(e) => setGenMonth(e.target.value)} />
+          </label>
+          <button type="button" className="btn-primary" disabled={genBusy} onClick={generatePayroll}>
+            {genBusy ? "Generating…" : "Generate payslips for all staff"}
+          </button>
+          <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
+            Uses each teacher&apos;s salary structure; approved unpaid leave is deducted. Staff who already have a payslip are skipped.
+          </span>
+        </div>
+      ) : null}
+      {genMsg ? <div className="alert ok no-print">{genMsg}</div> : null}
 
       {tab === "payroll" ? (
         <Panel title="Payslips" meta={`${payslips.length} RECORDS`}>
@@ -393,7 +437,8 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
                   ...payForm,
                   teacherId: e.target.value,
                   basic: picked?.basicSalary ?? payForm.basic,
-                  allowances: picked?.allowances ?? payForm.allowances,
+                  ...structureOf(picked),
+                  paymentMethod: picked?.paymentMethod === "cash" || (picked && !picked.paymentMethod && !picked.bankAccount) ? "cash" : "bank",
                 });
               }}
               required
@@ -404,23 +449,35 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
               ))}
             </select>
           </Field>
-          <Field label="Month (YYYY-MM)" required>
-            <input className={inputClass} value={payForm.month} onChange={(e) => setPayForm({ ...payForm, month: e.target.value })} required />
+          <Field label="Month" required>
+            <input
+              type="month"
+              className={inputClass}
+              value={payForm.month}
+              onChange={(e) => setPayForm({ ...payForm, month: e.target.value, workingDays: daysIn(e.target.value) })}
+              required
+            />
           </Field>
-          <Field label="Basic">
-            <input type="number" className={inputClass} value={payForm.basic} onChange={(e) => setPayForm({ ...payForm, basic: Number(e.target.value) })} />
+          <Field label="Basic salary">
+            <input type="number" min={0} className={inputClass} value={payForm.basic} onChange={(e) => setPayForm({ ...payForm, basic: Number(e.target.value) })} />
           </Field>
-          <Field label="Allowances">
-            <input type="number" className={inputClass} value={payForm.allowances} onChange={(e) => setPayForm({ ...payForm, allowances: Number(e.target.value) })} />
+          <Field label="Paid by">
+            <select className={inputClass} value={payForm.paymentMethod} onChange={(e) => setPayForm({ ...payForm, paymentMethod: e.target.value as "bank" | "cash" })}>
+              <option value="bank">Bank transfer</option>
+              <option value="cash">Cash</option>
+            </select>
+          </Field>
+          <Field label="Days in pay period">
+            <input type="number" min={0} max={31} className={inputClass} value={payForm.workingDays} onChange={(e) => setPayForm({ ...payForm, workingDays: Number(e.target.value) })} />
+          </Field>
+          <Field label="Unpaid days (absent / unpaid leave)">
+            <input type="number" min={0} max={31} step="0.5" className={inputClass} value={payForm.unpaidDays} onChange={(e) => setPayForm({ ...payForm, unpaidDays: Number(e.target.value) })} />
           </Field>
           <Field label="Tax-free allowance (empty = automatic)">
             <input type="number" min={0} className={inputClass} placeholder="auto" value={payForm.exemptAllowance} onChange={(e) => setPayForm({ ...payForm, exemptAllowance: e.target.value })} />
           </Field>
           <Field label="Income tax (empty = from tax slabs)">
             <input type="number" min={0} className={inputClass} placeholder="auto" value={payForm.incomeTax} onChange={(e) => setPayForm({ ...payForm, incomeTax: e.target.value })} />
-          </Field>
-          <Field label="Other deductions">
-            <input type="number" className={inputClass} value={payForm.deductions} onChange={(e) => setPayForm({ ...payForm, deductions: Number(e.target.value) })} />
           </Field>
           <Field label="Status">
             <select className={inputClass} value={payForm.status} onChange={(e) => setPayForm({ ...payForm, status: e.target.value })}>
@@ -429,6 +486,25 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
               <option value="paid">Paid</option>
             </select>
           </Field>
+        </div>
+        <div className="pay-lines-grid">
+          <SalaryLines title="Allowances" currency={cur} lines={payForm.earnings} onChange={(earnings) => setPayForm({ ...payForm, earnings })} suggestions={EARNING_HEADS} />
+          <SalaryLines
+            title="Deductions"
+            currency={cur}
+            lines={payForm.deductionItems}
+            onChange={(deductionItems) => setPayForm({ ...payForm, deductionItems })}
+            suggestions={DEDUCTION_HEADS}
+          />
+        </div>
+        <div className="pay-preview">
+          <span>Gross <b>{formatNumber(payGross)}</b></span>
+          {absentCut ? <span>Unpaid days <b>− {formatNumber(absentCut)}</b></span> : null}
+          <span>Deductions <b>− {formatNumber(payDeductions)}</b></span>
+          <span>Before tax <b>{formatNumber(payGross - payDeductions)}</b></span>
+          <span style={{ color: "var(--text-dim)" }}>
+            {payForm.incomeTax === "" ? "Income tax is worked out on saving." : `Income tax − ${formatNumber(Number(payForm.incomeTax) || 0)}`}
+          </span>
         </div>
       </ModalForm>
     </>

@@ -3,10 +3,12 @@ import { LeaveRequest, Payslip } from "@/backend/models/HR";
 import { ServiceError, type SessionUser } from "@/backend/types";
 import { parseOptionalDate } from "@/backend/lib/http";
 import type { z } from "zod";
-import type { leaveSchema, payslipSchema } from "@/backend/validators/modules.validator";
+import type { leaveSchema } from "@/backend/validators/modules.validator";
+import { payslipSchema } from "@/backend/validators/modules.validator";
 import { accountingService } from "@/backend/services/accounting.service";
 import { platformService } from "@/backend/services/platform.service";
-import { salaryTaxService } from "@/backend/services/salaryTax.service";
+import { salaryTaxService, taxYearLabel, taxYearMonths, taxYearOf } from "@/backend/services/salaryTax.service";
+import { letterhead } from "@/backend/lib/letterhead";
 import { Teacher } from "@/backend/models/Teacher";
 
 type LeaveInput = z.infer<typeof leaveSchema>;
@@ -27,15 +29,19 @@ async function syncPayslipLedger(slip: {
   status: string;
   paidOn?: Date | null;
   branchCode?: string;
+  paymentMethod?: string;
   teacherId: unknown;
 }) {
   const id = String(slip._id);
   await accountingService.removeBySource("payslip", id);
   if (slip.status !== "paid" || slip.net <= 0) return;
   const gross = Math.round((slip.basic + slip.allowances) * 100) / 100;
+  const cash = slip.paymentMethod === "cash";
   const [expense, bank, taxPayable, deductions] = await Promise.all([
     accountingService.ensureAccount({ systemKey: "payrollExpense", code: "51010101", name: "Salaries & Wages", type: "expense", level: 5, parentCode: "510101", isPosting: true }),
-    accountingService.ensureAccount({ systemKey: "bank", code: "11010102", name: "Main Bank Account", type: "asset", level: 5, parentCode: "110101", isPosting: true }),
+    cash
+      ? accountingService.ensureAccount({ systemKey: "cash", code: "11010101", name: "Cash in Hand", type: "asset", level: 5, parentCode: "110101", isPosting: true })
+      : accountingService.ensureAccount({ systemKey: "bank", code: "11010102", name: "Main Bank Account", type: "asset", level: 5, parentCode: "110101", isPosting: true }),
     accountingService.ensureAccount({ systemKey: "salaryTaxPayable", code: "21020102", name: "Income Tax Withheld on Salaries", type: "liability", level: 5, parentCode: "210201", isPosting: true }),
     accountingService.ensureAccount({ systemKey: "payrollDeductions", code: "21010102", name: "Payroll Deductions Payable", type: "liability", level: 5, parentCode: "210101", isPosting: true }),
   ]);
@@ -51,7 +57,7 @@ async function syncPayslipLedger(slip: {
     partyName: who,
     lines: [
       { accountCode: expense.code as string, debit: gross, credit: 0, narration: `Gross salary ${slip.month}` },
-      { accountCode: bank.code as string, debit: 0, credit: slip.net, narration: "Net pay" },
+      { accountCode: bank.code as string, debit: 0, credit: slip.net, narration: cash ? "Net pay in cash" : "Net pay by bank" },
       { accountCode: taxPayable.code as string, debit: 0, credit: slip.incomeTax || 0, narration: "Salary tax withheld" },
       { accountCode: deductions.code as string, debit: 0, credit: slip.deductions || 0, narration: "Other deductions" },
     ],
@@ -232,6 +238,110 @@ export const hrService = {
     if (!item) throw new ServiceError("NOT_FOUND", "Payslip not found", 404);
     await accountingService.removeBySource("payslip", id);
     return { ok: true };
+  },
+
+  /**
+   * Makes this month's payslips for every active staff member with a basic salary,
+   * from their salary structure, with approved unpaid leave taken off pro rata.
+   * Staff who already have a payslip for the month are left alone.
+   */
+  async generateMonth(month: string, branchCode?: string | null) {
+    await dbConnect();
+    const [y, m] = month.split("-").map(Number);
+    const start = new Date(y, m - 1, 1);
+    const end = new Date(y, m, 0, 23, 59, 59, 999);
+    const daysInMonth = end.getDate();
+    const filter: Record<string, unknown> = { status: "active", basicSalary: { $gt: 0 } };
+    if (branchCode) filter.branchCode = branchCode.toUpperCase();
+    const [staff, existing, unpaidLeaves] = await Promise.all([
+      Teacher.find(filter).lean(),
+      Payslip.find({ month }).select("teacherId").lean(),
+      LeaveRequest.find({ status: "approved", leaveType: "unpaid", fromDate: { $lte: end }, toDate: { $gte: start } }).lean(),
+    ]);
+    const done = new Set(existing.map((p) => String(p.teacherId)));
+    const DAY = 86400000;
+    const unpaidByTeacher = new Map<string, number>();
+    for (const l of unpaidLeaves) {
+      // Only the days of the leave that fall inside this month.
+      const from = Math.max(new Date(l.fromDate).getTime(), start.getTime());
+      const to = Math.min(new Date(l.toDate).getTime(), end.getTime());
+      const days = Math.min(Math.floor((to - from) / DAY) + 1, l.days || Infinity);
+      if (days > 0) unpaidByTeacher.set(String(l.teacherId), (unpaidByTeacher.get(String(l.teacherId)) || 0) + days);
+    }
+
+    const created: string[] = [];
+    const failed: { name: string; error: string }[] = [];
+    for (const t of staff) {
+      if (done.has(String(t._id))) continue;
+      const heads: { head: string; kind: string; amount: number }[] = t.salaryHeads || [];
+      const parsed = payslipSchema.safeParse({
+        teacherId: String(t._id),
+        month,
+        basic: t.basicSalary,
+        allowances: heads.length ? 0 : t.allowances || 0,
+        earnings: heads.length ? heads.filter((h) => h.kind === "earning").map(({ head, amount }) => ({ head, amount })) : undefined,
+        deductionItems: heads.length ? heads.filter((h) => h.kind === "deduction").map(({ head, amount }) => ({ head, amount })) : undefined,
+        workingDays: daysInMonth,
+        unpaidDays: unpaidByTeacher.get(String(t._id)) || 0,
+        paymentMethod: t.paymentMethod || (t.bankAccount ? "bank" : "cash"),
+        status: "pending",
+        branchCode: t.branchCode,
+      });
+      const name = `${t.firstName} ${t.lastName}`;
+      if (!parsed.success) {
+        failed.push({ name, error: parsed.error.issues[0]?.message || "Invalid salary details" });
+        continue;
+      }
+      try {
+        await this.createPayslip(parsed.data);
+        created.push(name);
+      } catch (e) {
+        failed.push({ name, error: (e as Error).message });
+      }
+    }
+    return { month, created: created.length, skipped: done.size, failed, names: created };
+  },
+
+  /** Everything the printed salary slip needs: employee, itemised pay, year-to-date and letterhead. */
+  async payslipForPrint(id: string) {
+    await dbConnect();
+    const slip = await Payslip.findById(id).lean();
+    if (!slip) throw new ServiceError("NOT_FOUND", "Payslip not found", 404);
+    const teacher = await Teacher.findById(slip.teacherId)
+      .select("firstName lastName employeeId designation department cnic taxNumber joinDate bankName bankAccount branchCode employmentType")
+      .lean();
+    const cfg = await salaryTaxService.config();
+    const year = taxYearOf(slip.month, cfg);
+    const months = taxYearMonths(year, cfg).filter((m) => m <= slip.month);
+    const [ytdSlips, head] = await Promise.all([
+      Payslip.find({ teacherId: slip.teacherId, month: { $in: months } }).select("basic allowances incomeTax net").lean(),
+      letterhead(slip.branchCode || teacher?.branchCode),
+    ]);
+    const sum = (f: (p: (typeof ytdSlips)[number]) => number) => Math.round(ytdSlips.reduce((t, p) => t + f(p), 0) * 100) / 100;
+    return {
+      payslip: slip,
+      teacher: teacher
+        ? {
+            name: `${teacher.firstName} ${teacher.lastName}`,
+            employeeId: teacher.employeeId,
+            designation: teacher.designation || "Teacher",
+            department: teacher.department || "",
+            cnic: teacher.cnic || "",
+            taxNumber: teacher.taxNumber || "",
+            joinDate: teacher.joinDate || null,
+            bankName: teacher.bankName || "",
+            bankAccount: teacher.bankAccount || "",
+            employmentType: teacher.employmentType || "",
+          }
+        : null,
+      ytd: {
+        taxYear: taxYearLabel(year, cfg),
+        gross: sum((p) => (p.basic || 0) + (p.allowances || 0)),
+        tax: sum((p) => p.incomeTax || 0),
+        net: sum((p) => p.net || 0),
+      },
+      school: head,
+    };
   },
 
   async payrollSummary() {

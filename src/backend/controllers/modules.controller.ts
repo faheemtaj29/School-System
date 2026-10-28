@@ -577,6 +577,37 @@ export const hrController = {
       return fromServiceError(e);
     }
   },
+  /** POST { month: "YYYY-MM", branchCode? } — this month's payslips for all active staff. */
+  async generatePayroll(req: Request) {
+    const { error } = await requireAuth(["admin"]);
+    if (error) return error;
+    try {
+      const body = await req.json().catch(() => ({}));
+      const month = String(body?.month || "");
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return jsonError("Month must use YYYY-MM format.");
+      return jsonOk(await hrService.generateMonth(month, body?.branchCode || null));
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+  /** GET — the salary slip for printing; a teacher may only open their own. */
+  async payslipPrint(_: Request, ctx: Ctx) {
+    const { session, error } = await requireAuth(["admin", "teacher"]);
+    if (error) return error;
+    try {
+      const { id } = await ctx.params;
+      if (!isValidObjectId(id)) return jsonError("Invalid record ID.", 400);
+      const data = await hrService.payslipForPrint(id);
+      if (session!.role === "teacher") {
+        const { resolveTeacher } = await import("@/backend/lib/portal");
+        const me = await resolveTeacher(session!);
+        if (!me || String(me._id) !== String(data.payslip.teacherId)) return jsonError("Forbidden", 403);
+      }
+      return jsonOk(data);
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
   async removePayslip(_: Request, ctx: Ctx) {
     const { error } = await requireAuth(["admin"]);
     if (error) return error;

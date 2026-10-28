@@ -38,6 +38,20 @@ const LeaveSchema = new Schema<ILeaveRequest>(
 export const LeaveRequest =
   models.LeaveRequest || model<ILeaveRequest>("LeaveRequest", LeaveSchema);
 
+/** One named amount on a payslip, e.g. House Rent 8,000 or EOBI 370. */
+export interface IPayLine {
+  head: string;
+  amount: number;
+}
+
+const PayLineSchema = new Schema<IPayLine>(
+  {
+    head: { type: String, required: true, trim: true },
+    amount: { type: Number, required: true, min: 0 },
+  },
+  { _id: false }
+);
+
 export interface IPayslip {
   teacherId: Types.ObjectId;
   month: string;
@@ -50,6 +64,13 @@ export interface IPayslip {
   /** Salary income tax withheld this month. */
   incomeTax?: number;
   deductions: number;
+  /** Itemised allowances (their total is `allowances`) and deductions (total is `deductions`). */
+  earnings?: IPayLine[];
+  deductionItems?: IPayLine[];
+  /** Days in the pay period and days without pay (absent / unpaid leave). */
+  workingDays?: number;
+  unpaidDays?: number;
+  paymentMethod?: "bank" | "cash";
   net: number;
   status: "draft" | "paid" | "pending";
   paidOn?: Date;
@@ -69,6 +90,11 @@ const PayslipSchema = new Schema<IPayslip>(
     taxableIncome: { type: Number, default: 0, min: 0 },
     incomeTax: { type: Number, default: 0, min: 0 },
     deductions: { type: Number, default: 0 },
+    earnings: { type: [PayLineSchema], default: undefined },
+    deductionItems: { type: [PayLineSchema], default: undefined },
+    workingDays: { type: Number, min: 0 },
+    unpaidDays: { type: Number, min: 0, default: 0 },
+    paymentMethod: { type: String, enum: ["bank", "cash"] },
     net: { type: Number, required: true },
     status: {
       type: String,

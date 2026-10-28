@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { PersonPhoto, savePickedPhoto } from "@/components/PersonPhoto";
+import { DEDUCTION_HEADS, EARNING_HEADS, SalaryLines, cleanLines, lineTotal, type PayLine } from "@/components/hr/SalaryLines";
 import { Field, ModalForm, OptionSelect, inputClass } from "@/components/ui";
 import {
   ClassItem,
@@ -582,6 +583,10 @@ const teacherEmpty = {
   emergencyPhone: "",
   basicSalary: "",
   allowances: "",
+  earningHeads: [] as PayLine[],
+  deductionHeads: [] as PayLine[],
+  employmentType: "",
+  paymentMethod: "",
   bankName: "",
   bankAccount: "",
   status: "active",
@@ -631,6 +636,15 @@ export function TeacherForm({
         emergencyPhone: initial.emergencyPhone != null ? String(initial.emergencyPhone) : "",
         basicSalary: initial.basicSalary != null ? String(initial.basicSalary) : "",
         allowances: initial.allowances != null ? String(initial.allowances) : "",
+        // Teachers saved before salary heads existed show their allowance total as one line.
+        earningHeads: initial.salaryHeads?.length
+          ? initial.salaryHeads.filter((h) => h.kind === "earning").map(({ head, amount }) => ({ head, amount }))
+          : initial.allowances
+            ? [{ head: "Allowances", amount: initial.allowances }]
+            : [],
+        deductionHeads: (initial.salaryHeads || []).filter((h) => h.kind === "deduction").map(({ head, amount }) => ({ head, amount })),
+        employmentType: initial.employmentType ?? "",
+        paymentMethod: initial.paymentMethod ?? "",
         bankName: initial.bankName != null ? String(initial.bankName) : "",
         bankAccount: initial.bankAccount != null ? String(initial.bankAccount) : "",
         status: initial.status,
@@ -665,7 +679,8 @@ export function TeacherForm({
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
-    const { idMode, ...rest } = form;
+    const { idMode, earningHeads, deductionHeads, allowances: _allowances, ...rest } = form;
+    void _allowances;
     // Empty optional fields are left out so they don't fail number / choice checks.
     const cleaned = Object.fromEntries(
       Object.entries(rest).filter(([, v]) => !(typeof v === "string" && v.trim() === ""))
@@ -674,6 +689,10 @@ export function TeacherForm({
       ...cleaned,
       subjects: form.subjects,
       classes: form.classes,
+      salaryHeads: [
+        ...cleanLines(earningHeads).map((l) => ({ ...l, kind: "earning" as const })),
+        ...cleanLines(deductionHeads).map((l) => ({ ...l, kind: "deduction" as const })),
+      ],
       employeeId: idMode === "auto" && !initial ? "" : form.employeeId,
     };
     const res = await fetch(initial ? `/api/teachers/${initial._id}` : "/api/teachers", {
@@ -856,8 +875,21 @@ export function TeacherForm({
         <Field label="Basic Salary (monthly)">
           <input type="number" min={0} className={inputClass} value={form.basicSalary} onChange={(e) => setForm({ ...form, basicSalary: e.target.value })} />
         </Field>
-        <Field label="Allowances (monthly)">
-          <input type="number" min={0} className={inputClass} value={form.allowances} onChange={(e) => setForm({ ...form, allowances: e.target.value })} />
+        <Field label="Employment Type">
+          <select className={inputClass} value={form.employmentType} onChange={(e) => setForm({ ...form, employmentType: e.target.value })}>
+            <option value="">—</option>
+            <option value="permanent">Permanent</option>
+            <option value="contract">Contract</option>
+            <option value="probation">Probation</option>
+            <option value="visiting">Visiting</option>
+          </select>
+        </Field>
+        <Field label="Salary Paid By">
+          <select className={inputClass} value={form.paymentMethod} onChange={(e) => setForm({ ...form, paymentMethod: e.target.value })}>
+            <option value="">Bank if an account is given, else cash</option>
+            <option value="bank">Bank transfer</option>
+            <option value="cash">Cash</option>
+          </select>
         </Field>
         <Field label="Bank Name">
           <input className={inputClass} value={form.bankName} onChange={(e) => setForm({ ...form, bankName: e.target.value })} />
@@ -865,6 +897,27 @@ export function TeacherForm({
         <Field label="Bank Account / IBAN">
           <input className={inputClass} value={form.bankAccount} onChange={(e) => setForm({ ...form, bankAccount: e.target.value })} />
         </Field>
+      </div>
+      <div className="pay-lines-grid">
+        <SalaryLines
+          title="Monthly allowances"
+          lines={form.earningHeads}
+          onChange={(earningHeads) => setForm({ ...form, earningHeads })}
+          suggestions={EARNING_HEADS}
+        />
+        <SalaryLines
+          title="Fixed monthly deductions"
+          lines={form.deductionHeads}
+          onChange={(deductionHeads) => setForm({ ...form, deductionHeads })}
+          suggestions={DEDUCTION_HEADS}
+        />
+      </div>
+      <div className="pay-preview">
+        <span>Basic <b>{(Number(form.basicSalary) || 0).toLocaleString("en-IN")}</b></span>
+        <span>+ Allowances <b>{lineTotal(form.earningHeads).toLocaleString("en-IN")}</b></span>
+        <span>= Gross <b>{((Number(form.basicSalary) || 0) + lineTotal(form.earningHeads)).toLocaleString("en-IN")}</b></span>
+        <span>− Fixed deductions <b>{lineTotal(form.deductionHeads).toLocaleString("en-IN")}</b></span>
+        <span style={{ color: "var(--text-dim)" }}>Income tax is added on each payslip from the tax slabs.</span>
       </div>
 
       <div className="form-section-title">Subject &amp; Class Assignment</div>
