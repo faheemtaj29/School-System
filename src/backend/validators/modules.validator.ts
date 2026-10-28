@@ -166,7 +166,8 @@ export const accountSchema = z.object({
   isCashBank: z.boolean().default(false),
   isActive: z.boolean().default(true),
   openingBalance: z.coerce.number().min(0).default(0),
-  openingBalanceSide: z.enum(["debit", "credit"]).default("debit"),
+  /** Omitted = the account's normal side (from its type). */
+  openingBalanceSide: z.enum(["debit", "credit"]).optional(),
 });
 
 const voucherLineSchema = z

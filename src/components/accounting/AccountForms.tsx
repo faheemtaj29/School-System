@@ -187,6 +187,15 @@ export function PartyForm({
 
 const NEW_HEAD = "__new_head__";
 
+/** What the opening balance means for each kind of account, in plain words. */
+const OPENING_HINT: Partial<Record<AccountType, string>> = {
+  asset: "What you have or are owed today — cash in hand, bank balance, money others owe you, or the value of the item.",
+  liability: "What you owe today — unpaid bills, loans, or advances received.",
+  equity: "Capital put into the business so far.",
+  income: "Usually left at 0 — income is recorded through vouchers.",
+  expense: "Usually left at 0 — expenses are recorded through vouchers.",
+};
+
 export function NewAccountForm({
   accounts,
   initialPath = [],
@@ -214,7 +223,6 @@ export function NewAccountForm({
   const [manual, setManual] = useState(false);
   const [code, setCode] = useState("");
   const [opening, setOpening] = useState("");
-  const [sideChoice, setOpeningSide] = useState<"debit" | "credit" | null>(null);
   const [details, setDetails] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -234,8 +242,8 @@ export function NewAccountForm({
   const isPostingNew = newLevel === 5;
   const kind: AccountKind = isPostingNew ? kindForGroup(parent?.code) : "general";
   const autoCode = nextCode(accounts, parent);
-  // Opening balance side follows the account's normal side unless the user picks one.
-  const openingSide = sideChoice || (newType === "asset" || newType === "expense" ? "debit" : "credit");
+  // No debit/credit question: the server puts the opening balance on the account's normal side.
+  const openingHint = OPENING_HINT[newType] || "";
 
   // Partners: show how much of the 100% profit share is already given out.
   useEffect(() => {
@@ -316,7 +324,6 @@ export function NewAccountForm({
             ? { ...rest, ...(rest.sharePercent ? { sharePercent: Number(rest.sharePercent) } : {}) }
             : undefined,
           openingBalance: isPostingNew ? Number(opening) || 0 : 0,
-          openingBalanceSide: openingSide,
         },
       });
       setMsg({ ok: true, text: `Created ${data.account.code} · ${data.account.name}` });
@@ -422,7 +429,7 @@ export function NewAccountForm({
             {isPostingNew
               ? "Posting account — this is what you pick in vouchers."
               : "Group heading — it holds other accounts below it. Vouchers post to level-5 accounts."}
-            {kind === "partner" ? " A drawings account for this partner is created too. Opening capital is normally a Credit." : ""}
+            {kind === "partner" ? " A drawings account for this partner is created too. Enter the capital they have put in as the opening balance." : ""}
           </p>
           <div className="af-grid">
             <label className="af-wide">
@@ -496,13 +503,7 @@ export function NewAccountForm({
                   <span>Opening balance</span>
                   <input type="number" min={0} className="qb-in qb-r" value={opening} onChange={(e) => setOpening(e.target.value)} placeholder="0" />
                 </label>
-                <label>
-                  <span>Side</span>
-                  <select className="qb-in" value={openingSide} onChange={(e) => setOpeningSide(e.target.value as "debit" | "credit")}>
-                    <option value="debit">Debit</option>
-                    <option value="credit">Credit</option>
-                  </select>
-                </label>
+                <p className="af-note">{openingHint}</p>
               </>
             ) : null}
           </div>

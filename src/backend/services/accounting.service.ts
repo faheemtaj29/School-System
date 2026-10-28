@@ -790,6 +790,9 @@ export const accountingService = {
         throw new ServiceError("VALIDATION", `Shares would total ${round(used + share)}% — only ${round(100 - used)}% is left`, 400);
       }
     }
+    // Debit/credit is never asked: it follows the account type (assets and expenses are
+    // debit-natured, everything else credit), and so does the side of the opening balance.
+    const nature = data.type === "asset" || data.type === "expense" ? "debit" : "credit";
     const created = await Account.create({
       ...data,
       code,
@@ -797,7 +800,8 @@ export const accountingService = {
       parentCode,
       bankName: data.isCashBank ? data.bankName || undefined : undefined,
       accountNumber: data.isCashBank ? data.accountNumber || undefined : undefined,
-      nature: data.type === "asset" || data.type === "expense" ? "debit" : "credit",
+      nature,
+      openingBalanceSide: data.openingBalanceSide || nature,
     });
     if (isPartner && (await Account.exists({ code: DRAWINGS_GROUP }))) {
       await Account.create({
