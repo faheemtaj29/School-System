@@ -5,7 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { SalaryTaxSettings } from "@/components/hr/SalaryTaxSettings";
 import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import { EmptyState, Field, Hero, ModalForm, NameCell, Panel, StatusBadge, inputClass } from "@/components/ui";
-import { TeacherItem, formatNumber, fullName, prettyDate, toDateInput } from "@/lib/types";
+import { TeacherItem, formatNumber, fullName, prettyDate, toDateInput, photoSrc } from "@/lib/types";
 
 type Leave = {
   _id: string;
@@ -273,7 +273,7 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
                         <td>
                           {t ? (
                             <Link href={portal === "teacher" ? "/teachers/me" : `/teachers/${t._id}`} className="name-link">
-                              <NameCell name={fullName(t)} />
+                              <NameCell name={fullName(t)} photo={photoSrc("teacher", t)} />
                             </Link>
                           ) : "—"}
                         </td>
@@ -320,7 +320,7 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
                     const t = typeof l.teacherId === "object" ? l.teacherId : null;
                     return (
                       <tr key={l._id}>
-                        <td><NameCell name={t ? fullName(t) : "—"} /></td>
+                        <td><NameCell name={t ? fullName(t) : "—"} photo={t ? photoSrc("teacher", t) : null} /></td>
                         <td style={{ textTransform: "capitalize" }}>{l.leaveType}</td>
                         <td>{prettyDate(l.fromDate)} → {prettyDate(l.toDate)}</td>
                         <td className="num">{l.days}</td>

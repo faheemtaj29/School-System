@@ -40,7 +40,7 @@ export const classService = {
   async list() {
     await ensureCurriculum();
     return ClassModel.find()
-      .populate("classTeacher", "firstName lastName employeeId")
+      .populate("classTeacher", "firstName lastName employeeId photoUpdatedAt")
       .populate("subjects", "name code credits stage")
       .sort({ level: 1, name: 1, section: 1 })
       .lean();
@@ -49,7 +49,7 @@ export const classService = {
   async getById(id: string) {
     await dbConnect();
     const item = await ClassModel.findById(id)
-      .populate("classTeacher", "firstName lastName employeeId")
+      .populate("classTeacher", "firstName lastName employeeId photoUpdatedAt")
       .populate("subjects", "name code credits stage")
       .lean();
     if (!item) throw new ServiceError("NOT_FOUND", "Class not found", 404);

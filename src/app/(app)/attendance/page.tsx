@@ -12,6 +12,7 @@ import {
   labelOfClass,
   prettyDate,
   toDateInput,
+  photoSrc,
 } from "@/lib/types";
 
 type Status = "present" | "absent" | "late" | "excused";
@@ -249,6 +250,7 @@ export default function AttendancePage() {
                     <Link href={`/students/${r.studentId}`} className="name-link" title="Open profile: full attendance record">
                       <NameCell
                         name={student ? fullName(student) : r.studentId}
+                        photo={student ? photoSrc("student", student) : null}
                         sub={student?.rollNumber ? `Roll ${student.rollNumber}` : undefined}
                       />
                     </Link>

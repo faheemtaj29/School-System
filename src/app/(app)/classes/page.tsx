@@ -11,6 +11,7 @@ import {
   SubjectItem,
   TeacherItem,
   idOf,
+  photoSrc,
 } from "@/lib/types";
 
 type SessionItem = {
@@ -177,6 +178,32 @@ export default function ClassesPage() {
     setMessage(
       `Imported ${done.subjects} subjects · ${done.classesCreated} classes created, ${done.classesUpdated} refreshed for ${done.academicYear}.`
     );
+    load();
+  }
+
+  /** Assign (or clear) the class teacher straight from the card. */
+  async function setClassTeacher(c: ClassItem, teacherId: string) {
+    const res = await fetch(`/api/classes/${c._id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: c.name,
+        section: c.section,
+        academicYear: c.academicYear,
+        room: c.room || undefined,
+        capacity: c.capacity,
+        branchCode: (c as { branchCode?: string }).branchCode || undefined,
+        stage: c.stage || undefined,
+        stream: c.stream || undefined,
+        level: c.level,
+        subjects: (c.subjects ?? []).map((s) => s._id),
+        classTeacher: teacherId || null,
+      }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      alert(d.error || "Could not assign the class teacher");
+    }
     load();
   }
 
@@ -520,18 +547,23 @@ export default function ClassesPage() {
                     </div>
                     <div className="cc-teacher">
                       <MiniAvatar
-                        name={
-                          c.classTeacher
-                            ? `${c.classTeacher.firstName} ${c.classTeacher.lastName}`
-                            : "N A"
-                        }
+                        name={c.classTeacher ? `${c.classTeacher.firstName} ${c.classTeacher.lastName}` : "?"}
+                        photo={c.classTeacher ? photoSrc("teacher", c.classTeacher) : null}
                       />
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: 12 }}>
-                          {c.classTeacher
-                            ? `${c.classTeacher.firstName} ${c.classTeacher.lastName}`
-                            : "Not assigned"}
-                        </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <select
+                          className="cc-teacher-pick"
+                          value={c.classTeacher?._id || ""}
+                          onChange={(e) => setClassTeacher(c, e.target.value)}
+                          title="Class teacher"
+                        >
+                          <option value="">Not assigned</option>
+                          {teachers.map((t) => (
+                            <option key={t._id} value={t._id}>
+                              {t.firstName} {t.lastName}
+                            </option>
+                          ))}
+                        </select>
                         <div style={{ fontSize: 10.5, color: "var(--text-dim)" }}>Class Teacher</div>
                       </div>
                     </div>

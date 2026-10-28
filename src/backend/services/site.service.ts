@@ -29,11 +29,15 @@ function normalizeCnic(value?: string) {
 export const siteService = {
   async content() {
     await dbConnect();
+    const settings = await Settings.findOne().select("schoolName").lean();
     let doc = await SiteContent.findOne().lean();
     if (!doc) {
-      const created = await SiteContent.create({});
+      const created = await SiteContent.create(settings?.schoolName ? { brandName: settings.schoolName } : {});
       doc = created.toObject();
     }
+    // Until the website name is edited, follow the school name from Settings.
+    const factory = SiteContent.schema.path("brandName").options.default;
+    if (settings?.schoolName && doc.brandName === factory) doc = { ...doc, brandName: settings.schoolName };
     return doc;
   },
 

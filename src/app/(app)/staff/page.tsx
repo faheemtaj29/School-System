@@ -9,6 +9,7 @@ import {
   NameCell,
   Panel,
   PortalAccessButton,
+  RowMenu,
   StatusBadge,
   inputClass,
 } from "@/components/ui";
@@ -168,7 +169,7 @@ export default function StaffPage() {
                 {filtered.length ? filtered.map((s) => (
                   <tr key={s._id}>
                     <td>
-                      <NameCell name={fullName(s)} sub={s.email} />
+                      <NameCell name={fullName(s)} sub={[s.phone, s.email].filter(Boolean).join(" · ")} />
                     </td>
                     <td className="num">{s.employeeId}</td>
                     <td>{s.department}</td>
@@ -188,19 +189,12 @@ export default function StaffPage() {
                         >
                           Edit
                         </button>
-                        <PortalAccessButton
-                          kind="staff"
-                          id={s._id}
-                          email={s.email}
-                          name={fullName(s)}
-                        />
-                        <button
-                          type="button"
-                          className="link-btn danger"
-                          onClick={() => remove(s._id)}
-                        >
-                          Delete
-                        </button>
+                        <RowMenu>
+                          <PortalAccessButton kind="staff" id={s._id} email={s.email} name={fullName(s)} />
+                          <button type="button" className="link-btn danger" onClick={() => remove(s._id)}>
+                            Delete
+                          </button>
+                        </RowMenu>
                       </div>
                     </td>
                   </tr>

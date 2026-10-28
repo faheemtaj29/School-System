@@ -80,7 +80,7 @@ export const hrService = {
   async listLeaves() {
     await dbConnect();
     return LeaveRequest.find()
-      .populate("teacherId", "firstName lastName employeeId branchCode")
+      .populate("teacherId", "firstName lastName employeeId branchCode photoUpdatedAt")
       .sort({ createdAt: -1 })
       .lean();
   },
@@ -88,7 +88,7 @@ export const hrService = {
   async listLeavesForTeacher(teacherId: string) {
     await dbConnect();
     return LeaveRequest.find({ teacherId })
-      .populate("teacherId", "firstName lastName employeeId branchCode")
+      .populate("teacherId", "firstName lastName employeeId branchCode photoUpdatedAt")
       .sort({ createdAt: -1 })
       .lean();
   },
@@ -148,7 +148,7 @@ export const hrService = {
   async listPayslips() {
     await dbConnect();
     return Payslip.find()
-      .populate("teacherId", "firstName lastName employeeId email branchCode")
+      .populate("teacherId", "firstName lastName employeeId email branchCode photoUpdatedAt")
       .sort({ month: -1 })
       .lean();
   },
@@ -156,7 +156,7 @@ export const hrService = {
   async listPayslipsForTeacher(teacherId: string) {
     await dbConnect();
     return Payslip.find({ teacherId })
-      .populate("teacherId", "firstName lastName employeeId email branchCode")
+      .populate("teacherId", "firstName lastName employeeId email branchCode photoUpdatedAt")
       .sort({ month: -1 })
       .lean();
   },

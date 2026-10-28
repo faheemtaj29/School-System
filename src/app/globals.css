@@ -1024,6 +1024,11 @@ textarea.inp {
   background: var(--jade-light);
   color: var(--jade-dark);
 }
+.alert.warn,
+.badge.warn {
+  background: var(--saffron-light);
+  color: #96650f;
+}
 .check-list {
   max-height: 168px;
   overflow-y: auto;
@@ -3059,3 +3064,15 @@ table.qbp-je { width: 100%; border-collapse: collapse; margin-top: 22px; font-si
 .form-photo-row .pp-actions { justify-content: center; }
 .form-photo-note { display: grid; gap: 4px; font-size: 12px; color: var(--text-dim); max-width: 420px; }
 .form-photo-note b { color: var(--text); font-size: 13px; }
+
+/* Subjects: teacher chips + inline assign */
+.sub-teachers { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sub-teacher { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 2px; border: 1px solid var(--line); border-radius: 99px; font-size: 12px; font-weight: 600; background: var(--card); }
+.sub-teacher .mini-avatar { width: 22px; height: 22px; font-size: 9px; }
+.sub-teacher button { border: 0; background: none; color: var(--text-dim); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 4px; }
+.sub-teacher button:hover { color: var(--red); }
+.sub-assign { border: 1px dashed var(--line); background: transparent; border-radius: 99px; padding: 3px 8px; font-size: 12px; color: var(--jade-dark); cursor: pointer; }
+.cc-teacher-pick { width: 100%; border: 0; background: transparent; font: inherit; font-weight: 600; font-size: 12px; color: var(--text); padding: 0; cursor: pointer; }
+.cc-teacher-pick:hover { color: var(--jade-dark); }
+.stat-link { color: var(--jade-dark); text-decoration: none; font-family: var(--font-sans, inherit); font-weight: 700; }
+.stat-link:hover { text-decoration: underline; }

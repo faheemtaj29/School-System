@@ -22,7 +22,7 @@ export default function StudentsPage() {
   const [students, setStudents] = useState<StudentItem[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [branches, setBranches] = useState<{ code: string; name: string }[]>([]);
-  const [schoolName, setSchoolName] = useState("Sabaq Model School");
+  const [schoolName, setSchoolName] = useState("");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<StudentItem | null>(null);
   const [filterClass, setFilterClass] = useState("");

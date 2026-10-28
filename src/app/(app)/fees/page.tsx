@@ -22,6 +22,7 @@ import {
   labelOfClass,
   prettyDate,
   toDateInput,
+  photoSrc,
 } from "@/lib/types";
 
 type MainTab = "generate" | "structure" | "received" | "pending" | "all";
@@ -192,6 +193,7 @@ export default function FeesPage() {
           <td>
             <NameCell
               name={s ? fullName(s) : "Unknown"}
+              photo={s ? photoSrc("student", s) : null}
               sub={s ? `${s.admissionNo} · ${labelOfClass(s.classId as never)}` : undefined}
             />
           </td>

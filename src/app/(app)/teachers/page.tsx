@@ -40,7 +40,7 @@ export default function TeachersPage() {
   }, [load]);
 
   async function remove(id: string) {
-    if (!confirm("Delete this staff member?")) return;
+    if (!confirm("Delete this teacher?")) return;
     await fetch(`/api/teachers/${id}`, { method: "DELETE" });
     load();
   }
@@ -55,9 +55,9 @@ export default function TeachersPage() {
   return (
     <>
       <Hero
-        title="Teachers & Staff"
-        subtitle={`${teachers.length} staff member${teachers.length !== 1 ? "s" : ""} · Teaching faculty`}
-        actionLabel="Add Staff"
+        title="Teachers"
+        subtitle={`${teachers.length} teacher${teachers.length !== 1 ? "s" : ""} · teaching faculty (clerks, accountants and other staff are under Campus Staff)`}
+        actionLabel="Add Teacher"
         onAction={() => {
           setEditing(null);
           setOpen(true);

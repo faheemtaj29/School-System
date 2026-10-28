@@ -17,7 +17,7 @@ import type { SessionUser } from "@/backend/types";
 const studentPopulate = {
   path: "studentId",
   select:
-    "firstName lastName admissionNo classId branchCode discountType discountPercent",
+    "firstName lastName admissionNo classId branchCode discountType discountPercent photoUpdatedAt",
   populate: { path: "classId", select: "name section branchCode" },
 } as const;
 

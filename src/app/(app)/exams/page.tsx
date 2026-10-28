@@ -15,6 +15,7 @@ import {
   idOf,
   labelOfClass,
   prettyDate,
+  photoSrc,
 } from "@/lib/types";
 
 /* ─── local types ─────────────────────────────────────────────── */
@@ -944,7 +945,7 @@ export default function ExamsPage() {
                     const c = (r as { components?: Partial<MarkComponents> }).components;
                     return (
                       <tr key={`${selected?._id}-${i}`}>
-                        <td><NameCell name={student ? fullName(student) : "Unknown"} sub={student?.admissionNo} /></td>
+                        <td><NameCell name={student ? fullName(student) : "Unknown"} sub={student?.admissionNo} photo={student ? photoSrc("student", student) : null} /></td>
                         <td className="num">{c?.theory ?? "—"}</td>
                         <td className="num">{c?.viva ?? "—"}</td>
                         <td className="num">{c?.assignment ?? "—"}</td>

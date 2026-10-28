@@ -51,6 +51,25 @@ export const subjectController = {
     }
   },
 
+  /** POST /api/subjects/[id]  { action: "teachers", teacherIds } | { action: "merge", into } */
+  async action(req: Request, ctx: Ctx) {
+    const { error } = await requireAuth(["admin"]);
+    if (error) return error;
+    try {
+      const { id } = await ctx.params;
+      const body = await req.json();
+      if (body.action === "teachers" && Array.isArray(body.teacherIds)) {
+        return jsonOk(await subjectService.setTeachers(id, body.teacherIds.map(String)));
+      }
+      if (body.action === "merge" && typeof body.into === "string") {
+        return jsonOk(await subjectService.merge(id, body.into));
+      }
+      return jsonError("Unknown action");
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
   async remove(_: Request, ctx: Ctx) {
     const { error } = await requireAuth(["admin"]);
     if (error) return error;

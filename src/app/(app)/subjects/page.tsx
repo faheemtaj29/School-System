@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EmptyState, Hero, NameCell, Panel } from "@/components/ui";
+import { EmptyState, Hero, MiniAvatar, Panel, RowMenu } from "@/components/ui";
 import { SubjectForm } from "@/components/forms/SchoolForms";
 import {
   ClassItem,
@@ -11,6 +11,7 @@ import {
   TeacherItem,
   fullName,
   idOf,
+  photoSrc,
 } from "@/lib/types";
 
 export default function SubjectsPage() {
@@ -21,6 +22,7 @@ export default function SubjectsPage() {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<SubjectItem | null>(null);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = useCallback(async () => {
     const [s, t, c] = await Promise.all([
@@ -38,9 +40,35 @@ export default function SubjectsPage() {
   }, [load]);
 
   async function remove(id: string) {
-    if (!confirm("Delete this subject?")) return;
-    await fetch(`/api/subjects/${id}`, { method: "DELETE" });
+    if (!confirm("Delete this subject? It will be removed from every class and teacher.")) return;
+    const res = await fetch(`/api/subjects/${id}`, { method: "DELETE" });
+    const d = await res.json().catch(() => ({}));
+    setNotice(res.ok ? { ok: true, text: "Subject deleted." } : { ok: false, text: d.error || "Could not delete" });
     load();
+  }
+
+  async function action(id: string, body: Record<string, unknown>) {
+    const res = await fetch(`/api/subjects/${id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) setNotice({ ok: false, text: d.error || "Could not save" });
+    return res.ok ? d : null;
+  }
+
+  async function assignTeachers(subjectId: string, ids: string[]) {
+    if (await action(subjectId, { action: "teachers", teacherIds: ids })) load();
+  }
+
+  async function merge(from: SubjectItem, into: SubjectItem) {
+    if (!confirm(`Merge ${from.name} (${from.code}) into ${into.name} (${into.code})?\nIts classes and teachers move to ${into.code}, then ${from.code} is deleted.`)) return;
+    const d = await action(from._id, { action: "merge", into: into._id });
+    if (d) {
+      setNotice({ ok: true, text: `Merged ${from.code} into ${into.code} — ${d.classes} class(es), ${d.teachers} teacher(s) moved.` });
+      load();
+    }
   }
 
   function teachersFor(subjectId: string) {
@@ -48,6 +76,19 @@ export default function SubjectsPage() {
       (t.subjects as SubjectItem[]).some((s) => idOf(s as never) === subjectId)
     );
   }
+
+  /** Subjects that share a name (case-insensitive) — usually an accidental duplicate. */
+  const twins = useMemo(() => {
+    const byName = new Map<string, SubjectItem[]>();
+    for (const sub of subjects) {
+      const key = sub.name.trim().toLowerCase();
+      byName.set(key, [...(byName.get(key) ?? []), sub]);
+    }
+    return [...byName.values()].filter((list) => list.length > 1);
+  }, [subjects]);
+  const twinsOf = (sub: SubjectItem) =>
+    twins.find((list) => list.some((x) => x._id === sub._id))?.filter((x) => x._id !== sub._id) ?? [];
+  const unassigned = subjects.filter((sub) => !teachersFor(sub._id).length).length;
 
   /** How many classes teach each subject. */
   const usage = useMemo(() => {
@@ -81,7 +122,7 @@ export default function SubjectsPage() {
     <>
       <Hero
         title="Subjects"
-        subtitle={`${subjects.length} subjects across ${classes.length} classes`}
+        subtitle={`${subjects.length} subjects across ${classes.length} classes${unassigned ? ` · ${unassigned} without a teacher` : ""}`}
         actionLabel="Add Subject"
         onAction={() => {
           setEditing(null);
@@ -113,6 +154,15 @@ export default function SubjectsPage() {
         </select>
       </div>
 
+      {notice ? <div className={`alert ${notice.ok ? "ok" : "err"}`}>{notice.text}</div> : null}
+      {twins.length ? (
+        <div className="alert warn">
+          Possible duplicates:{" "}
+          {twins.map((list) => `${list[0].name} (${list.map((x) => x.code).join(", ")})`).join(" · ")}. Use{" "}
+          <b>More ▾ → Merge</b> on the one to remove; its classes and teachers move to the other.
+        </div>
+      ) : null}
+
       {!groups.length ? (
         <EmptyState message="No subjects match. Import the curriculum from Classes → Curriculum Library." />
       ) : (
@@ -135,14 +185,45 @@ export default function SubjectsPage() {
                     const mapped = teachersFor(s._id);
                     return (
                       <tr key={s._id}>
-                        <td style={{ fontWeight: 600 }}>{s.name}</td>
+                        <td>
+                          <b>{s.name}</b>
+                          {twinsOf(s).length ? <span className="badge warn" style={{ marginLeft: 8 }}>duplicate</span> : null}
+                        </td>
                         <td className="num">{s.code}</td>
                         <td>
-                          {mapped.length ? (
-                            <NameCell name={fullName(mapped[0])} />
-                          ) : (
-                            <span style={{ color: "var(--text-dim)" }}>Not assigned</span>
-                          )}
+                          <div className="sub-teachers">
+                            {mapped.map((t) => (
+                              <span key={t._id} className="sub-teacher">
+                                <MiniAvatar name={fullName(t)} photo={photoSrc("teacher", t)} />
+                                {fullName(t)}
+                                <button
+                                  type="button"
+                                  title="Remove"
+                                  onClick={() => assignTeachers(s._id, mapped.filter((x) => x._id !== t._id).map((x) => x._id))}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                            {teachers.length > mapped.length ? (
+                              <select
+                                className="sub-assign"
+                                value=""
+                                onChange={(e) => e.target.value && assignTeachers(s._id, [...mapped.map((x) => x._id), e.target.value])}
+                              >
+                                <option value="">{mapped.length ? "+ Add" : "+ Assign teacher"}</option>
+                                {teachers
+                                  .filter((t) => !mapped.some((x) => x._id === t._id))
+                                  .map((t) => (
+                                    <option key={t._id} value={t._id}>
+                                      {fullName(t)}
+                                    </option>
+                                  ))}
+                              </select>
+                            ) : !mapped.length ? (
+                              <span style={{ color: "var(--text-dim)" }}>Add staff first</span>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="num">{s.credits}</td>
                         <td className="num">{usage.get(s._id) ?? 0}</td>
@@ -158,13 +239,16 @@ export default function SubjectsPage() {
                             >
                               Edit
                             </button>
-                            <button
-                              type="button"
-                              className="link-btn danger"
-                              onClick={() => remove(s._id)}
-                            >
-                              Delete
-                            </button>
+                            <RowMenu>
+                              {twinsOf(s).map((t) => (
+                                <button key={t._id} type="button" className="link-btn" onClick={() => merge(s, t)}>
+                                  Merge into {t.code}
+                                </button>
+                              ))}
+                              <button type="button" className="link-btn danger" onClick={() => remove(s._id)}>
+                                Delete
+                              </button>
+                            </RowMenu>
                           </div>
                         </td>
                       </tr>

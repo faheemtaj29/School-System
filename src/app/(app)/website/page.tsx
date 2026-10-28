@@ -230,7 +230,7 @@ export default function WebsitePage() {
         <div className="pay-stat">
           <div className="tag">Public Site</div>
           <div className="num" style={{ fontSize: 16 }}>
-            <Link href="/" target="_blank">Open website →</Link>
+            <Link href="/" target="_blank" className="stat-link">Open website →</Link>
           </div>
         </div>
       </div>

@@ -46,6 +46,7 @@ export type ClassItem = {
     firstName: string;
     lastName: string;
     employeeId: string;
+    photoUpdatedAt?: string;
   } | null;
 };
 

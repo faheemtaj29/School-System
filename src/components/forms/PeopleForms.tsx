@@ -697,10 +697,10 @@ export function TeacherForm({
       open={open}
       onClose={onClose}
       onSubmit={onSubmit}
-      title={initial ? "Edit Staff Member" : "Add Staff Member"}
+      title={initial ? "Edit Teacher" : "Add Teacher"}
       subtitle="Assign related subjects and classes"
       wide
-      submitLabel={initial ? "Update Staff" : "Add Staff"}
+      submitLabel={initial ? "Update Teacher" : "Add Teacher"}
     >
       {error ? <div className="alert err">{error}</div> : null}
 
@@ -715,8 +715,8 @@ export function TeacherForm({
           onPicked={setPickedPhoto}
         />
         <div className="form-photo-note">
-          <b>Staff photo</b>
-          <span>Shown on the staff profile, staff list and ID card. It is resized automatically.</span>
+          <b>Teacher photo</b>
+          <span>Shown on the teacher profile, teacher list, payslips and ID card. It is resized automatically.</span>
         </div>
       </div>
 
