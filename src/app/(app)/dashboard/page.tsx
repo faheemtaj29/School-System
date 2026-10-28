@@ -132,6 +132,14 @@ type RoleData =
 
 export default function DashboardPage() {
   const [role, setRole] = useState<RoleData | null>(null);
+  // The active academic session (same as the top bar), not the calendar year.
+  const [sessionName, setSessionName] = useState("");
+  useEffect(() => {
+    fetch("/api/sessions")
+      .then((r) => r.json())
+      .then((d) => setSessionName(d.active?.name || ""))
+      .catch(() => {});
+  }, []);
   const [stats, setStats] = useState<Stats | null>(null);
   const [charts, setCharts] = useState<Charts | null>(null);
   const [recentStudents, setRecentStudents] = useState<RecentStudent[]>([]);
@@ -198,7 +206,7 @@ export default function DashboardPage() {
             {role?.role === "staff"
               ? "Campus operations — fees, store and daily workflows"
               : "All-in-one campus command center"}
-            <span className="live">SESSION {new Date().getFullYear()}</span>
+            {sessionName ? <span className="live">SESSION {sessionName}</span> : null}
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, position: "relative", zIndex: 1, flexWrap: "wrap" }}>

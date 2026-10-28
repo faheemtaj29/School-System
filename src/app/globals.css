@@ -76,7 +76,7 @@ svg.ico {
 
 /* ================= SIDEBAR ================= */
 .sidebar {
-  width: 236px;
+  width: 256px;
   background: var(--sidebar-bg);
   color: #cbd8d0;
   display: flex;
@@ -114,8 +114,8 @@ svg.ico {
 .brand-text small {
   display: block;
   font-family: var(--font-mono), monospace;
-  font-size: 8.5px;
-  color: #8aa096;
+  font-size: 9.5px;
+  color: #9fb4a9;
   letter-spacing: 1.1px;
   margin-top: 3px;
   font-weight: 400;
@@ -131,19 +131,21 @@ svg.ico {
 }
 .nav-label {
   font-family: var(--font-mono), monospace;
-  font-size: 9px;
-  letter-spacing: 1.3px;
-  color: #5d7267;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  color: #8fa89b;
   padding: 0 10px 8px;
   text-transform: uppercase;
 }
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   padding: 10px 12px;
-  font-size: 13.5px;
-  color: #afc1b7;
+  font-size: 15px;
+  font-weight: 500;
+  color: #dfe8e3;
   border-radius: 9px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
@@ -151,16 +153,20 @@ svg.ico {
   text-decoration: none;
 }
 .nav-item svg {
-  opacity: 0.75;
+  opacity: 0.9;
+  width: 19px;
+  height: 19px;
+  flex-shrink: 0;
 }
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #e8eee9;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
 }
 .nav-item.active {
-  background: rgba(232, 153, 46, 0.16);
-  color: #fbefd8;
-  font-weight: 600;
+  background: rgba(232, 153, 46, 0.2);
+  color: #fff6e6;
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--saffron);
 }
 .nav-item.active svg {
   opacity: 1;
@@ -197,29 +203,30 @@ svg.ico {
 }
 .nav-sublabel {
   font-family: var(--font-mono), monospace;
-  font-size: 9px;
+  font-size: 10px;
+  font-weight: 700;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: #7a9185;
+  color: #93ab9f;
   padding: 3px 8px;
 }
 .nav-subitem {
   display: block;
   text-decoration: none;
-  color: #afc1b7;
+  color: #d6e1db;
   border-radius: 7px;
-  font-size: 12.5px;
-  padding: 7px 9px;
+  font-size: 14px;
+  padding: 7px 10px;
   margin-bottom: 2px;
 }
 .nav-subitem:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #e8eee9;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
 }
 .nav-subitem.active {
-  background: rgba(232, 153, 46, 0.16);
-  color: #fbefd8;
-  font-weight: 600;
+  background: rgba(232, 153, 46, 0.2);
+  color: #fff6e6;
+  font-weight: 700;
 }
 
 .sidebar-foot {
@@ -3288,3 +3295,9 @@ table.rc2-table { width: 100%; border-collapse: collapse; font-variant-numeric: 
 .def-months { display: flex; flex-wrap: wrap; gap: 4px; }
 .def-months span { font-size: 10.5px; padding: 1px 7px; border-radius: 99px; background: var(--red-light); color: var(--red); white-space: nowrap; }
 tr.def-hot td { background: #fff6f5; }
+
+/* Phone: panel titles and their side notes wrap instead of running off the screen */
+@media (max-width: 640px) {
+  .panel-head { flex-wrap: wrap; align-items: center; }
+  .panel-head .meta { white-space: normal; max-width: 100%; }
+}

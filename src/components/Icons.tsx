@@ -48,10 +48,29 @@ export const AttendanceIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Exam paper on a clipboard with a tick. */
 export const ExamsIcon = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M4 19.5V6a2 2 0 0 1 2-2h11a1 1 0 0 1 1 1v13" />
-    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H18" />
+    <rect x="5" y="4" width="14" height="17" rx="2" />
+    <path d="M9 3h6v3H9z" />
+    <path d="M8.5 11h7M8.5 14.5h4" />
+    <path d="M13.5 17.5l1.5 1.5 3-3" />
+  </Svg>
+);
+
+/** Approvals: a circled tick. */
+export const ApprovalIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M8 12.5l2.7 2.7L16.5 9.5" />
+  </Svg>
+);
+
+/** Parent messages: a chat bubble. */
+export const MessageIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2Z" />
+    <path d="M8 8.5h8M8 12h5" />
   </Svg>
 );
 

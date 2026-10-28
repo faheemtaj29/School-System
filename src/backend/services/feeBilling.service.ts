@@ -175,6 +175,15 @@ export const feeBillingService = {
     const query: Record<string, unknown> = { "feeStructure.0": { $exists: true } };
     if (classIds?.length) query._id = { $in: classIds };
     const classes = await ClassModel.find(query).select("name section feeStructure").lean();
+    if (!classes.length) {
+      throw new ServiceError(
+        "VALIDATION",
+        classIds?.length
+          ? "The chosen class has no monthly fee set yet — set it under Fee Structure & Monthly Billing first"
+          : "No class has a monthly fee set yet — set it under Fee Structure & Monthly Billing first",
+        400
+      );
+    }
     // One batch for the whole run, so its challans can be printed / sent together afterwards.
     const issueBatch = newBatch();
 

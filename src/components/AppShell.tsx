@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import {
+  ApprovalIcon,
+  MessageIcon,
   AccountingIcon,
   AttendanceIcon,
   BellIcon,
@@ -55,8 +57,8 @@ const navGroups: NavGroup[] = [
       { href: "/portal", label: "My Children", Icon: StudentsIcon, roles: ["parent"] },
       { href: "/portal", label: "My Profile", Icon: StudentsIcon, roles: ["student"] },
       { href: "/reports", label: "Reports & Print", Icon: ReportsIcon, roles: ["admin", "teacher", "student", "parent"] },
-      { href: "/approvals", label: "Approvals", Icon: NoticeIcon, roles: ["admin", "staff", "teacher"] },
-      { href: "/messages", label: "Parent Messages", Icon: NoticeIcon, roles: ["admin", "staff", "teacher"] },
+      { href: "/approvals", label: "Approvals", Icon: ApprovalIcon, roles: ["admin", "staff", "teacher"] },
+      { href: "/messages", label: "Parent Messages", Icon: MessageIcon, roles: ["admin", "staff", "teacher"] },
     ],
   },
   {
