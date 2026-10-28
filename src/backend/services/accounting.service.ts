@@ -8,6 +8,7 @@ import { Account, AccountingCounter, Voucher } from "@/backend/models/Accounting
 import { LedgerEntry, type LedgerSource } from "@/backend/models/Ledger";
 import { Settings } from "@/backend/models/Settings";
 import { StockVoucher } from "@/backend/models/Inventory";
+import { Fee } from "@/backend/models/Fee";
 import { ServiceError } from "@/backend/types";
 import type { SessionUser } from "@/backend/types";
 import { recordAudit, getAuditTrail } from "@/backend/lib/audit";
@@ -2033,6 +2034,142 @@ export const accountingService = {
       to: range.to || null,
       ...header,
     };
+  },
+
+  /**
+   * Aging (QuickBooks "A/P Aging" / "A/R Aging") as of a date.
+   * Party accounts: payments settle the oldest bills first, and what is left is
+   * aged from the bill date. Students: unpaid fee vouchers aged from the due date.
+   */
+  async aging(params: { kind: "payable" | "receivable"; asOf?: string | null; branchCode?: string | null }) {
+    await ensureSeeded();
+    const asOf = rangeDates({ to: params.asOf || null }).to || new Date();
+    const payable = params.kind === "payable";
+    const DAY = 86400000;
+    const bucketOf = (date: Date | null) => {
+      if (!date) return "d90";
+      const days = Math.floor((asOf.getTime() - date.getTime()) / DAY);
+      if (days <= 0) return "current";
+      if (days <= 30) return "d30";
+      if (days <= 60) return "d60";
+      if (days <= 90) return "d90";
+      return "over90";
+    };
+    type Buckets = { current: number; d30: number; d60: number; d90: number; over90: number; total: number };
+    const empty = (): Buckets => ({ current: 0, d30: 0, d60: 0, d90: 0, over90: 0, total: 0 });
+    const rows: (Buckets & { code: string; name: string; group: string; oldest: string | null })[] = [];
+
+    const accounts = await Account.find({
+      isPosting: true,
+      $or: payable
+        ? [{ partyType: "supplier" }, { code: /^2103/ }]
+        : [{ partyType: "customer" }, { code: /^110302/ }],
+    })
+      .select("code name")
+      .lean();
+    const codes = accounts.map((a) => a.code);
+    const [lines, typed] = await Promise.all([
+      codes.length
+        ? Voucher.aggregate([
+            { $match: { ...baseMatch(params.branchCode), date: { $lte: asOf }, "lines.accountCode": { $in: codes } } },
+            { $unwind: "$lines" },
+            { $match: { "lines.accountCode": { $in: codes } } },
+            { $project: { date: 1, code: "$lines.accountCode", debit: "$lines.debit", credit: "$lines.credit" } },
+            { $sort: { date: 1, _id: 1 } },
+          ])
+        : [],
+      // Opening balances belong to the whole business, not one campus.
+      params.branchCode ? new Map<string, number>() : typedOpenings(),
+    ]);
+    const byCode = new Map<string, { date: Date; debit: number; credit: number }[]>();
+    for (const l of lines) {
+      if (!byCode.has(l.code)) byCode.set(l.code, []);
+      byCode.get(l.code)!.push(l);
+    }
+
+    for (const a of accounts) {
+      const open: { date: Date | null; amount: number }[] = [];
+      let advance = 0;
+      const owe = (date: Date | null, amount: number) => {
+        const used = Math.min(advance, amount);
+        advance -= used;
+        if (amount - used > 0.004) open.push({ date, amount: amount - used });
+      };
+      const settle = (amount: number) => {
+        while (amount > 0.004 && open.length) {
+          const used = Math.min(open[0].amount, amount);
+          open[0].amount -= used;
+          amount -= used;
+          if (open[0].amount <= 0.004) open.shift();
+        }
+        advance += amount;
+      };
+      // Typed opening is debit-positive; a payable opens on the credit side.
+      const opening = (typed.get(a.code) || 0) * (payable ? -1 : 1);
+      if (opening > 0) owe(null, opening);
+      else if (opening < 0) settle(-opening);
+      for (const l of byCode.get(a.code) || []) {
+        const up = payable ? l.credit : l.debit;
+        const down = payable ? l.debit : l.credit;
+        if (up > 0) owe(new Date(l.date), up);
+        if (down > 0) settle(down);
+      }
+      const b = empty();
+      for (const o of open) b[bucketOf(o.date)] += o.amount;
+      b.current -= advance;
+      b.total = open.reduce((s, o) => s + o.amount, 0) - advance;
+      if (Math.abs(b.total) < 0.01) continue;
+      rows.push({
+        code: a.code,
+        name: a.name,
+        group: payable ? "Suppliers" : "Customers",
+        oldest: open[0]?.date ? open[0].date.toISOString() : open.length ? "opening" : null,
+        ...(Object.fromEntries(Object.entries(b).map(([k, v]) => [k, round(v)])) as Buckets),
+      });
+    }
+
+    if (!payable) {
+      const feeMatch: Record<string, unknown> = { status: { $ne: "paid" }, createdAt: { $lte: asOf } };
+      if (params.branchCode) feeMatch.branchCode = params.branchCode.toUpperCase();
+      const fees = await Fee.find(feeMatch)
+        .select("studentId amount paidAmount dueDate")
+        .populate("studentId", "firstName lastName admissionNo")
+        .sort({ dueDate: 1 })
+        .lean();
+      const students = new Map<string, Buckets & { code: string; name: string; oldest: string | null }>();
+      for (const f of fees) {
+        const due = (f.amount || 0) - (f.paidAmount || 0);
+        if (due <= 0.004) continue;
+        const s = f.studentId as unknown as { _id: unknown; firstName?: string; lastName?: string; admissionNo?: string } | null;
+        const key = String(s?._id ?? f.studentId);
+        if (!students.has(key)) {
+          students.set(key, {
+            ...empty(),
+            code: s?.admissionNo || "",
+            name: s ? `${s.firstName ?? ""} ${s.lastName ?? ""}`.trim() : "Removed student",
+            oldest: f.dueDate ? new Date(f.dueDate).toISOString() : null,
+          });
+        }
+        const row = students.get(key)!;
+        row[bucketOf(f.dueDate ? new Date(f.dueDate) : null)] += due;
+        row.total += due;
+      }
+      for (const r of students.values()) {
+        rows.push({
+          ...r,
+          group: "Students (fees)",
+          ...(Object.fromEntries(
+            (["current", "d30", "d60", "d90", "over90", "total"] as const).map((k) => [k, round(r[k])])
+          ) as Buckets),
+        });
+      }
+    }
+
+    rows.sort((x, y) => y.total - x.total);
+    const totals = empty();
+    for (const r of rows) for (const k of Object.keys(totals) as (keyof Buckets)[]) totals[k] += r[k];
+    for (const k of Object.keys(totals) as (keyof Buckets)[]) totals[k] = round(totals[k]);
+    return { kind: params.kind, asOf: asOf.toISOString(), rows, totals };
   },
 
   /**

@@ -3425,3 +3425,5 @@ tr.def-hot td { background: #fff6f5; }
 .attn-clear { padding: 10px 12px; border-radius: 10px; background: var(--jade-light); color: var(--jade-dark); font-weight: 600; font-size: 13px; }
 /* Voucher description written automatically from the chosen account */
 .qb-in.qb-auto { color: #4a5a50; font-style: italic; }
+/* Aging report: amounts outstanding more than 90 days */
+.report-table td.aging-late { color: var(--red); font-weight: 600; }

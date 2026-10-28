@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { EmptyState, Panel } from "@/components/ui";
 import { formatNumber, prettyDate } from "@/lib/types";
 import { Picker } from "./QbVoucher";
@@ -327,6 +327,99 @@ export function EquityStatement({ period }: { period: Period }) {
       <p className="coa-hint">
         Each partner&apos;s share of profit uses the % set on their capital account in the chart of accounts. Drawings are
         the payments posted to the partner&apos;s drawings account.
+      </p>
+    </Panel>
+  );
+}
+
+/* ---------------- Aging (payables / receivables) ---------------- */
+
+type AgingBuckets = { current: number; d30: number; d60: number; d90: number; over90: number; total: number };
+type AgingRow = AgingBuckets & { code: string; name: string; group: string; oldest: string | null };
+
+const AGING_COLS: [keyof AgingBuckets, string][] = [
+  ["current", "Current"],
+  ["d30", "1 – 30 days"],
+  ["d60", "31 – 60 days"],
+  ["d90", "61 – 90 days"],
+  ["over90", "Over 90 days"],
+];
+
+/** QuickBooks-style A/P and A/R aging: how much is owed, and how long it has been outstanding. */
+export function AgingReport({ period }: { period: Period }) {
+  const [kind, setKind] = useState<"payable" | "receivable">("payable");
+  const data = useReport<{ asOf: string; rows: AgingRow[]; totals: AgingBuckets }>("aging", period, { kind });
+  const groups = useMemo(() => {
+    const map = new Map<string, AgingRow[]>();
+    for (const r of data?.rows ?? []) {
+      if (!map.has(r.group)) map.set(r.group, []);
+      map.get(r.group)!.push(r);
+    }
+    return [...map.entries()];
+  }, [data]);
+  const title = kind === "payable" ? "Payables Aging — what we owe" : "Receivables Aging — what we are owed";
+
+  return (
+    <Panel title={title} meta={data ? `AS OF ${prettyDate(data.asOf).toUpperCase()}` : "LOADING"}>
+      <div className="tabs no-print" style={{ marginBottom: 12 }}>
+        <button type="button" className={`tab${kind === "payable" ? " active" : ""}`} onClick={() => setKind("payable")}>
+          Payables (suppliers)
+        </button>
+        <button type="button" className={`tab${kind === "receivable" ? " active" : ""}`} onClick={() => setKind("receivable")}>
+          Receivables (students &amp; customers)
+        </button>
+      </div>
+      {!data ? (
+        <EmptyState message="Loading…" />
+      ) : !data.rows.length ? (
+        <EmptyState message={kind === "payable" ? "Nothing owed to suppliers." : "Nothing outstanding from students or customers."} />
+      ) : (
+        <div className="table-scroll">
+          <table className="reg report-table">
+            <thead>
+              <tr>
+                <th>{kind === "payable" ? "Supplier" : "Name"}</th>
+                {AGING_COLS.map(([k, label]) => (
+                  <th key={k} className="right">{label}</th>
+                ))}
+                <th className="right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groups.map(([group, rows]) => (
+                <Fragment key={group}>
+                  {groups.length > 1 ? (
+                    <tr className="group-row">
+                      <td colSpan={AGING_COLS.length + 2}><strong>{group}</strong></td>
+                    </tr>
+                  ) : null}
+                  {rows.map((r) => (
+                    <tr key={`${group}-${r.code}-${r.name}`}>
+                      <td>{r.code ? <span className="num">{r.code} · </span> : null}{r.name}</td>
+                      {AGING_COLS.map(([k]) => (
+                        <td key={k} className={`num${k === "over90" && r[k] > 0 ? " aging-late" : ""}`}>{amt(r[k])}</td>
+                      ))}
+                      <td className="num"><strong>{formatNumber(r.total)}</strong></td>
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
+              <tr className="total-row">
+                <td><strong>TOTAL</strong></td>
+                {AGING_COLS.map(([k]) => (
+                  <td key={k} className="num"><strong>{formatNumber(data.totals[k])}</strong></td>
+                ))}
+                <td className="num"><strong>{formatNumber(data.totals.total)}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="coa-hint">
+        {kind === "payable"
+          ? "Payments are set against the oldest bills first; what is left is aged from the bill date. A negative Current amount is an advance paid."
+          : "Customer balances are aged from the invoice date, oldest settled first. Student fees are aged from each voucher's due date — Current means not yet due."}{" "}
+        Use the “To” date to see the position on an earlier day.
       </p>
     </Panel>
   );

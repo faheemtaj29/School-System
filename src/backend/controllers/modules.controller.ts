@@ -211,6 +211,15 @@ export const accountingController = {
           })
         );
       }
+      if (view === "aging") {
+        return jsonOk(
+          await accountingService.aging({
+            kind: url.searchParams.get("kind") === "receivable" ? "receivable" : "payable",
+            asOf: range.to,
+            branchCode,
+          })
+        );
+      }
       if (view === "partners") {
         return jsonOk({ partners: await accountingService.partners() });
       }
