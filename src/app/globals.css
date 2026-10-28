@@ -3423,3 +3423,5 @@ tr.def-hot td { background: #fff6f5; }
 .attn-sub-title { font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--text-dim); }
 .attn-sub .deadline-row { color: inherit; text-decoration: none; }
 .attn-clear { padding: 10px 12px; border-radius: 10px; background: var(--jade-light); color: var(--jade-dark); font-weight: 600; font-size: 13px; }
+/* Voucher description written automatically from the chosen account */
+.qb-in.qb-auto { color: #4a5a50; font-style: italic; }

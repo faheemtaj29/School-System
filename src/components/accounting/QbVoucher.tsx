@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NewAccountForm, PartyForm, type ChartAccount } from "./AccountForms";
+import { suggestDescription } from "./autoDescription";
 
 /**
  * QuickBooks-style voucher entry: payments, receipts, journal entries and contra transfers.
@@ -22,12 +23,14 @@ type Account = {
   bankName?: string;
   accountNumber?: string;
   partyType?: "supplier" | "customer";
+  consumerNumber?: string;
 };
 
 type Party = { _id: string; name: string; code?: string; accountCode?: string | null };
 
-type Line = { key: number; code: string; description: string; amount: string };
-type JLine = { key: number; code: string; description: string; debit: string; credit: string };
+/** `typed` marks a description the user wrote; otherwise it follows the suggested wording. */
+type Line = { key: number; code: string; description: string; typed?: boolean; amount: string };
+type JLine = { key: number; code: string; description: string; typed?: boolean; debit: string; credit: string };
 
 const TITLES: Record<QbMode, string> = {
   cpv: "Cash Payment Voucher",
@@ -392,6 +395,34 @@ export function QbVoucher({
   );
 
   const settleAcc = accounts.find((a) => a.code === settle);
+
+  // Suggested wording per line, kept in step with the payee, bank method and cheque number.
+  const describe = (code: string, side?: "debit" | "credit") => {
+    const acc = accounts.find((a) => a.code === code);
+    if (!acc) return "";
+    const parentCode = chart.find((c) => c.code === code)?.parentCode;
+    return suggestDescription(acc, {
+      mode,
+      method,
+      cheque,
+      payee,
+      side,
+      group: chart.find((c) => c.code === parentCode)?.name,
+    });
+  };
+  const lineText = (l: Line) => (l.typed ? l.description : describe(l.code));
+  const jSide = (l: JLine): "debit" | "credit" | undefined =>
+    num(l.credit) > 0 ? "credit" : num(l.debit) > 0 ? "debit" : undefined;
+  const jLineText = (l: JLine) => (l.typed ? l.description : describe(l.code, jSide(l)));
+  const filledLines = lines.filter((l) => l.code);
+  const suggestedMemo =
+    filledLines.length === 1
+      ? lineText(filledLines[0])
+      : filledLines.length > 1
+        ? `${lineText(filledLines[0])} and other ${isReceipt ? "receipts" : "payments"}`
+        : mode === "cv" && contraTo
+          ? describe(contraTo)
+          : "";
   const total = isPayment || isReceipt ? lines.reduce((s, l) => s + num(l.amount), 0) : mode === "cv" ? num(contraAmount) : 0;
   const jDebit = jlines.reduce((s, l) => s + num(l.debit), 0);
   const jCredit = jlines.reduce((s, l) => s + num(l.credit), 0);
@@ -413,6 +444,7 @@ export function QbVoucher({
   function buildVoucher() {
     const narration =
       memo.trim() ||
+      suggestedMemo ||
       (isPayment
         ? `Payment${payee ? ` to ${payee}` : ""}`
         : isReceipt
@@ -435,7 +467,7 @@ export function QbVoucher({
         accountCode: l.code,
         debit: isPayment ? num(l.amount) : 0,
         credit: isReceipt ? num(l.amount) : 0,
-        narration: l.description || undefined,
+        narration: lineText(l) || undefined,
       }));
       const settleLine = {
         accountCode: settle,
@@ -449,7 +481,7 @@ export function QbVoucher({
       if (settle === contraTo) throw new Error("'From' and 'to' must be different accounts");
       if (num(contraAmount) <= 0) throw new Error("Enter the amount to transfer");
       voucherLines = [
-        { accountCode: contraTo, debit: num(contraAmount), credit: 0 },
+        { accountCode: contraTo, debit: num(contraAmount), credit: 0, narration: describe(contraTo) || undefined },
         { accountCode: settle, debit: 0, credit: num(contraAmount) },
       ];
     } else {
@@ -460,7 +492,7 @@ export function QbVoucher({
         if ((num(l.debit) > 0) === (num(l.credit) > 0)) throw new Error("Each line needs either a debit or a credit");
       }
       if (Math.abs(jDebit - jCredit) > 0.005) throw new Error(`Debits (${money(jDebit)}) and credits (${money(jCredit)}) must be equal`);
-      voucherLines = filled.map((l) => ({ accountCode: l.code, debit: num(l.debit), credit: num(l.credit), narration: l.description || undefined }));
+      voucherLines = filled.map((l) => ({ accountCode: l.code, debit: num(l.debit), credit: num(l.credit), narration: jLineText(l) || undefined }));
     }
 
     return {
@@ -708,7 +740,12 @@ export function QbVoucher({
                       />
                     </td>
                     <td>
-                      <input className="qb-in" value={l.description} onChange={(e) => setLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, description: e.target.value } : x)))} />
+                      <input
+                        className={`qb-in${l.typed ? "" : " qb-auto"}`}
+                        value={lineText(l)}
+                        title={l.typed ? undefined : "Written automatically — type to change it"}
+                        onChange={(e) => setLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, description: e.target.value, typed: e.target.value !== "" } : x)))}
+                      />
                     </td>
                     <td>
                       <input
@@ -771,7 +808,12 @@ export function QbVoucher({
                       <input type="number" min={0} step="0.01" className="qb-in qb-r" value={l.credit} onChange={(e) => setJLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, credit: e.target.value, debit: e.target.value ? "" : x.debit } : x)))} />
                     </td>
                     <td>
-                      <input className="qb-in" value={l.description} onChange={(e) => setJLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, description: e.target.value } : x)))} />
+                      <input
+                        className={`qb-in${l.typed ? "" : " qb-auto"}`}
+                        value={jLineText(l)}
+                        title={l.typed ? undefined : "Written automatically — type to change it"}
+                        onChange={(e) => setJLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, description: e.target.value, typed: e.target.value !== "" } : x)))}
+                      />
                     </td>
                     <td>
                       <button type="button" className="qb-del" title="Delete line" onClick={() => setJLines((ls) => (ls.length > 2 ? ls.filter((x) => x.key !== l.key) : ls))}>
@@ -802,7 +844,13 @@ export function QbVoucher({
         <div className="qb-bottom">
           <div className="qb-memo">
             <label>Memo / Narration</label>
-            <textarea className="qb-in" rows={3} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="What was this for?" />
+            <textarea
+              className="qb-in"
+              rows={3}
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              placeholder={suggestedMemo ? `${suggestedMemo} (used if left blank)` : "What was this for?"}
+            />
             {mode === "jv" ? (
               <label className="check-row" style={{ marginTop: 8 }}>
                 <input type="checkbox" checked={adjusting} onChange={(e) => setAdjusting(e.target.checked)} />
