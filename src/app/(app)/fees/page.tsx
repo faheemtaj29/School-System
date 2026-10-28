@@ -12,6 +12,7 @@ import {
   inputClass,
 } from "@/components/ui";
 import { FeeForm } from "@/components/forms/SchoolForms";
+import { FeeCollections } from "@/components/fees/FeeCollections";
 import { AdvanceFeeModal, CollectModal, FeeStructurePanel, monthName, type CollectTarget } from "@/components/fees/FeeTools";
 import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import {
@@ -25,7 +26,7 @@ import {
   photoSrc,
 } from "@/lib/types";
 
-type MainTab = "generate" | "structure" | "received" | "pending" | "all";
+type MainTab = "generate" | "structure" | "received" | "pending" | "all" | "collections";
 
 export default function FeesPage() {
   const [fees, setFees] = useState<FeeItem[]>([]);
@@ -352,6 +353,7 @@ export default function FeesPage() {
           { key: "pending",  label: `Pending (${stats.pending})` },
           { key: "received", label: `Received (${stats.paid})` },
           { key: "all",      label: "All Vouchers" },
+          ...(canEdit ? [{ key: "collections", label: "Collections Report" }] : []),
         ].map(({ key, label }) => (
           <button key={key} type="button"
             className={`filter-chip${tab === key ? " active" : ""}`}
@@ -359,14 +361,13 @@ export default function FeesPage() {
           >{label}</button>
         ))}
         {canEdit ? (
-          <button type="button" className="btn-ghost no-print" style={{ marginLeft: "auto" }} onClick={() => setAdvanceOpen(true)}>
+          <div className="fee-tab-actions no-print">
+          <button type="button" className="btn-ghost" onClick={() => setAdvanceOpen(true)}>
             Advance Fee
           </button>
-        ) : null}
-        {canEdit ? (
           <button
             type="button"
-            className="btn-ghost no-print"
+            className="btn-ghost"
             title="Adds the late fee from Settings to overdue vouchers past the grace days"
             onClick={async () => {
               setSysMsg("");
@@ -378,6 +379,7 @@ export default function FeesPage() {
           >
             Apply Late Fees
           </button>
+          </div>
         ) : null}
       </div>
 
@@ -483,6 +485,8 @@ export default function FeesPage() {
       ) : null}
 
       {tab === "structure" && canEdit ? <FeeStructurePanel onGenerated={load} /> : null}
+
+      {tab === "collections" && canEdit ? <FeeCollections classes={classes} /> : null}
 
       {advanceOpen ? (
         <AdvanceFeeModal

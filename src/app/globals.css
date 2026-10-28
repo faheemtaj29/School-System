@@ -3188,3 +3188,18 @@ table.qbp-je { width: 100%; border-collapse: collapse; margin-top: 22px; font-si
 .adv-matches button { text-align: left; border: 0; background: none; padding: 7px 10px; cursor: pointer; font-size: 12.5px; }
 .adv-matches button:hover { background: var(--paper); }
 .adv-matches span { color: var(--text-dim); font-size: 11.5px; }
+
+/* Fee collection report */
+.coll-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
+.coll-filters label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
+.coll-filters .inp, .coll-filters select { width: auto; }
+.coll-filters .btn-dark { margin-left: auto; }
+.coll-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; margin-bottom: 18px; }
+.coll-split h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-dim); margin: 0 0 6px; }
+table.reg.compact td { padding: 6px 8px; }
+.coll-print-sums { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 4px 0 12px; font-size: 12px; }
+.coll-print-sums span { color: #555; margin-right: 6px; }
+.coll-print-split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.fee-tab-actions { margin-left: auto; display: flex; gap: 8px; }
+.coll-print-table td:nth-child(2), .coll-print-table td:nth-child(3), .coll-print-table td:nth-child(5) { white-space: nowrap; }
+.coll-print-table { font-size: 10.5px; }

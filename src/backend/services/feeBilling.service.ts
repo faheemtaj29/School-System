@@ -36,6 +36,13 @@ function classLabel(c?: { name?: string; section?: string } | null) {
 import { DEFAULT_CHALLAN_TERMS } from "@/lib/challanTerms";
 import { challanToken } from "@/backend/lib/challanLink";
 
+/** Head-wise split in whole rupees that still adds up to the total (the largest head takes the rounding). */
+function wholeRupees(parts: { label: string; amount: number }[], total: number) {
+  const out = parts.map((p) => ({ label: p.label, amount: Math.round(p.amount) })).sort((a, b) => b.amount - a.amount);
+  if (out.length) out[0].amount = round(out[0].amount + total - out.reduce((t, p) => t + p.amount, 0));
+  return out;
+}
+
 const lines = (text?: string | null) => String(text || "").split("\n").map((l) => l.trim()).filter(Boolean);
 
 async function schoolHeader() {
@@ -368,6 +375,89 @@ export const feeBillingService = {
       });
     }
     return { fee: updatedFee.toObject(), receiptNo, ledgerSyncPending };
+  },
+
+  /**
+   * Fee collection report (daily cash closing): every payment received between two dates,
+   * with totals by method, by day, by fee head and by class.
+   */
+  async collections(filters: { from: string; to: string; method?: string; classId?: string; branch?: string }) {
+    await dbConnect();
+    const from = new Date(`${filters.from}T00:00:00.000Z`);
+    const to = new Date(`${filters.to}T23:59:59.999Z`);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) {
+      throw new ServiceError("VALIDATION", "Choose a valid date range", 400);
+    }
+    // Older vouchers were paid before counter receipts existed: they only carry paidAmount + paymentDate.
+    const query: Record<string, unknown> = {
+      $or: [
+        { "payments.date": { $gte: from, $lte: to } },
+        { "payments.0": { $exists: false }, paidAmount: { $gt: 0 }, paymentDate: { $gte: from, $lte: to } },
+      ],
+    };
+    if (filters.branch) query.branchCode = filters.branch.toUpperCase();
+    if (filters.classId && Types.ObjectId.isValid(filters.classId)) {
+      const ids = await Student.find({ classId: filters.classId }).select("_id").lean();
+      query.studentId = { $in: ids.map((x) => x._id) };
+    }
+    const fees = (await Fee.find(query).populate(studentFields).lean()) as unknown as FeeLean[];
+
+    const rows: {
+      date: Date; receiptNo: string; feeId: string; student: string; admissionNo: string; classLabel: string;
+      title: string; method: string; amount: number; receivedBy: string;
+    }[] = [];
+    const byHead = new Map<string, number>();
+    for (const f of fees) {
+      const lines = (f.lines?.length ? f.lines : [{ head: f.title, amount: f.amount }]).filter((l) => l.amount > 0);
+      const weight = lines.reduce((t, l) => t + l.amount, 0);
+      const payments = f.payments?.length
+        ? f.payments
+        : f.paidAmount && f.paymentDate
+          ? [{ amount: f.paidAmount, date: f.paymentDate, method: f.method || "cash", receiptNo: f.receiptNo || `FEE-${String(f._id).slice(-6).toUpperCase()}` }]
+          : [];
+      for (const p of payments) {
+        const d = new Date(p.date);
+        if (d < from || d > to) continue;
+        if (filters.method && p.method !== filters.method) continue;
+        rows.push({
+          date: d,
+          receiptNo: p.receiptNo,
+          feeId: String(f._id),
+          student: f.studentId ? `${f.studentId.firstName} ${f.studentId.lastName}` : "—",
+          admissionNo: f.studentId?.admissionNo || "",
+          classLabel: classLabel(f.studentId?.classId),
+          title: f.title,
+          method: p.method,
+          amount: round(p.amount),
+          receivedBy: (p as { receivedBy?: string }).receivedBy || "",
+        });
+        // Each payment is spread over the challan's heads the same way the ledger posts it.
+        for (const l of lines) {
+          byHead.set(l.head, round((byHead.get(l.head) || 0) + (weight ? (p.amount * l.amount) / weight : 0)));
+        }
+      }
+    }
+    rows.sort((a, b) => a.date.getTime() - b.date.getTime() || a.receiptNo.localeCompare(b.receiptNo));
+    const sumBy = (key: (r: (typeof rows)[number]) => string) => {
+      const m = new Map<string, { count: number; amount: number }>();
+      for (const r of rows) {
+        const k = key(r);
+        const cur = m.get(k) || { count: 0, amount: 0 };
+        m.set(k, { count: cur.count + 1, amount: round(cur.amount + r.amount) });
+      }
+      return [...m.entries()].map(([label, v]) => ({ label, ...v }));
+    };
+    return {
+      school: await schoolHeader(),
+      from: filters.from,
+      to: filters.to,
+      rows,
+      total: round(rows.reduce((t, r) => t + r.amount, 0)),
+      byMethod: sumBy((r) => r.method).sort((a, b) => b.amount - a.amount),
+      byDay: sumBy((r) => r.date.toISOString().slice(0, 10)).sort((a, b) => a.label.localeCompare(b.label)),
+      byClass: sumBy((r) => r.classLabel || "—").sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true })),
+      byHead: wholeRupees([...byHead.entries()].map(([label, amount]) => ({ label, amount })), round(rows.reduce((t, r) => t + r.amount, 0))),
+    };
   },
 
   /** Retry the idempotent accounting projection without collecting money again. */

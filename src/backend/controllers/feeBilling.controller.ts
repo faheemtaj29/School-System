@@ -89,6 +89,25 @@ export const feeBillingController = {
     }
   },
 
+  /** GET /api/fees/collections?from=YYYY-MM-DD&to=…&method=&classId=&branch= */
+  async collections(req: Request) {
+    const { error } = await requireAuth(["admin", "staff"]);
+    if (error) return error;
+    try {
+      const q = new URL(req.url).searchParams;
+      const today = new Date().toISOString().slice(0, 10);
+      return jsonOk(await feeBillingService.collections({
+        from: q.get("from") || today,
+        to: q.get("to") || q.get("from") || today,
+        method: q.get("method") || undefined,
+        classId: q.get("classId") || undefined,
+        branch: q.get("branch") || undefined,
+      }));
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
   /** GET /api/public/challan?t=<token> — one challan from a signed WhatsApp/SMS link, no login. */
   async publicChallan(req: Request) {
     try {

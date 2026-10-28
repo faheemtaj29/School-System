@@ -2,7 +2,7 @@
 
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
-import { PrintShell, fmtDate, usePrintData, type SchoolHeader } from "./PrintShell";
+import { PrintShell, SchoolHead, fmtDate, usePrintData, type SchoolHeader } from "./PrintShell";
 
 type School = SchoolHeader & {
   currency: string;
@@ -355,6 +355,78 @@ export function FeeReceiptPrint({ id, receiptNo }: { id: string; receiptNo: stri
               </div>
             </article>
           ))}
+        </section>
+      ) : null}
+    </PrintShell>
+  );
+}
+
+type CollectionData = {
+  school: School;
+  from: string;
+  to: string;
+  total: number;
+  rows: { date: string; receiptNo: string; feeId: string; student: string; admissionNo: string; classLabel: string; title: string; method: string; amount: number; receivedBy: string }[];
+  byMethod: { label: string; count: number; amount: number }[];
+  byHead: { label: string; amount: number }[];
+  byClass: { label: string; count: number; amount: number }[];
+};
+
+const METHOD: Record<string, string> = { cash: "Cash", bank: "Bank", online: "Online", card: "Card" };
+
+/** Printed fee collection report (cash closing) with totals by method, head and class. */
+export function FeeCollectionsPrint({ query }: { query: string }) {
+  const { data, error } = usePrintData<CollectionData>(`/api/fees/collections?${query}`);
+  const cur = data?.school.currency || "";
+  const range = data ? (data.from === data.to ? fmtDate(data.from) : `${fmtDate(data.from)} – ${fmtDate(data.to)}`) : "";
+  return (
+    <PrintShell title={`Fee Collection ${range}`} error={error} loading={!data}>
+      {data ? (
+        <section className="doc-page">
+          <SchoolHead school={data.school} title="FEE COLLECTION REPORT" sub={range} />
+          <div className="coll-print-sums">
+            <div><span>Total collected</span><b>{cur} {money(data.total)}</b></div>
+            {data.byMethod.map((m) => (
+              <div key={m.label}><span>{METHOD[m.label] || m.label} ({m.count})</span><b>{cur} {money(m.amount)}</b></div>
+            ))}
+          </div>
+          <div className="coll-print-split">
+            <table className="doc-table">
+              <thead><tr><th>Fee head</th><th className="num">Amount</th></tr></thead>
+              <tbody>{data.byHead.map((h) => <tr key={h.label}><td>{h.label}</td><td className="num">{money(h.amount)}</td></tr>)}</tbody>
+            </table>
+            <table className="doc-table">
+              <thead><tr><th>Class</th><th className="num">Receipts</th><th className="num">Amount</th></tr></thead>
+              <tbody>{data.byClass.map((c) => <tr key={c.label}><td>{c.label}</td><td className="num">{c.count}</td><td className="num">{money(c.amount)}</td></tr>)}</tbody>
+            </table>
+          </div>
+          <table className="doc-table coll-print-table">
+            <thead>
+              <tr><th>#</th><th>Date</th><th>Receipt</th><th>Student</th><th>Class</th><th>Challan</th><th>Method</th><th className="num">Amount</th></tr>
+            </thead>
+            <tbody>
+              {data.rows.map((r, i) => (
+                <tr key={r.receiptNo + r.feeId}>
+                  <td>{i + 1}</td>
+                  <td>{fmtDate(r.date)}</td>
+                  <td>{r.receiptNo}</td>
+                  <td>{r.student} <small>({r.admissionNo})</small></td>
+                  <td>{r.classLabel}</td>
+                  <td>{r.title}</td>
+                  <td>{METHOD[r.method] || r.method}</td>
+                  <td className="num">{money(r.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr><td colSpan={7}><b>Total</b></td><td className="num"><b>{cur} {money(data.total)}</b></td></tr>
+            </tfoot>
+          </table>
+          <div className="signs">
+            <span>Prepared by (cashier)</span>
+            <span>Checked by (accounts)</span>
+            <span>Approved by (principal)</span>
+          </div>
         </section>
       ) : null}
     </PrintShell>
