@@ -52,6 +52,7 @@ export function canOpenPage(role: string, pathname: string) {
   }
 
   if (normalizedRole === "student" || normalizedRole === "parent") {
+    if (pathname === "/portal" || pathname.startsWith("/portal/")) return true;
     if (pathname === "/fees" || pathname.startsWith("/fees/")) return true;
     if (pathname === "/reports" || pathname.startsWith("/reports/")) return true;
     return false;

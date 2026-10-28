@@ -35,7 +35,7 @@ export const userSchema = z.object({
 
 /** Admin grants portal access to an existing teacher, student or staff record. */
 export const portalAccessSchema = z.object({
-  kind: z.enum(["teacher", "student", "staff"]),
+  kind: z.enum(["teacher", "student", "staff", "parent"]),
   recordId: z.string().min(1),
   email: z.string().email().optional(),
   password: z.string().min(6),

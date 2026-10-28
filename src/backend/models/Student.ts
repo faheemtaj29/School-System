@@ -44,6 +44,8 @@ export interface IStudent {
   photoData?: string;
   photoUpdatedAt?: Date;
   user?: Types.ObjectId;
+  /** Parent's portal login (one parent login can have several children). */
+  parentUser?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -90,6 +92,7 @@ const StudentSchema = new Schema<IStudent>(
     photoData: { type: String, select: false },
     photoUpdatedAt: Date,
     user: { type: Schema.Types.ObjectId, ref: "User" },
+    parentUser: { type: Schema.Types.ObjectId, ref: "User", index: true, sparse: true },
   },
   { timestamps: true }
 );

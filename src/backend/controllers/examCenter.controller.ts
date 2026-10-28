@@ -5,6 +5,7 @@ import {
   jsonOk,
   requireAuth,
 } from "@/backend/lib/http";
+import { canSeeStudent } from "@/backend/lib/portal";
 import { examCenterService } from "@/backend/services/examCenter.service";
 import {
   dateSheetPlanSchema,
@@ -129,11 +130,18 @@ export const examCenterController = {
   },
 
   async results(req: Request) {
-    const { error } = await requireAuth(["admin", "teacher", "staff"]);
+    const { session, error } = await requireAuth(["admin", "teacher", "staff", "student", "parent"]);
     if (error) return error;
     const { termId, classIds } = query(req);
     if (!needIds(termId) || !classIds.length) return jsonError("Select a term and classes");
     try {
+      // Students/parents get only their own child's card — never classmates'.
+      if (session!.role === "student" || session!.role === "parent") {
+        const student = new URL(req.url).searchParams.get("student") || "";
+        if (!(await canSeeStudent(session!, student))) return jsonError("Forbidden", 403);
+        const data = await examCenterService.resultCards(termId, classIds);
+        return jsonOk({ ...data, batches: data.batches.map((b) => ({ ...b, cards: b.cards.filter((c) => c.student._id === student) })) });
+      }
       return jsonOk(await examCenterService.resultCards(termId, classIds));
     } catch (e) {
       return fromServiceError(e);

@@ -263,19 +263,20 @@ export function PortalAccessButton({
   name,
   onDone,
 }: {
-  kind: "teacher" | "student" | "staff";
+  kind: "teacher" | "student" | "staff" | "parent";
   id: string;
   email?: string;
   name: string;
   onDone?: () => void;
 }) {
+  const who = kind === "parent" ? `the parent of ${name}` : name;
   async function grant() {
     if (!email) {
-      alert(`Add an email address to ${name} before creating a login.`);
+      alert(kind === "parent" ? `Add the parent's email to ${name} before creating a parent login.` : `Add an email address to ${name} before creating a login.`);
       return;
     }
     const password = prompt(
-      `Set a portal password for ${name} (${email}).\nMinimum 6 characters.`
+      `Set a portal password for ${who} (${email}).\nMinimum 6 characters.`
     );
     if (!password) return;
     if (password.length < 6) {
@@ -292,13 +293,17 @@ export function PortalAccessButton({
       alert(data.error || "Could not create the login");
       return;
     }
-    alert(`Portal login ready.\nEmail: ${data.email}\nRole: ${data.role}`);
+    alert(
+      kind === "parent"
+        ? `Parent login ready.\nEmail: ${data.email}\nChildren linked: ${data.children}`
+        : `Portal login ready.\nEmail: ${data.email}\nRole: ${data.role}`
+    );
     onDone?.();
   }
 
   return (
     <button type="button" className="link-btn" onClick={grant}>
-      Portal Login
+      {kind === "parent" ? "Parent Login" : "Portal Login"}
     </button>
   );
 }

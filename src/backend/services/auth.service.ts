@@ -144,6 +144,7 @@ export const authService = {
   /** Creates or resets portal login and links the people record. */
   async grantPortalAccess(input: PortalAccessInput) {
     await dbConnect();
+    if (input.kind === "parent") return this.grantParentAccess(input);
     const Model =
       input.kind === "teacher" ? Teacher : input.kind === "staff" ? Staff : Student;
     const record = await Model.findById(input.recordId);
@@ -182,4 +183,43 @@ export const authService = {
     await record.save();
     return { email: user.email, role: user.role, created: !clash };
   },
+
+  /**
+   * Parent login for a student's guardian. The same parent email links every brother/sister
+   * whose record has that parent email, so one login shows all their children.
+   */
+  async grantParentAccess(input: PortalAccessInput) {
+    const student = await Student.findById(input.recordId);
+    if (!student) throw new ServiceError("NOT_FOUND", "Student not found", 404);
+    const email = (input.email || student.parentEmail || "").toLowerCase().trim();
+    if (!email) {
+      throw new ServiceError("VALIDATION", "Add the parent's email to this student before creating a parent login", 400);
+    }
+    const existing = await User.findOne({ email });
+    if (existing && existing.role !== "parent") {
+      throw new ServiceError("CONFLICT", "This email already belongs to a non-parent account. Use a different parent email.", 409);
+    }
+    const user = await User.findOneAndUpdate(
+      existing ? { _id: existing._id } : { email },
+      {
+        name: student.parentName || `Parent of ${student.firstName} ${student.lastName}`,
+        email,
+        password: await hashPassword(input.password),
+        role: "parent",
+        isActive: true,
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    if (!student.parentEmail) student.parentEmail = email;
+    student.parentUser = user._id;
+    await student.save();
+    const escaped = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const siblings = await Student.updateMany(
+      { parentEmail: new RegExp(`^${escaped}$`, "i"), parentUser: { $exists: false } },
+      { $set: { parentUser: user._id } }
+    );
+    const children = await Student.countDocuments({ parentUser: user._id });
+    return { email: user.email, role: user.role, created: !existing, children, linkedNow: siblings.modifiedCount + 1 };
+  },
 };
+

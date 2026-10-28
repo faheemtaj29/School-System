@@ -38,3 +38,28 @@ export async function resolveStaff(session: SessionUser) {
     $or: [{ user: { $exists: false } }, { user: null }],
   }).lean();
 }
+
+/**
+ * Students a student/parent login may see: a student sees themself; a parent sees every
+ * child linked to their login (parentUser), falling back to an older direct link.
+ */
+export async function resolveChildren(session: SessionUser) {
+  if (session.role === "student") {
+    const me = await resolveStudent(session);
+    return me ? [me] : [];
+  }
+  if (session.role === "parent") {
+    const kids = await Student.find({ parentUser: session.id }).sort({ firstName: 1 }).lean();
+    if (kids.length) return kids;
+    const legacy = await resolveStudent(session);
+    return legacy ? [legacy] : [];
+  }
+  return [];
+}
+
+/** Staff roles may see any student; students/parents only their own. */
+export async function canSeeStudent(session: SessionUser, studentId: string) {
+  if (["admin", "staff", "teacher"].includes(session.role)) return true;
+  const kids = await resolveChildren(session);
+  return kids.some((k) => String(k._id) === String(studentId));
+}

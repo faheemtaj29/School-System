@@ -2,6 +2,7 @@
  * Dashboard aggregates — one admin overview plus personal views for
  * teachers and students, each scoped to the records they own.
  */
+import { resolveChildren } from "@/backend/lib/portal";
 import { dbConnect } from "@/backend/config/database";
 import { ClassModel } from "@/backend/models/Class";
 import { Student } from "@/backend/models/Student";
@@ -323,11 +324,11 @@ export const dashboardService = {
   /** A student's own attendance, fees, results, courses and certificates. */
   async getStudentOverview(session: SessionUser) {
     await dbConnect();
-    const student = await Student.findOne({
-      $or: [{ user: session.id }, { email: session.email.toLowerCase() }],
-    })
-      .populate("classId", "name section room")
-      .lean();
+    // Parents: the first linked child here; the portal page switches between children.
+    const kids = await resolveChildren(session);
+    const student = kids.length
+      ? await Student.findById(kids[0]._id).populate("classId", "name section room").lean()
+      : null;
 
     if (!student) return { role: "student" as const, linked: false };
 
@@ -416,6 +417,9 @@ export const dashboardService = {
     return {
       role: "student" as const,
       linked: true,
+      studentId: String(student._id),
+      viewer: { role: session.role, name: session.name },
+      children: kids.map((k) => ({ _id: String(k._id), name: `${k.firstName} ${k.lastName}` })),
       profile: {
         name: `${student.firstName} ${student.lastName}`,
         admissionNo: student.admissionNo,

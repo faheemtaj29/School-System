@@ -16,7 +16,7 @@ import { ServiceError } from "@/backend/types";
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
-type LedgerRow = { date: Date; number: string; description: string; debit: number; credit: number; balance: number; kind: string };
+type LedgerRow = { date: Date; number: string; description: string; debit: number; credit: number; balance: number; kind: string; feeId: string };
 type Status = "present" | "absent" | "late" | "excused";
 
 async function loadStudent(id: string) {
@@ -35,7 +35,8 @@ async function feeLedger(studentId: string) {
     const late = f.lateFeeAmount || 0;
     const discount = f.discountAmount || 0;
     const charge = f.originalAmount ?? round(f.amount - late + discount);
-    rows.push({ date: f.createdAt, number: ref, description: f.title, debit: round(charge), credit: 0, kind: "charge" });
+    const feeId = String(f._id);
+    rows.push({ date: f.createdAt, number: ref, description: f.title, debit: round(charge), credit: 0, kind: "charge", feeId });
     if (discount > 0) {
       rows.push({
         date: f.createdAt,
@@ -44,10 +45,11 @@ async function feeLedger(studentId: string) {
         debit: 0,
         credit: round(discount),
         kind: "concession",
+        feeId,
       });
     }
     if (late > 0) {
-      rows.push({ date: f.dueDate, number: ref, description: "Late fee", debit: round(late), credit: 0, kind: "late" });
+      rows.push({ date: f.dueDate, number: ref, description: "Late fee", debit: round(late), credit: 0, kind: "late", feeId });
     }
     const payments = f.payments?.length
       ? f.payments
@@ -62,6 +64,7 @@ async function feeLedger(studentId: string) {
         debit: 0,
         credit: round(p.amount),
         kind: "payment",
+        feeId,
       });
     }
   }

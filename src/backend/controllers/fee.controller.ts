@@ -10,7 +10,7 @@ import {
 } from "@/backend/lib/http";
 import { feeService } from "@/backend/services/fee.service";
 import { feeBillingService } from "@/backend/services/feeBilling.service";
-import { resolveStudent } from "@/backend/lib/portal";
+import { resolveChildren } from "@/backend/lib/portal";
 import { bulkFeeSchema, feeSchema, installmentFeeSchema } from "@/backend/validators/fee.validator";
 import { z } from "zod";
 
@@ -29,11 +29,14 @@ export const feeController = {
     if (error) return error;
     try {
       const { searchParams } = new URL(req.url);
-      let studentId = searchParams.get("studentId");
+      const studentId = searchParams.get("studentId");
+      let studentIds: string[] | undefined;
       if (session!.role === "student" || session!.role === "parent") {
-        const student = await resolveStudent(session!);
-        if (!student) return jsonOk({ fees: [], portal: "student", linked: false });
-        studentId = String(student._id);
+        // A parent sees every child's fees (or one child's when asked); a student only their own.
+        const kids = (await resolveChildren(session!)).map((k) => String(k._id));
+        if (!kids.length) return jsonOk({ fees: [], portal: "student", linked: false });
+        if (studentId && !kids.includes(studentId)) return jsonOk({ fees: [] });
+        if (!studentId) studentIds = kids;
       }
       // Staff opening the fee screen also triggers this month's automatic billing if it is due.
       if (session!.role === "admin" || session!.role === "staff") {
@@ -41,6 +44,7 @@ export const feeController = {
       }
       const fees = await feeService.list({
         studentId,
+        studentIds,
         status: searchParams.get("status"),
       });
       return jsonOk({ fees });

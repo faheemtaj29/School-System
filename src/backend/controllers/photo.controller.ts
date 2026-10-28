@@ -5,7 +5,7 @@ import { isValidObjectId } from "mongoose";
 import { dbConnect } from "@/backend/config/database";
 import { fromServiceError, jsonError, jsonOk, requireAuth } from "@/backend/lib/http";
 import { imageProblem, imageResponse } from "@/backend/lib/images";
-import { resolveTeacher } from "@/backend/lib/portal";
+import { canSeeStudent, resolveTeacher } from "@/backend/lib/portal";
 import { Student } from "@/backend/models/Student";
 import { Teacher } from "@/backend/models/Teacher";
 import type { SessionUser } from "@/backend/types";
@@ -28,11 +28,12 @@ function handlers(kind: Kind) {
   const Model = MODEL[kind];
   return {
     async get(_: Request, ctx: Ctx) {
-      const { error } = await requireAuth();
+      const { session, error } = await requireAuth();
       if (error) return error;
       try {
         const { id } = await ctx.params;
         if (!isValidObjectId(id)) return jsonError("Invalid ID", 400);
+        if (kind === "student" && !(await canSeeStudent(session!, id))) return jsonError("Forbidden", 403);
         await dbConnect();
         const doc = await Model.findById(id).select("+photoData").lean();
         return imageResponse(doc?.photoData, "private, max-age=31536000, immutable");

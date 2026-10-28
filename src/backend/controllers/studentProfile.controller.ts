@@ -3,6 +3,7 @@
  */
 import { z } from "zod";
 import { firstZodError, fromServiceError, jsonError, jsonOk, requireAuth } from "@/backend/lib/http";
+import { canSeeStudent } from "@/backend/lib/portal";
 import { studentProfileService } from "@/backend/services/studentProfile.service";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -15,10 +16,13 @@ const markSchema = z.object({
 
 export const studentProfileController = {
   async get(_: Request, ctx: Ctx) {
-    const { session, error } = await requireAuth(["admin", "staff", "teacher"]);
+    const { session, error } = await requireAuth(["admin", "staff", "teacher", "student", "parent"]);
     if (error) return error;
     try {
-      const profile = await studentProfileService.profile((await ctx.params).id);
+      const id = (await ctx.params).id;
+      // Students and parents only ever see their own children.
+      if (!(await canSeeStudent(session!, id))) return jsonError("Forbidden", 403);
+      const profile = await studentProfileService.profile(id);
       return jsonOk({ ...profile, viewer: { role: session!.role } });
     } catch (e) {
       return fromServiceError(e);

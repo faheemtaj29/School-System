@@ -47,6 +47,9 @@ export type TeacherData = {
 
 export type StudentData = {
   linked: boolean;
+  studentId?: string;
+  viewer?: { role: string; name: string };
+  children?: { _id: string; name: string }[];
   profile: {
     name: string;
     admissionNo: string;
@@ -340,15 +343,27 @@ export function TeacherDashboard({ data }: { data: TeacherData }) {
 export function StudentDashboard({ data }: { data: StudentData }) {
   const { profile, stats } = data;
   const paidPct = stats.billed ? Math.round((stats.paid / stats.billed) * 100) : 0;
+  const isParent = data.viewer?.role === "parent";
 
   return (
     <>
+      {isParent && (data.children?.length || 0) > 1 ? (
+        <div className="chips" style={{ marginBottom: 12, alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: "var(--text-dim)" }}>Your children:</span>
+          {data.children!.map((c) => (
+            <Link key={c._id} href={`/portal?child=${c._id}`} className={`filter-chip${c._id === data.studentId ? " active" : ""}`}>
+              {c.name}
+            </Link>
+          ))}
+        </div>
+      ) : null}
       <div className="hero">
         <div className="hero-text">
           <h1>
-            {greeting()}, {profile.name.split(" ")[0]}
+            {greeting()}, {isParent ? data.viewer?.name || "" : profile.name.split(" ")[0]}
           </h1>
           <div className="sub">
+            {isParent ? `${profile.name} · ` : ""}
             {profile.className} · Roll {profile.rollNumber || "—"} · {profile.admissionNo}
             {stats.todayStatus ? (
               <span className="live">TODAY: {stats.todayStatus.toUpperCase()}</span>
@@ -356,6 +371,9 @@ export function StudentDashboard({ data }: { data: StudentData }) {
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, position: "relative", zIndex: 1, flexWrap: "wrap" }}>
+          <Link href={data.studentId ? `/portal?child=${data.studentId}` : "/portal"} className="btn-primary">
+            {isParent ? "Full record" : "My Profile"}
+          </Link>
           <Link href="/distance-learning" className="btn-primary">My Courses</Link>
           <Link
             href="/fees"

@@ -166,12 +166,15 @@ export async function syncFeeLedger(fee: {
 export const feeService = {
   async list(filters: {
     studentId?: string | null;
+    /** Several students at once (a parent's children). */
+    studentIds?: string[];
     status?: string | null;
     branchCode?: string | null;
   }) {
     await dbConnect();
     const query: Record<string, unknown> = {};
     if (filters.studentId) query.studentId = filters.studentId;
+    else if (filters.studentIds) query.studentId = { $in: filters.studentIds };
     if (filters.status) query.status = filters.status;
     if (filters.branchCode) query.branchCode = filters.branchCode.toUpperCase();
 

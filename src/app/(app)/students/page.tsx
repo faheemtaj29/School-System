@@ -316,6 +316,12 @@ export default function StudentsPage() {
                           email={s.email}
                           name={fullName(s)}
                         />
+                        <PortalAccessButton
+                          kind="parent"
+                          id={s._id}
+                          email={s.parentEmail}
+                          name={fullName(s)}
+                        />
                         <button
                           type="button"
                           className="link-btn danger"
