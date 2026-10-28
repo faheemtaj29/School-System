@@ -3,445 +3,465 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { NameCell, Panel, StatusBadge, inputClass } from "@/components/ui";
-import {
-  ClassItem,
-  FeeItem,
-  StudentItem,
-  fullName,
-  formatNumber,
-  labelOfClass,
-  prettyDate,
-  toDateInput,
-} from "@/lib/types";
+import { EmptyState, Panel, StatusBadge } from "@/components/ui";
+import { PersonPhoto } from "@/components/PersonPhoto";
+import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
 
-/* ── local types ─────────────────────────────────────────────────── */
-type ExamResult = {
+/* ── types (shape of /api/students/[id]/profile) ─────────────────── */
+type Status = "present" | "absent" | "late" | "excused";
+type Student = {
   _id: string;
+  admissionNo: string;
+  firstName: string;
+  lastName: string;
+  email?: string;
+  phone?: string;
+  gender?: string;
+  dateOfBirth?: string;
+  address?: string;
+  rollNumber?: string;
+  parentName?: string;
+  parentPhone?: string;
+  parentEmail?: string;
+  admissionDate?: string;
+  createdAt?: string;
+  status: string;
+  cnic?: string;
+  nationality?: string;
+  religion?: string;
+  previousSchool?: string;
+  discountType?: string;
+  discountPercent?: number;
+  tcNo?: string;
+  tcIssuedDate?: string;
+  leavingDate?: string;
+  leavingReason?: string;
+  conductRemark?: string;
+  photoUrl: string | null;
+  classId?: { _id: string; name: string; section?: string; room?: string } | null;
+};
+type LedgerRow = { date: string; number: string; description: string; debit: number; credit: number; balance: number; kind: string };
+type Card = {
+  termId: string;
+  classId: string;
+  term: string;
+  academicYear: string;
   date: string;
-  examType: string;
-  subject: { name: string; code?: string };
-  className: string;
-  maxMarks: number;
-  marks: number;
-  grade?: string;
-  remarks?: string;
+  classLabel: string;
+  totalMarks: number;
+  obtained: number;
+  percent: number;
+  grade: string;
+  result: string;
+  position: number;
+  outOf: number;
+  subjects: { name: string; obtained: number; totalMarks: number; grade: string; status: string }[];
+};
+type Profile = {
+  student: Student;
+  currency: string;
+  ledger: { rows: LedgerRow[]; totalDebit: number; totalCredit: number; balance: number; challans: { _id: string; title: string; status: string }[] };
+  attendance: {
+    total: number;
+    present: number;
+    absent: number;
+    late: number;
+    excused: number;
+    percent: number | null;
+    months: { month: string; present: number; absent: number; late: number; excused: number }[];
+    days: { date: string; status: Status; note: string }[];
+  };
+  results: { cards: Card[]; tests: { _id: string; date: string; title: string; subject: string; marks: number; maxMarks: number; grade: string }[] };
+  timeline: { date: string; kind: string; title: string; detail?: string }[];
+  viewer: { role: string };
 };
 
-type ProfileTab = "overview" | "fees" | "academics";
+type Tab = "overview" | "record" | "attendance" | "fees" | "results";
 
-/* ── helpers ─────────────────────────────────────────────────────── */
-function initials(s: StudentItem) {
-  return `${s.firstName?.[0] ?? ""}${s.lastName?.[0] ?? ""}`.toUpperCase();
+const STATUS_LABEL: Record<Status, string> = { present: "P", absent: "A", late: "L", excused: "E" };
+const KIND_ICON: Record<string, string> = { admission: "🎓", fee: "🧾", payment: "💵", result: "📊", absent: "✕", tc: "📄" };
+
+function Info({ label, value }: { label: string; value?: string | number | null }) {
+  return (
+    <div className="tp-info">
+      <span>{label}</span>
+      <b>{value === undefined || value === null || value === "" ? "—" : value}</b>
+    </div>
+  );
 }
 
-function gradeColor(pct: number) {
-  if (pct >= 80) return "#16a34a";
-  if (pct >= 60) return "var(--primary)";
-  if (pct >= 40) return "var(--warn, #e97316)";
-  return "var(--danger)";
-}
-
-function pct(marks: number, max: number) {
-  if (!max) return 0;
-  return Math.round((marks / max) * 100);
+function monthLabel(m: string) {
+  const [y, mo] = m.split("-").map(Number);
+  return new Date(y, mo - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 }
 
 /* ══════════════════════════════════════════════════════════════════ */
 export default function StudentProfilePage() {
-  const params = useParams();
-  const id = params?.id as string;
-
-  const [student, setStudent] = useState<StudentItem | null>(null);
-  const [classes, setClasses] = useState<ClassItem[]>([]);
-  const [fees, setFees] = useState<FeeItem[]>([]);
-  const [exams, setExams] = useState<ExamResult[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<ProfileTab>("overview");
+  const { id } = useParams<{ id: string }>();
+  const [data, setData] = useState<Profile | null>(null);
+  const [err, setErr] = useState("");
+  const [tab, setTab] = useState<Tab>("overview");
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [marking, setMarking] = useState("");
 
   const load = useCallback(async () => {
-    if (!id) return;
-    setLoading(true);
-    try {
-      const [sRes, fRes, eRes, cRes] = await Promise.all([
-        fetch(`/api/students/${id}`).then((r) => r.json()),
-        fetch(`/api/fees?studentId=${id}`).then((r) => r.json()),
-        fetch("/api/exams").then((r) => r.json()),
-        fetch("/api/classes").then((r) => r.json()),
-      ]);
-      setStudent(sRes.student ?? null);
-      setFees(fRes.fees ?? []);
-      setClasses(cRes.classes ?? []);
-
-      // filter exam results for this student
-      const allExams = eRes.exams ?? [];
-      const results: ExamResult[] = [];
-      for (const exam of allExams) {
-        const myResult = (exam.results ?? []).find((r: { studentId: { _id?: string } | string }) => {
-          const sid = typeof r.studentId === "object" ? r.studentId._id : r.studentId;
-          return sid === id;
-        });
-        if (myResult) {
-          results.push({
-            _id: exam._id,
-            date: exam.date,
-            examType: exam.examType ?? "Exam",
-            subject: typeof exam.subjectId === "object"
-              ? { name: exam.subjectId.name, code: exam.subjectId.code }
-              : { name: "Unknown" },
-            className: typeof exam.classId === "object"
-              ? `${exam.classId.name}-${exam.classId.section}`
-              : "—",
-            maxMarks: exam.maxMarks ?? 100,
-            marks: myResult.marks ?? 0,
-            grade: myResult.grade,
-            remarks: myResult.remarks,
-          });
-        }
-      }
-      results.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setExams(results);
-    } finally {
-      setLoading(false);
-    }
+    const res = await fetch(`/api/students/${id}/profile`);
+    const d = await res.json();
+    if (!res.ok) return setErr(d.error || "Could not load the student");
+    setData(d);
   }, [id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches data, state is set when it arrives
+    load();
+  }, [load]);
 
-  /* ── computed stats ─────────────────────────────────────────────── */
-  const feeStats = useMemo(() => {
-    const billed = fees.reduce((s, f) => s + (f.amount || 0), 0);
-    const collected = fees.reduce((s, f) => s + (f.paidAmount || 0), 0);
-    const outstanding = fees.filter((f) => f.status !== "paid").reduce((s, f) => s + Math.max(0, (f.amount || 0) - (f.paidAmount || 0)), 0);
-    const paid = fees.filter((f) => f.status === "paid").length;
-    const pending = fees.filter((f) => f.status !== "paid").length;
-    return { billed, collected, outstanding, paid, pending };
-  }, [fees]);
+  const byDay = useMemo(
+    () => new Map((data?.attendance.days || []).map((d) => [new Date(d.date).toISOString().slice(0, 10), d])),
+    [data]
+  );
 
-  const examStats = useMemo(() => {
-    if (!exams.length) return null;
-    const totalPct = exams.reduce((s, e) => s + pct(e.marks, e.maxMarks), 0);
-    const avg = Math.round(totalPct / exams.length);
-    const highest = exams.reduce((best, e) => pct(e.marks, e.maxMarks) > pct(best.marks, best.maxMarks) ? e : best, exams[0]);
-    const lowest = exams.reduce((worst, e) => pct(e.marks, e.maxMarks) < pct(worst.marks, worst.maxMarks) ? e : worst, exams[0]);
-    return { avg, highest, lowest, total: exams.length };
-  }, [exams]);
+  if (err) return <EmptyState message={err} />;
+  if (!data) return <div className="tp-loading">Loading student profile…</div>;
 
-  /* ── loading / not found ────────────────────────────────────────── */
-  if (loading) {
-    return (
-      <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--text-dim)" }}>
-        Loading student profile…
-      </div>
-    );
-  }
-  if (!student) {
-    return (
-      <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--text-dim)" }}>
-        Student not found.{" "}
-        <Link href="/students" style={{ color: "var(--primary)" }}>Go back</Link>
-      </div>
-    );
+  const s = data.student;
+  const name = `${s.firstName} ${s.lastName}`;
+  const cur = data.currency;
+  const cls = s.classId ? `${s.classId.name}${s.classId.section ? ` – ${s.classId.section}` : ""}` : "—";
+  const canMark = data.viewer.role === "admin" || data.viewer.role === "teacher";
+  const canPhoto = data.viewer.role !== "student" && data.viewer.role !== "parent";
+  const latest = data.results.cards[0];
+
+  async function mark(date: string, status: Status) {
+    setMarking(date);
+    const res = await fetch(`/api/students/${id}/attendance`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date, status }),
+    });
+    const d = await res.json();
+    setMarking("");
+    if (res.ok && data) setData({ ...data, attendance: d.attendance });
   }
 
-  const className = labelOfClass(student.classId as ClassItem);
+  // Calendar for the chosen month (Monday first).
+  const [cy, cm] = month.split("-").map(Number);
+  const first = new Date(Date.UTC(cy, cm - 1, 1));
+  const daysInMonth = new Date(Date.UTC(cy, cm, 0)).getUTCDate();
+  const lead = (first.getUTCDay() + 6) % 7;
+  const today = toDateInput(new Date());
+  const cells = [
+    ...Array.from({ length: lead }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => `${month}-${String(i + 1).padStart(2, "0")}`),
+  ];
+  const monthStats = data.attendance.months.find((m) => m.month === month);
 
-  /* ── render ─────────────────────────────────────────────────────── */
   return (
     <>
-      {/* Back navigation */}
-      <div style={{ padding: "12px 24px 0" }}>
-        <Link
-          href="/students"
-          style={{ fontSize: 13, color: "var(--text-dim)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
-        >
-          ← Students
-        </Link>
+      <div className="no-print" style={{ marginBottom: 10 }}>
+        <Link href="/students" className="link-btn">← Students</Link>
       </div>
 
-      {/* ── Profile header ──────────────────────────────────────────── */}
-      <div style={{
-        margin: "12px 24px 0",
-        padding: "20px 24px",
-        background: "var(--card)",
-        border: "1px solid var(--line)",
-        borderRadius: 12,
-        display: "flex",
-        gap: 20,
-        alignItems: "flex-start",
-        flexWrap: "wrap",
-      }}>
-        {/* Avatar */}
-        <div style={{
-          width: 72, height: 72, borderRadius: "50%",
-          background: "var(--primary)", color: "#fff",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 24, fontWeight: 700, flexShrink: 0, letterSpacing: 1,
-        }}>
-          {initials(student)}
-        </div>
-
-        {/* Main info */}
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>{fullName(student)}</h2>
-            <StatusBadge status={student.status} />
-          </div>
-          <div style={{ marginTop: 6, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13, color: "var(--text-dim)" }}>
-            <span>Admission No: <strong style={{ color: "var(--fg, currentColor)" }}>{student.admissionNo}</strong></span>
-            {student.rollNumber ? <span>Roll No: <strong style={{ color: "var(--fg, currentColor)" }}>{student.rollNumber}</strong></span> : null}
-            <span>Class: <strong style={{ color: "var(--fg, currentColor)" }}>{className || "—"}</strong></span>
-            {student.admissionDate ? <span>Admitted: <strong style={{ color: "var(--fg, currentColor)" }}>{prettyDate(student.admissionDate)}</strong></span> : null}
-          </div>
-          <div style={{ marginTop: 6, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12, color: "var(--text-dim)" }}>
-            {student.gender ? <span>{student.gender}</span> : null}
-            {student.dateOfBirth ? <span>DOB: {prettyDate(student.dateOfBirth)}</span> : null}
-            {student.phone ? <span>📞 {student.phone}</span> : null}
-            {student.email ? <span>✉ {student.email}</span> : null}
+      {/* ── header ─────────────────────────────────────────────── */}
+      <section className="tp-hero">
+        <PersonPhoto
+          kind="student"
+          id={s._id}
+          url={s.photoUrl}
+          name={name}
+          editable={canPhoto}
+          onChanged={(url) => setData({ ...data, student: { ...s, photoUrl: url } })}
+        />
+        <div className="tp-hero-main">
+          <h1>{name}</h1>
+          <p>
+            {cls}
+            {s.rollNumber ? ` · Roll no. ${s.rollNumber}` : ""}
+            {s.parentName ? ` · ${s.gender === "female" ? "D/o" : "S/o"} ${s.parentName}` : ""}
+          </p>
+          <div className="tp-tags">
+            <span>Adm. {s.admissionNo}</span>
+            <span>Admitted {prettyDate(s.admissionDate || s.createdAt || "")}</span>
+            {s.discountType && s.discountType !== "none" ? (
+              <span>Concession: {s.discountType.replace(/_/g, " ")}{s.discountPercent ? ` ${s.discountPercent}%` : ""}</span>
+            ) : null}
+            <StatusBadge status={s.status} />
           </div>
         </div>
-
-        {/* Quick stats */}
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <div style={{ textAlign: "center", minWidth: 72 }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: feeStats.outstanding > 0 ? "var(--danger)" : "#16a34a" }}>
-              {feeStats.outstanding > 0 ? `PKR ${formatNumber(feeStats.outstanding)}` : "✓"}
-            </div>
-            <div style={{ fontSize: 11, color: "var(--text-dim)" }}>Outstanding</div>
-          </div>
-          {examStats ? (
-            <div style={{ textAlign: "center", minWidth: 72 }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: gradeColor(examStats.avg) }}>
-                {examStats.avg}%
-              </div>
-              <div style={{ fontSize: 11, color: "var(--text-dim)" }}>Avg Score</div>
-            </div>
-          ) : null}
+        <div className="tp-hero-stats">
+          <div><small>Attendance</small><b>{data.attendance.percent === null ? "—" : `${data.attendance.percent}%`}</b></div>
+          <div><small>Latest result</small><b>{latest ? `${latest.percent}% · ${latest.grade}` : "—"}</b></div>
+          <div><small>Fee balance</small><b>{cur} {formatNumber(data.ledger.balance)}</b></div>
+          <div><small>Days absent</small><b>{data.attendance.absent}</b></div>
         </div>
-      </div>
+      </section>
 
-      {/* ── Tab bar ─────────────────────────────────────────────────── */}
-      <div className="tabs" style={{ margin: "16px 24px 0" }}>
-        {([
-          { key: "overview", label: "Overview" },
-          { key: "fees",     label: `Fees (${fees.length})` },
-          { key: "academics", label: `Academics (${exams.length})` },
-        ] as { key: ProfileTab; label: string }[]).map(({ key, label }) => (
-          <button
-            key={key}
-            type="button"
-            className={`tab${tab === key ? " active" : ""}`}
-            onClick={() => setTab(key)}
-          >
-            {label}
+      <div className="chips no-print" style={{ margin: "14px 0" }}>
+        {(
+          [
+            ["overview", "Profile"],
+            ["record", "Track record"],
+            ["attendance", "Attendance"],
+            ["fees", "Fee ledger"],
+            ["results", `Results (${data.results.cards.length || data.results.tests.length})`],
+          ] as [Tab, string][]
+        ).map(([k, l]) => (
+          <button key={k} type="button" className={`filter-chip${tab === k ? " active" : ""}`} onClick={() => setTab(k)}>
+            {l}
           </button>
         ))}
       </div>
 
-      {/* ══ OVERVIEW TAB ════════════════════════════════════════════════ */}
+      {/* ── profile ─────────────────────────────────────────────── */}
       {tab === "overview" ? (
+        <div className="tp-grid">
+          <Panel title="Personal">
+            <Info label="Full name" value={name} />
+            <Info label="Gender" value={s.gender} />
+            <Info label="Date of birth" value={s.dateOfBirth ? prettyDate(s.dateOfBirth) : ""} />
+            <Info label="B-Form / CNIC" value={s.cnic} />
+            <Info label="Nationality" value={s.nationality} />
+            <Info label="Religion" value={s.religion} />
+            <Info label="Address" value={s.address} />
+          </Panel>
+          <Panel title="Guardian / Parent">
+            <Info label="Name" value={s.parentName} />
+            <Info label="Phone" value={s.parentPhone} />
+            <Info label="Email" value={s.parentEmail} />
+            <Info label="Student phone" value={s.phone} />
+            <Info label="Student email" value={s.email} />
+          </Panel>
+          <Panel title="School">
+            <Info label="Admission no." value={s.admissionNo} />
+            <Info label="Admission date" value={prettyDate(s.admissionDate || s.createdAt || "")} />
+            <Info label="Class" value={cls} />
+            <Info label="Roll no." value={s.rollNumber} />
+            <Info label="Previous school" value={s.previousSchool} />
+            <Info label="Status" value={s.status} />
+          </Panel>
+          {s.tcNo ? (
+            <Panel title="Transfer Certificate">
+              <Info label="TC no." value={s.tcNo} />
+              <Info label="Issued" value={s.tcIssuedDate ? prettyDate(s.tcIssuedDate) : ""} />
+              <Info label="Leaving date" value={s.leavingDate ? prettyDate(s.leavingDate) : ""} />
+              <Info label="Reason" value={s.leavingReason} />
+              <Info label="Conduct" value={s.conductRemark} />
+            </Panel>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* ── track record ───────────────────────────────────────── */}
+      {tab === "record" ? (
+        <Panel title="Track Record" meta={`${data.timeline.length} EVENTS`}>
+          {!data.timeline.length ? (
+            <EmptyState message="Nothing recorded yet." />
+          ) : (
+            <ol className="sp-timeline">
+              {data.timeline.map((t, i) => (
+                <li key={i} className={`sp-tl-${t.kind}`}>
+                  <span className="sp-tl-dot">{KIND_ICON[t.kind] || "•"}</span>
+                  <div>
+                    <b>{t.title}</b>
+                    {t.detail ? <span>{t.detail}</span> : null}
+                  </div>
+                  <time>{prettyDate(t.date)}</time>
+                </li>
+              ))}
+            </ol>
+          )}
+        </Panel>
+      ) : null}
+
+      {/* ── attendance ─────────────────────────────────────────── */}
+      {tab === "attendance" ? (
         <>
-          {/* Personal details */}
-          <Panel title="Personal Information" style={{ margin: "12px 24px 0" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "12px 24px", fontSize: 13 }}>
-              <InfoRow label="Full Name" value={fullName(student)} />
-              <InfoRow label="Admission No." value={student.admissionNo} />
-              <InfoRow label="Roll Number" value={student.rollNumber} />
-              <InfoRow label="Class" value={className} />
-              <InfoRow label="Gender" value={student.gender} />
-              <InfoRow label="Date of Birth" value={student.dateOfBirth ? prettyDate(student.dateOfBirth) : undefined} />
-              <InfoRow label="CNIC / B-Form" value={student.cnic} />
-              <InfoRow label="Nationality" value={student.nationality} />
-              <InfoRow label="Religion" value={student.religion} />
-              <InfoRow label="Admission Date" value={student.admissionDate ? prettyDate(student.admissionDate) : undefined} />
-              <InfoRow label="Email" value={student.email} />
-              <InfoRow label="Phone" value={student.phone} />
-              {student.address ? (
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <InfoRow label="Address" value={student.address} />
-                </div>
-              ) : null}
-              {student.previousSchool ? (
-                <InfoRow label="Previous School" value={student.previousSchool} />
-              ) : null}
-            </div>
-          </Panel>
-
-          {/* Guardian details */}
-          {(student.parentName || student.parentPhone || student.parentEmail) ? (
-            <Panel title="Guardian / Parent" style={{ margin: "12px 24px 0" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "12px 24px", fontSize: 13 }}>
-                <InfoRow label="Name" value={student.parentName} />
-                <InfoRow label="Phone" value={student.parentPhone} />
-                <InfoRow label="Email" value={student.parentEmail} />
+          <div className="pay-stat-row">
+            <div className="pay-stat"><div className="tag">Days marked</div><div className="num">{data.attendance.total}</div></div>
+            <div className="pay-stat"><div className="tag">Present</div><div className="num" style={{ color: "var(--jade-dark)" }}>{data.attendance.present}</div></div>
+            <div className="pay-stat"><div className="tag">Late</div><div className="num" style={{ color: "#96650f" }}>{data.attendance.late}</div></div>
+            <div className="pay-stat"><div className="tag">Absent</div><div className="num" style={{ color: "var(--red)" }}>{data.attendance.absent}</div></div>
+            <div className="pay-stat"><div className="tag">Leave</div><div className="num">{data.attendance.excused}</div></div>
+          </div>
+          <div className="tp-grid">
+            <Panel title={monthLabel(month)} meta={monthStats ? `P ${monthStats.present} · A ${monthStats.absent} · L ${monthStats.late}` : "NO RECORD"}>
+              <div className="chips no-print" style={{ marginBottom: 10 }}>
+                <button type="button" className="filter-chip" onClick={() => setMonth(toDateInput(new Date(Date.UTC(cy, cm - 2, 1))).slice(0, 7))}>‹ Previous</button>
+                <button type="button" className="filter-chip" onClick={() => setMonth(new Date().toISOString().slice(0, 7))}>This month</button>
+                <button type="button" className="filter-chip" onClick={() => setMonth(toDateInput(new Date(Date.UTC(cy, cm, 1))).slice(0, 7))}>Next ›</button>
               </div>
-            </Panel>
-          ) : null}
-
-          {/* Fee snapshot */}
-          <Panel title="Fee Snapshot" style={{ margin: "12px 24px 0" }}>
-            <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-              <StatTile label="Total Billed" value={`PKR ${formatNumber(feeStats.billed)}`} />
-              <StatTile label="Collected" value={`PKR ${formatNumber(feeStats.collected)}`} color="#16a34a" />
-              <StatTile label="Outstanding" value={`PKR ${formatNumber(feeStats.outstanding)}`} color={feeStats.outstanding > 0 ? "var(--danger)" : undefined} />
-              <StatTile label="Paid Vouchers" value={String(feeStats.paid)} />
-              <StatTile label="Pending" value={String(feeStats.pending)} color={feeStats.pending > 0 ? "var(--warn, #e97316)" : undefined} />
-            </div>
-          </Panel>
-
-          {/* Academic snapshot */}
-          {examStats ? (
-            <Panel title="Academic Snapshot" style={{ margin: "12px 24px 0" }}>
-              <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-                <StatTile label="Exams Taken" value={String(examStats.total)} />
-                <StatTile label="Average Score" value={`${examStats.avg}%`} color={gradeColor(examStats.avg)} />
-                <StatTile label="Best Subject" value={examStats.highest.subject.name} sub={`${pct(examStats.highest.marks, examStats.highest.maxMarks)}%`} color="#16a34a" />
-                <StatTile label="Needs Attention" value={examStats.lowest.subject.name} sub={`${pct(examStats.lowest.marks, examStats.lowest.maxMarks)}%`} color={gradeColor(pct(examStats.lowest.marks, examStats.lowest.maxMarks))} />
+              <div className="sp-cal">
+                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => <div key={d} className="sp-cal-h">{d}</div>)}
+                {cells.map((day, i) => {
+                  if (!day) return <div key={`x${i}`} />;
+                  const rec = byDay.get(day);
+                  const future = day > today;
+                  return (
+                    <div key={day} className={`sp-cal-d${rec ? ` sp-${rec.status}` : ""}${day === today ? " sp-today" : ""}`} title={rec?.note || rec?.status || ""}>
+                      <span>{Number(day.slice(8))}</span>
+                      {rec ? <b>{STATUS_LABEL[rec.status]}</b> : null}
+                      {canMark && !future ? (
+                        <div className="sp-cal-mark no-print">
+                          {(["present", "absent", "late", "excused"] as Status[]).map((st) => (
+                            <button key={st} type="button" disabled={marking === day} onClick={() => mark(day, st)} title={st}>
+                              {STATUS_LABEL[st]}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
+              <p className="coa-hint">
+                P present · A absent · L late · E leave/excused.
+                {canMark ? " Hover a day and click a letter to mark this student (class-wise marking is on the Attendance page)." : ""}
+              </p>
             </Panel>
-          ) : null}
-
-          {/* TC info if issued */}
-          {student.tcNo ? (
-            <Panel title="Transfer Certificate" style={{ margin: "12px 24px 0" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "12px 24px", fontSize: 13 }}>
-                <InfoRow label="TC No." value={student.tcNo} />
-                <InfoRow label="Issued Date" value={student.tcIssuedDate ? prettyDate(student.tcIssuedDate) : undefined} />
-                <InfoRow label="Leaving Date" value={student.leavingDate ? prettyDate(student.leavingDate) : undefined} />
-                <InfoRow label="Reason" value={student.leavingReason} />
-                <InfoRow label="Conduct" value={student.conductRemark} />
-              </div>
+            <Panel title="Month by month" meta={`${data.attendance.months.length} MONTHS`}>
+              {!data.attendance.months.length ? (
+                <EmptyState message="No attendance marked yet." />
+              ) : (
+                <table className="reg report-table">
+                  <thead>
+                    <tr><th>Month</th><th className="right">P</th><th className="right">L</th><th className="right">A</th><th className="right">E</th><th className="right">%</th></tr>
+                  </thead>
+                  <tbody>
+                    {data.attendance.months.map((m) => {
+                      const total = m.present + m.late + m.absent + m.excused;
+                      return (
+                        <tr key={m.month} style={{ cursor: "pointer" }} onClick={() => setMonth(m.month)}>
+                          <td>{monthLabel(m.month)}</td>
+                          <td className="num">{m.present}</td>
+                          <td className="num">{m.late}</td>
+                          <td className="num">{m.absent}</td>
+                          <td className="num">{m.excused}</td>
+                          <td className="num">{total ? Math.round(((m.present + m.late) / total) * 100) : 0}%</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </Panel>
-          ) : null}
+          </div>
         </>
       ) : null}
 
-      {/* ══ FEES TAB ════════════════════════════════════════════════════ */}
+      {/* ── fee ledger ─────────────────────────────────────────── */}
       {tab === "fees" ? (
-        <Panel title="Fee History" meta={`${fees.length} VOUCHER${fees.length !== 1 ? "S" : ""}`} style={{ margin: "12px 24px 0" }}>
-          {!fees.length ? (
-            <div style={{ padding: "24px 0", textAlign: "center", color: "var(--text-dim)", fontSize: 13 }}>
-              No fee vouchers generated yet.
-            </div>
+        <Panel title="Fee Ledger" meta={`BALANCE ${cur} ${formatNumber(data.ledger.balance)}`}>
+          <div className="chips no-print" style={{ marginBottom: 12 }}>
+            <button type="button" className="btn-dark" onClick={() => window.open(`/print/student-ledger?student=${s._id}`, "_blank")}>
+              Print fee ledger
+            </button>
+            <Link href={`/fees?q=${encodeURIComponent(s.admissionNo)}`} className="btn-ghost">Collect fee / challans</Link>
+          </div>
+          {!data.ledger.rows.length ? (
+            <EmptyState message="No fee challans yet." />
           ) : (
             <div className="table-scroll">
-              <table className="reg">
+              <table className="reg report-table pl-table">
                 <thead>
                   <tr>
-                    <th>Title</th>
-                    <th className="num">Due Date</th>
-                    <th className="num">Amount</th>
-                    <th className="num">Paid</th>
-                    <th className="right">Status</th>
+                    <th style={{ width: 170 }}>Voucher / receipt no.</th>
+                    <th style={{ width: 110 }}>Date</th>
+                    <th>Description</th>
+                    <th className="right">Debit (charged)</th>
+                    <th className="right">Credit (paid / concession)</th>
+                    <th className="right">Balance</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {fees.map((fee) => (
-                    <tr key={fee._id} style={{ background: fee.status === "overdue" ? "var(--red-bg, #fff1f1)" : undefined }}>
-                      <td>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{fee.title}</div>
-                        {fee.lines?.length ? (
-                          <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
-                            {fee.lines.map((l) => `${l.head}: PKR ${formatNumber(l.amount)}`).join(" · ")}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="num">{prettyDate(fee.dueDate)}</td>
-                      <td className="num" style={{ fontWeight: 600 }}>PKR {formatNumber(fee.amount)}</td>
-                      <td className="num" style={{ color: (fee.paidAmount || 0) > 0 ? "#16a34a" : "var(--text-dim)" }}>
-                        {(fee.paidAmount || 0) > 0 ? `PKR ${formatNumber(fee.paidAmount)}` : "—"}
-                      </td>
-                      <td className="right">
-                        <StatusBadge status={fee.status} />
-                      </td>
+                  {data.ledger.rows.map((r, i) => (
+                    <tr key={i}>
+                      <td className="num">{r.number}</td>
+                      <td>{prettyDate(r.date)}</td>
+                      <td>{r.description}</td>
+                      <td className="num">{r.debit ? formatNumber(r.debit) : ""}</td>
+                      <td className="num">{r.credit ? formatNumber(r.credit) : ""}</td>
+                      <td className="num">{formatNumber(r.balance)}</td>
+                    </tr>
+                  ))}
+                  <tr className="total-row">
+                    <td colSpan={3}><strong>Total / balance due</strong></td>
+                    <td className="num"><strong>{formatNumber(data.ledger.totalDebit)}</strong></td>
+                    <td className="num"><strong>{formatNumber(data.ledger.totalCredit)}</strong></td>
+                    <td className="num"><strong>{formatNumber(data.ledger.balance)}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      ) : null}
+
+      {/* ── results ────────────────────────────────────────────── */}
+      {tab === "results" ? (
+        <>
+          {!data.results.cards.length && !data.results.tests.length ? (
+            <Panel title="Results"><EmptyState message="No results ready yet." /></Panel>
+          ) : null}
+          {data.results.cards.map((c) => (
+            <Panel
+              key={c.termId}
+              title={`${c.term} · ${c.academicYear}`}
+              meta={`${c.result} · ${c.percent}% · GRADE ${c.grade}${c.position ? ` · POSITION ${c.position}/${c.outOf}` : ""}`}
+            >
+              <div className="table-scroll">
+                <table className="reg report-table">
+                  <thead>
+                    <tr><th>Subject</th><th className="right">Marks</th><th className="right">Out of</th><th className="right">Grade</th><th className="right">Status</th></tr>
+                  </thead>
+                  <tbody>
+                    {c.subjects.map((sub) => (
+                      <tr key={sub.name}>
+                        <td>{sub.name}</td>
+                        <td className="num">{sub.status === "absent" ? "ABS" : sub.obtained}</td>
+                        <td className="num">{sub.totalMarks}</td>
+                        <td className="num">{sub.grade}</td>
+                        <td className="right"><span className={`sp-res sp-res-${sub.status}`}>{sub.status.toUpperCase()}</span></td>
+                      </tr>
+                    ))}
+                    <tr className="total-row">
+                      <td><strong>Total</strong></td>
+                      <td className="num"><strong>{c.obtained}</strong></td>
+                      <td className="num"><strong>{c.totalMarks}</strong></td>
+                      <td className="num"><strong>{c.grade}</strong></td>
+                      <td className="right"><strong>{c.result}</strong></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <button
+                type="button"
+                className="link-btn no-print"
+                onClick={() => window.open(`/print/result-cards?termId=${c.termId}&classIds=${c.classId}&student=${s._id}`, "_blank")}
+              >
+                Print result card
+              </button>
+            </Panel>
+          ))}
+          {data.results.tests.length && !data.results.cards.length ? (
+            <Panel title="Tests" meta={`${data.results.tests.length} TESTS`}>
+              <table className="reg report-table">
+                <thead><tr><th>Date</th><th>Test</th><th>Subject</th><th className="right">Marks</th><th className="right">Grade</th></tr></thead>
+                <tbody>
+                  {data.results.tests.map((t) => (
+                    <tr key={t._id}>
+                      <td>{prettyDate(t.date)}</td>
+                      <td>{t.title}</td>
+                      <td>{t.subject}</td>
+                      <td className="num">{t.marks} / {t.maxMarks}</td>
+                      <td className="num">{t.grade || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
-          )}
-        </Panel>
+            </Panel>
+          ) : null}
+        </>
       ) : null}
-
-      {/* ══ ACADEMICS TAB ═══════════════════════════════════════════════ */}
-      {tab === "academics" ? (
-        <Panel title="Exam Results" meta={`${exams.length} RESULT${exams.length !== 1 ? "S" : ""}`} style={{ margin: "12px 24px 0" }}>
-          {!exams.length ? (
-            <div style={{ padding: "24px 0", textAlign: "center", color: "var(--text-dim)", fontSize: 13 }}>
-              No exam results recorded yet.
-            </div>
-          ) : (
-            <div className="table-scroll">
-              <table className="reg">
-                <thead>
-                  <tr>
-                    <th>Subject</th>
-                    <th>Exam Type</th>
-                    <th className="num">Date</th>
-                    <th className="num">Marks</th>
-                    <th className="num">%</th>
-                    <th className="right">Grade</th>
-                    <th>Remarks</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {exams.map((e) => {
-                    const scorePct = pct(e.marks, e.maxMarks);
-                    return (
-                      <tr key={e._id}>
-                        <td>
-                          <div style={{ fontWeight: 600, fontSize: 13 }}>{e.subject.name}</div>
-                          {e.subject.code ? <div style={{ fontSize: 11, color: "var(--text-dim)" }}>{e.subject.code}</div> : null}
-                        </td>
-                        <td style={{ fontSize: 13 }}>{e.examType}</td>
-                        <td className="num">{prettyDate(e.date)}</td>
-                        <td className="num" style={{ fontWeight: 600 }}>{e.marks} / {e.maxMarks}</td>
-                        <td className="num">
-                          <span style={{
-                            display: "inline-block", padding: "2px 8px", borderRadius: 99,
-                            background: `${gradeColor(scorePct)}22`,
-                            color: gradeColor(scorePct), fontWeight: 700, fontSize: 12,
-                          }}>
-                            {scorePct}%
-                          </span>
-                        </td>
-                        <td className="right">
-                          {e.grade ? <StatusBadge status={e.grade} /> : <span style={{ color: "var(--text-dim)" }}>—</span>}
-                        </td>
-                        <td style={{ fontSize: 12, color: "var(--text-dim)" }}>{e.remarks || "—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Panel>
-      ) : null}
-
-      <div style={{ height: 40 }} />
     </>
-  );
-}
-
-/* ── sub-components ─────────────────────────────────────────────── */
-function InfoRow({ label, value }: { label: string; value?: string | null }) {
-  return (
-    <div>
-      <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--text-dim)", marginBottom: 2 }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 13, fontWeight: 500 }}>{value || "—"}</div>
-    </div>
-  );
-}
-
-function StatTile({ label, value, color, sub }: { label: string; value: string; color?: string; sub?: string }) {
-  return (
-    <div style={{ padding: "12px 16px", background: "var(--surface)", borderRadius: 8, border: "1px solid var(--line)", minWidth: 120 }}>
-      <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 700, color: color || undefined }}>{value}</div>
-      {sub ? <div style={{ fontSize: 11, color: color || "var(--text-dim)", marginTop: 2 }}>{sub}</div> : null}
-    </div>
   );
 }

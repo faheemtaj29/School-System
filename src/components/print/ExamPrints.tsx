@@ -183,8 +183,12 @@ function ordinal(n: number) {
 
 const STATUS_LABEL = { pass: "Pass", fail: "Fail", absent: "Absent", pending: "Pending" } as const;
 
-export function ResultCardsPrint({ termId, classIds }: { termId: string; classIds: string }) {
-  const { data, error } = usePrintData<ResultData>(resultsUrl(termId, classIds));
+export function ResultCardsPrint({ termId, classIds, studentId }: { termId: string; classIds: string; studentId?: string }) {
+  const { data: all, error } = usePrintData<ResultData>(resultsUrl(termId, classIds));
+  // One student's card when opened from their profile.
+  const data = all && studentId
+    ? { ...all, batches: all.batches.map((b) => ({ ...b, cards: b.cards.filter((c) => c.student._id === studentId) })) }
+    : all;
   const count = data?.batches.reduce((s, b) => s + b.cards.length, 0) || 0;
   return (
     <PrintShell title="Result Cards" info={data ? `${count} cards` : undefined} error={error} loading={!data}>

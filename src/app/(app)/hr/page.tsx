@@ -214,7 +214,7 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
       <Hero
         title="HR & Payroll"
         subtitle="Staff leave, salaries and payslips"
-        actionLabel={tab === "payroll" ? (portal === "teacher" ? undefined : "Create Payslip") : "Add Leave"}
+        actionLabel={tab === "payroll" ? (portal === "teacher" ? undefined : "Create Payslip") : tab === "leave" ? "Add Leave" : undefined}
         onAction={() => (tab === "payroll" ? (portal === "admin" ? setPayOpen(true) : undefined) : setLeaveOpen(true))}
       />
 
@@ -225,14 +225,14 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
           <div className="pay-stat"><div className="tag">Pending</div><div className="num" style={{ color: "#96650f" }}>{cur} {formatNumber(payroll.pending)}</div></div>
           <div className="pay-stat"><div className="tag">Draft</div><div className="num">{payroll.draft}</div></div>
         </div>
-      ) : (
+      ) : tab === "leave" ? (
         <div className="pay-stat-row">
           <div className="pay-stat"><div className="tag">Pending</div><div className="num" style={{ color: "#96650f" }}>{leaveStats.pending}</div></div>
           <div className="pay-stat"><div className="tag">Approved</div><div className="num" style={{ color: "var(--jade-dark)" }}>{leaveStats.approved}</div></div>
           <div className="pay-stat"><div className="tag">Rejected</div><div className="num">{leaveStats.rejected}</div></div>
           <div className="pay-stat"><div className="tag">Approved Days</div><div className="num">{leaveStats.totalDays}</div></div>
         </div>
-      )}
+      ) : null}
 
       <div className="tabs">
         <button type="button" className={`tab${tab === "payroll" ? " active" : ""}`} onClick={() => setTab("payroll")}>Payroll</button>
@@ -298,7 +298,7 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
             </div>
           )}
         </Panel>
-      ) : (
+      ) : tab === "leave" ? (
         <Panel title="Leave Requests" meta={`${leaves.length} RECORDS`}>
           {!leaves.length ? (
             <EmptyState message="No leave requests." />
@@ -343,7 +343,7 @@ body{font:14px Arial,sans-serif;color:#17212b;margin:40px}header{border-bottom:2
             </div>
           )}
         </Panel>
-      )}
+      ) : null}
 
       <ModalForm open={leaveOpen} onClose={() => setLeaveOpen(false)} onSubmit={createLeave} title="Add Leave Request" submitLabel="Submit">
         {err ? <div className="alert err">{err}</div> : null}

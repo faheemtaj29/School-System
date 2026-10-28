@@ -344,7 +344,7 @@ async function stockDocNumbers(vouchers: { sourceType?: string; sourceId?: unkno
 }
 
 /** School letterhead for printed reports, and the campus name for a branch code. */
-async function printHeader(branchCode?: string | null) {
+export async function printHeader(branchCode?: string | null) {
   const s = await Settings.findOne().select("schoolName address phone email currency logoUpdatedAt branches").lean();
   const code = branchCode ? branchCode.toUpperCase() : "";
   const branch = code ? (s?.branches || []).find((b: { code: string; name: string }) => b.code === code) : null;

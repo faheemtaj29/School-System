@@ -52,6 +52,12 @@ export default function FeesPage() {
   // Received/Pending filters
   const [filterClass, setFilterClass] = useState("");
   const [feeSearch, setFeeSearch] = useState("");
+  // Opened from a student's profile: /fees?q=<admission no.>
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the URL
+    if (q) setFeeSearch(q);
+  }, []);
 
   // Single voucher edit
   const [editOpen, setEditOpen] = useState(false);

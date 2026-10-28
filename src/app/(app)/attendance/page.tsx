@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState, Field, Hero, NameCell, Panel, inputClass } from "@/components/ui";
 import { CheckCalendarIcon } from "@/components/Icons";
@@ -222,10 +223,12 @@ export default function AttendancePage() {
                 const student = students.find((s) => s._id === r.studentId);
                 return (
                   <div className="att-row" key={r.studentId}>
-                    <NameCell
-                      name={student ? fullName(student) : r.studentId}
-                      sub={student?.rollNumber ? `Roll ${student.rollNumber}` : undefined}
-                    />
+                    <Link href={`/students/${r.studentId}`} className="name-link" title="Open profile: full attendance record">
+                      <NameCell
+                        name={student ? fullName(student) : r.studentId}
+                        sub={student?.rollNumber ? `Roll ${student.rollNumber}` : undefined}
+                      />
+                    </Link>
                     <div className="att-opts">
                       {options.map((o) => (
                         <button

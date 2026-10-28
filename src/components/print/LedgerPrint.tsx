@@ -394,3 +394,91 @@ export function GeneralLedgerPrintPage({ query }: { query: string }) {
     </PrintShell>
   );
 }
+
+type StudentLedgerData = {
+  student: { firstName: string; lastName: string; admissionNo: string; parentName?: string; rollNumber?: string; classId?: { name: string; section?: string } | null };
+  ledger: { rows: { date: string; number: string; description: string; debit: number; credit: number; balance: number }[]; totalDebit: number; totalCredit: number; balance: number };
+  school: School;
+};
+
+/** A student's fee ledger — same layout as the party ledger. */
+export function StudentLedgerPrintPage({ query }: { query: string }) {
+  const id = new URLSearchParams(query).get("student") || "";
+  const { data, error } = usePrintData<StudentLedgerData>(id ? `/api/students/${id}/profile` : null);
+  const s = data?.student;
+  const cur = data?.school.currency || "Rs";
+  return (
+    <PrintShell title={s ? `Fee ledger · ${s.firstName} ${s.lastName}` : "Fee ledger"} error={error} loading={!data}>
+      {data && s ? (
+        <section className="doc-page qbp">
+          <Letterhead school={data.school} />
+          <h1 className="qbp-title">STUDENT FEE LEDGER</h1>
+          <div className="qbp-info">
+            <div>
+              <h4>Student</h4>
+              <p>
+                <b>{s.firstName} {s.lastName}</b>
+                {s.parentName ? <><br />Parent: {s.parentName}</> : null}
+                <br />Adm. {s.admissionNo}{s.rollNumber ? ` · Roll ${s.rollNumber}` : ""}
+              </p>
+            </div>
+            <div>
+              <h4>Class</h4>
+              <p>{s.classId ? `${s.classId.name}${s.classId.section ? ` – ${s.classId.section}` : ""}` : "—"}</p>
+            </div>
+            <table className="qbp-meta">
+              <tbody>
+                <tr><td>Printed</td><td>{fmtDate(new Date().toISOString())}</td></tr>
+                <tr><td>Balance due</td><td>{cur} {money(data.ledger.balance)}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <table className="qbp-lines">
+            <thead>
+              <tr>
+                <th style={{ width: 140 }}>Voucher / receipt</th>
+                <th style={{ width: 90 }}>Date</th>
+                <th>Description</th>
+                <th className="num" style={{ width: 95 }}>Debit</th>
+                <th className="num" style={{ width: 95 }}>Credit</th>
+                <th className="num" style={{ width: 105 }}>Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.ledger.rows.map((r, i) => (
+                <tr key={i}>
+                  <td>{r.number}</td>
+                  <td>{fmtDate(r.date)}</td>
+                  <td>{r.description}</td>
+                  <td className="num">{r.debit ? money(r.debit) : ""}</td>
+                  <td className="num">{r.credit ? money(r.credit) : ""}</td>
+                  <td className="num">{money(r.balance)}</td>
+                </tr>
+              ))}
+              <tr className="gl-total">
+                <td colSpan={3}><b>Total</b></td>
+                <td className="num"><b>{money(data.ledger.totalDebit)}</b></td>
+                <td className="num"><b>{money(data.ledger.totalCredit)}</b></td>
+                <td className="num"><b>{money(data.ledger.balance)}</b></td>
+              </tr>
+            </tbody>
+          </table>
+          <div className="qbp-sum">
+            <div className="qbp-words"><p>Debit = fee charged · Credit = fee paid or concession.</p></div>
+            <div className="qbp-tot">
+              <div><span>TOTAL CHARGED</span><span>{money(data.ledger.totalDebit)}</span></div>
+              <div><span>PAID / CONCESSION</span><span>{money(data.ledger.totalCredit)}</span></div>
+              <div className="qbp-big"><span>{data.ledger.balance > 0 ? "BALANCE DUE" : "ADVANCE"}</span><b>{cur} {money(Math.abs(data.ledger.balance))}</b></div>
+            </div>
+          </div>
+          <div className="signs">
+            <span>Accounts office</span>
+            <span>Checked by</span>
+            <span>Principal</span>
+            <span>Parent&apos;s signature</span>
+          </div>
+        </section>
+      ) : null}
+    </PrintShell>
+  );
+}
