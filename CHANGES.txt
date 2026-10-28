@@ -1,0 +1,13 @@
+School System — update 2026-10-28 07:39
+Latest commit: cf36153 Merge remote-tracking branch 'origin/main' into claude/wonderful-meitner-1ofn6k
+
+== What changed since the previous ZIP ==
+- Merge remote-tracking branch 'origin/main' into claude/wonderful-meitner-1ofn6k
+- Create azure-webapps-node.yml
+
+== Files changed (A = new, M = modified, D = deleted) ==
+A	.github/workflows/azure-webapps-node.yml
+
+How to use: extract, copy your .env.local into the folder, then
+  npm install && npm run db:migrate && npm run dev
+To send to GitHub from this folder:  git push origin main
