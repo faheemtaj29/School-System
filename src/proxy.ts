@@ -11,10 +11,12 @@ const publicPaths = [
   "/admissions",
   "/about",
   "/contact",
+  // A fee challan opened from a signed WhatsApp/SMS link.
+  "/challan",
 ];
 
 /** Public read/submit endpoints for the website. */
-const publicApi = ["/api/auth", "/api/site", "/api/settings/logo"];
+const publicApi = ["/api/auth", "/api/site", "/api/settings/logo", "/api/public"];
 
 function matches(pathname: string, paths: string[]) {
   return paths.some((p) => pathname === p || pathname.startsWith(`${p}/`));

@@ -104,6 +104,12 @@ export interface ISettings {
   /** Late fee engine — percent of unpaid balance after grace days. */
   lateFeePercent?: number;
   lateFeeGraceDays?: number;
+  /** Fee challan: days after the due date the challan stays valid (its expiry date). */
+  challanValidityDays?: number;
+  /** Fee challan: banks / accounts where fee can be deposited, one per line. */
+  challanBanks?: string;
+  /** Fee challan: "Important notes" printed on every copy, one per line. */
+  challanNotes?: string;
   /** Withholding tax % for vendor payments (FBR-style). */
   whtRate?: number;
   /** Prefix for auto-generated admission numbers, e.g. ADM → ADM-MAIN-2026-00001. */
@@ -212,6 +218,9 @@ const SettingsSchema = new Schema<ISettings>(
     employeeIdMode: { type: String, enum: ["auto", "manual"], default: "auto" },
     lateFeePercent: { type: Number, default: 5, min: 0, max: 100 },
     lateFeeGraceDays: { type: Number, default: 7, min: 0, max: 90 },
+    challanValidityDays: { type: Number, default: 5, min: 0, max: 90 },
+    challanBanks: { type: String, trim: true, default: "" },
+    challanNotes: { type: String, trim: true, default: "" },
     whtRate: { type: Number, default: 0, min: 0, max: 100 },
     admissionPrefix: { type: String, uppercase: true, trim: true, default: "STD" },
     receiptPrefix: { type: String, uppercase: true, trim: true, default: "RCP" },

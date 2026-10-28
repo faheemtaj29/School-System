@@ -48,6 +48,9 @@ type Settings = {
   employeeIdMode?: "auto" | "manual";
   lateFeePercent?: number;
   lateFeeGraceDays?: number;
+  challanValidityDays?: number;
+  challanBanks?: string;
+  challanNotes?: string;
   whtRate?: number;
   admissionPrefix?: string;
   receiptPrefix?: string;
@@ -133,6 +136,9 @@ const empty: Settings = {
   employeeIdMode: "auto",
   lateFeePercent: 5,
   lateFeeGraceDays: 7,
+  challanValidityDays: 5,
+  challanBanks: "",
+  challanNotes: "",
   whtRate: 0,
   admissionPrefix: "STD",
   receiptPrefix: "RCP",
@@ -1028,6 +1034,34 @@ export default function SettingsPage() {
                   onChange={(e) => setForm({ ...form, lateFeeGraceDays: Number(e.target.value) })}
                 />
               </Field>
+              <Field label="Challan valid for (days after due date)">
+                <input
+                  type="number"
+                  className={inputClass}
+                  value={form.challanValidityDays ?? 5}
+                  onChange={(e) => setForm({ ...form, challanValidityDays: Number(e.target.value) })}
+                />
+              </Field>
+              <div className="form-grid one" style={{ gridColumn: "1 / -1" }}>
+                <Field label="Fee challan — banks where fee can be deposited (one per line)">
+                  <textarea
+                    className={inputClass}
+                    rows={3}
+                    value={form.challanBanks ?? ""}
+                    onChange={(e) => setForm({ ...form, challanBanks: e.target.value })}
+                    placeholder={"Meezan Bank — A/C 0123-4567890\nHabib Bank — A/C 9876-5432100"}
+                  />
+                </Field>
+                <Field label="Fee challan — important notes (one per line)">
+                  <textarea
+                    className={inputClass}
+                    rows={4}
+                    value={form.challanNotes ?? ""}
+                    onChange={(e) => setForm({ ...form, challanNotes: e.target.value })}
+                    placeholder={"Please pay on or before the due date to avoid the late fee.\nPayment once made is not refundable.\nFor any query contact the school office."}
+                  />
+                </Field>
+              </div>
               <Field label="WHT rate % (FBR-style)">
                 <input
                   type="number"

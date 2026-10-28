@@ -32,6 +32,7 @@ export function PrintShell({
   error,
   loading,
   landscape,
+  closable = true,
   children,
 }: {
   title: string;
@@ -39,6 +40,8 @@ export function PrintShell({
   error?: string;
   loading?: boolean;
   landscape?: boolean;
+  /** False on pages opened from a link (no tab of ours to go back to). */
+  closable?: boolean;
   children: ReactNode;
 }) {
   useEffect(() => {
@@ -56,11 +59,13 @@ export function PrintShell({
         </div>
         <div>
           <button type="button" className="btn-dark" disabled={loading || !!error} onClick={() => window.print()}>
-            Print
+            Print / Save PDF
           </button>
-          <button type="button" className="btn-ghost" onClick={() => window.close()}>
-            Close
-          </button>
+          {closable ? (
+            <button type="button" className="btn-ghost" onClick={() => window.close()}>
+              Close
+            </button>
+          ) : null}
         </div>
       </div>
       {error ? <div className="alert err print-msg">{error}</div> : null}

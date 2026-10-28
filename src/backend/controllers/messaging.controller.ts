@@ -73,9 +73,13 @@ export const messagingController = {
       const { action, studentIds, manual, ...input } = parsed.data;
       // Teachers may tell parents about absences; fee, result and custom messages are office work.
       if (session!.role === "teacher" && input.kind !== "absence") return jsonError("Forbidden", 403);
-      if (action === "prepare") return jsonOk({ rows: await messagingService.prepare(input) });
+      // Challan links in fee messages point at the address the office is using.
+      const fwdHost = req.headers.get("x-forwarded-host");
+      const baseUrl = fwdHost ? `${req.headers.get("x-forwarded-proto") || "https"}://${fwdHost}` : new URL(req.url).origin;
+      const withBase = { ...input, baseUrl };
+      if (action === "prepare") return jsonOk({ rows: await messagingService.prepare(withBase) });
       if (!studentIds?.length) return jsonError("Choose who to send to");
-      return jsonOk(await messagingService.send(input, studentIds, session!, Boolean(manual)));
+      return jsonOk(await messagingService.send(withBase, studentIds, session!, Boolean(manual)));
     } catch (e) {
       return fromServiceError(e);
     }

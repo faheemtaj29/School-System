@@ -291,7 +291,16 @@ export default function FeesPage() {
           {months.map((m) => <option key={m} value={m}>{monthName(m)}</option>)}
         </select>
         {canEdit && tab !== "received" ? (
-          <button type="button" className="btn-dark" onClick={printChallans}>Print challans</button>
+          <>
+            <button type="button" className="btn-dark" onClick={printChallans}>Print challans</button>
+            <a
+              className="btn-ghost"
+              href={`/messages?kind=fee${filterClass ? `&classIds=${filterClass}` : ""}`}
+              title="Each father gets the challan heads, totals and a link to the challan on WhatsApp"
+            >
+              Send challans on WhatsApp
+            </a>
+          </>
         ) : null}
       </div>
     );

@@ -1,3 +1,4 @@
+import { verifyChallanToken } from "@/backend/lib/challanLink";
 import {
   firstZodError,
   fromServiceError,
@@ -83,6 +84,17 @@ export const feeBillingController = {
         status: url.searchParams.get("status") || undefined,
         ids,
       }));
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  /** GET /api/public/challan?t=<token> — one challan from a signed WhatsApp/SMS link, no login. */
+  async publicChallan(req: Request) {
+    try {
+      const feeId = verifyChallanToken(new URL(req.url).searchParams.get("t") || "");
+      if (!feeId) return jsonError("This challan link is not valid", 404);
+      return jsonOk(await feeBillingService.challans({ ids: [feeId] }));
     } catch (e) {
       return fromServiceError(e);
     }

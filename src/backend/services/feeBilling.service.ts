@@ -33,9 +33,11 @@ function classLabel(c?: { name?: string; section?: string } | null) {
   return c.section ? `${c.name} - ${c.section}` : c.name;
 }
 
+const lines = (text?: string | null) => String(text || "").split("\n").map((l) => l.trim()).filter(Boolean);
+
 async function schoolHeader() {
   const s = await Settings.findOne()
-    .select("schoolName address phone email logoUpdatedAt currency lateFeePercent lateFeeGraceDays registrationNo")
+    .select("schoolName address phone email logoUpdatedAt currency lateFeePercent lateFeeGraceDays registrationNo challanValidityDays challanBanks challanNotes")
     .lean();
   return {
     name: s?.schoolName || "School",
@@ -46,6 +48,9 @@ async function schoolHeader() {
     currency: s?.currency || "PKR",
     lateFeePercent: s?.lateFeePercent ?? 0,
     lateFeeGraceDays: s?.lateFeeGraceDays ?? 0,
+    challanValidityDays: s?.challanValidityDays ?? 5,
+    banks: lines(s?.challanBanks),
+    notes: lines(s?.challanNotes),
     logoUrl: s?.logoUpdatedAt ? `/api/settings/logo?v=${new Date(s.logoUpdatedAt).getTime()}` : null,
   };
 }
@@ -78,6 +83,8 @@ type FeeLean = {
   payments?: IFeePayment[];
   billingMonth?: string;
   lateFeeAmount?: number;
+  lateFeeApplied?: boolean;
+  createdAt?: Date;
 };
 
 const studentFields = {
@@ -325,6 +332,7 @@ export const feeBillingService = {
     if (!filters.ids?.length && !filters.month && !filters.classId) {
       throw new ServiceError("VALIDATION", "Pick a month or class to print", 400);
     }
+    const header = await schoolHeader();
     const fees = (await Fee.find(query).populate(studentFields).sort({ dueDate: 1 }).lean()) as unknown as FeeLean[];
     const studentIds = [...new Set(fees.map((f) => String(f.studentId?._id)))];
     const open = (await Fee.find({
@@ -348,6 +356,11 @@ export const feeBillingService = {
             .reduce((s, o) => s + (o.amount - (o.paidAmount || 0)), 0)
         );
         const balance = round(f.amount - (f.paidAmount || 0));
+        const payable = round(balance + arrears);
+        // The late fee is added to the voucher only once (Apply Late Fees); until then show what it would be.
+        const lateAfterDue = f.lateFeeApplied ? 0 : round((balance * header.lateFeePercent) / 100);
+        const expiry = new Date(f.dueDate);
+        expiry.setDate(expiry.getDate() + header.challanValidityDays);
         return {
           _id: String(f._id),
           challanNo: `CH-${String(f._id).slice(-6).toUpperCase()}`,
@@ -363,7 +376,11 @@ export const feeBillingService = {
           paid: f.paidAmount || 0,
           balance,
           arrears,
-          payable: round(balance + arrears),
+          payable,
+          lateAfterDue,
+          payableAfterDue: round(payable + lateAfterDue),
+          issueDate: f.createdAt || null,
+          expiryDate: expiry,
           student: {
             name: `${f.studentId!.firstName} ${f.studentId!.lastName}`,
             admissionNo: f.studentId!.admissionNo,
@@ -375,7 +392,7 @@ export const feeBillingService = {
         };
       })
       .sort((a, b) => a.student.classLabel.localeCompare(b.student.classLabel, undefined, { numeric: true }) || a.student.rollNo.localeCompare(b.student.rollNo, undefined, { numeric: true }) || a.student.name.localeCompare(b.student.name));
-    return { school: await schoolHeader(), challans: list };
+    return { school: header, challans: list };
   },
 
   /** One payment receipt (latest payment unless a receipt number is given). */

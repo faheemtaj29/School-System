@@ -44,7 +44,7 @@ const TAB_LABEL: Record<Tab, string> = {
 };
 const PLACEHOLDERS: Record<Kind, string> = {
   absence: "{parent} {student} {class} {date} {school}",
-  fee: "{parent} {student} {class} {amount} {currency} {dueDate} {status} {school}",
+  fee: "{parent} {student} {class} {period} {heads} {amount} {amountAfterDue} {currency} {dueDate} {status} {link} {school}",
   result: "{parent} {student} {class} {term} {obtained} {total} {percent} {grade} {result} {position} {school}",
   custom: "{parent} {student} {class} {school}",
 };

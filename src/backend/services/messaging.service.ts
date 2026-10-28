@@ -10,13 +10,15 @@ import { Fee } from "@/backend/models/Fee";
 import { MessageLog, type MessageKind } from "@/backend/models/Messaging";
 import { Settings, type MessagingConfig } from "@/backend/models/Settings";
 import { Student } from "@/backend/models/Student";
+import { challanUrl } from "@/backend/lib/challanLink";
 import { examCenterService } from "@/backend/services/examCenter.service";
+import { feeBillingService } from "@/backend/services/feeBilling.service";
 import { ServiceError, type SessionUser } from "@/backend/types";
 
 export const DEFAULT_TEMPLATES: MessagingConfig["templates"] = {
   absence:
     "Dear {parent}, {student} ({class}) was absent from school on {date}. Please contact the school if this was not expected. — {school}",
-  fee: "Dear {parent}, fee of {currency} {amount} for {student} ({class}) is {status} (due {dueDate}). Please pay at the school office or bank. — {school}",
+  fee: "Dear {parent}, fee challan of {student} ({class}) for {period} is {status}.\n{heads}\nTotal payable by {dueDate}: {currency} {amount}\nAfter due date: {currency} {amountAfterDue}\nView / download challan: {link}\n— {school}",
   result:
     "Dear {parent}, the {term} result of {student} ({class}) is ready: {obtained}/{total} marks, {percent}%, grade {grade}, {result}{position}. — {school}",
 };
@@ -37,6 +39,8 @@ export type PrepareInput = {
   dueWithinDays?: number;
   termId?: string;
   text?: string;
+  /** Public address of this app (for challan links), e.g. https://school.example.com */
+  baseUrl?: string;
 };
 
 export type MessageRow = {
@@ -172,30 +176,57 @@ export const messagingService = {
         query.dueDate = { $gte: now, $lte: new Date(now.getTime() + (input.dueWithinDays || 3) * 86400000) };
       }
       const fees = await Fee.find(query).sort({ dueDate: 1 }).lean();
-      const byStudent = new Map<string, { amount: number; due: Date; overdue: boolean }>();
+      // Each student's latest open challan carries the earlier unpaid ones as arrears,
+      // so that one challan is what the parent gets (heads, totals and its link).
+      const latest = new Map<string, (typeof fees)[number]>();
       for (const f of fees) {
-        const bal = Math.max(0, (f.amount || 0) - (f.paidAmount || 0));
-        if (bal <= 0) continue;
-        const key = String(f.studentId);
-        const cur = byStudent.get(key) || { amount: 0, due: f.dueDate, overdue: false };
-        cur.amount += bal;
-        if (f.dueDate < cur.due) cur.due = f.dueDate;
-        if (f.dueDate < now) cur.overdue = true;
-        byStudent.set(key, cur);
+        if ((f.amount || 0) - (f.paidAmount || 0) <= 0) continue;
+        latest.set(String(f.studentId), f);
       }
       const students = await Student.find({
-        _id: { $in: [...byStudent.keys()] },
+        _id: { $in: [...latest.keys()] },
         status: "active",
         ...(classIds.length ? { classId: { $in: classIds } } : {}),
       })
         .populate("classId", "name section")
         .lean();
+      const feeIds = students.map((st) => String(latest.get(String(st._id))!._id));
+      const { challans } = feeIds.length ? await feeBillingService.challans({ ids: feeIds }) : { challans: [] };
+      const money = (n: number) => Math.round(n).toLocaleString("en-IN");
+      // Saved wording from before challan links existed still gets the heads and the link.
+      let template = cfg.templates.fee;
+      const extra = [
+        template.includes("{heads}") ? "" : "{heads}",
+        template.includes("{link}") ? "" : "View / download challan: {link}",
+      ].filter(Boolean).join("\n");
+      if (extra) {
+        // Put them above the sign-off ("— {school}") when there is one.
+        const sign = template.lastIndexOf("— {school}");
+        template = sign >= 0
+          ? `${template.slice(0, sign).trimEnd()}\n${extra}\n${template.slice(sign)}`
+          : `${template}\n${extra}`;
+      }
       for (const st of students) {
-        const due = byStudent.get(String(st._id))!;
-        push(st, classLabel(st.classId as never), cfg.templates.fee, {
-          amount: Math.round(due.amount).toLocaleString("en-IN"),
-          dueDate: prettyDay(due.due),
-          status: due.overdue ? "overdue" : "due",
+        const fee = latest.get(String(st._id))!;
+        const c = challans.find((x) => x._id === String(fee._id));
+        if (!c) continue;
+        const heads = [
+          ...c.lines.map((l) => `• ${l.head}: ${money(l.amount)}`),
+          ...(c.arrears ? [`• Arrears: ${money(c.arrears)}`] : []),
+          ...(c.discountAmount ? [`• Concession: -${money(c.discountAmount)}`] : []),
+          ...(c.paid ? [`• Already paid: -${money(c.paid)}`] : []),
+        ].join("\n");
+        const month = c.billingMonth
+          ? new Date(`${c.billingMonth}-01T00:00:00Z`).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" })
+          : c.title;
+        push(st, classLabel(st.classId as never), template, {
+          amount: money(c.payable),
+          amountAfterDue: money(c.payableAfterDue),
+          dueDate: prettyDay(c.dueDate),
+          status: new Date(c.dueDate) < now ? "overdue" : "due",
+          period: month,
+          heads,
+          link: input.baseUrl ? challanUrl(input.baseUrl, String(fee._id)) : "",
         });
       }
     } else if (input.kind === "result") {

@@ -72,6 +72,8 @@ type Challan = {
   title: string;
   billingMonth: string | null;
   dueDate: string;
+  issueDate: string | null;
+  expiryDate: string;
   status: string;
   lines: { head: string; amount: number }[];
   gross: number;
@@ -82,12 +84,108 @@ type Challan = {
   balance: number;
   arrears: number;
   payable: number;
+  lateAfterDue: number;
+  payableAfterDue: number;
   student: { name: string; admissionNo: string; rollNo: string; fatherName: string; phone: string; classLabel: string };
 };
 
-export function FeeChallansPrint({ query, copies }: { query: string; copies: number }) {
-  const { data, error } = usePrintData<{ school: School; challans: Challan[] }>(query ? `/api/fees/challans?${query}` : null);
-  const labels = copies >= 3 ? ["Student copy", "School copy", "Bank copy"] : ["Student / Parent copy", "School copy"];
+type ChallanSchool = School & { banks: string[]; notes: string[] };
+
+/** "06-Oct-26", as printed on bank challans. */
+function shortDate(value?: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  const [day, mon, yr] = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit", timeZone: "UTC" }).split(" ");
+  return `${day}-${mon}-${yr}`;
+}
+
+/** "2026-09" → "Sep-26" */
+function period(month: string | null, fallback: string) {
+  if (!month) return fallback;
+  const [y, m] = month.split("-").map(Number);
+  return `${new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" })}-${String(y).slice(2)}`;
+}
+
+/** One copy of the challan: header band, student block, particulars, totals, copy bar, notes. */
+function ChallanCopy({ c, school, copy }: { c: Challan; school: ChallanSchool; copy: string }) {
+  const cur = school.currency;
+  const subtotal = c.lines.reduce((t, l) => t + l.amount, 0);
+  const rows: [string, number | null][] = [
+    ...c.lines.map((l): [string, number] => [l.head, l.amount]),
+    ["Arrears (previous unpaid)", c.arrears],
+    [`Discount / concession${c.discountLabel ? ` (${c.discountLabel.replace(/_/g, " ")})` : " (if any)"}`, c.discountAmount ? -c.discountAmount : 0],
+    ...(c.paid ? [["Already paid", -c.paid] as [string, number]] : []),
+  ];
+  return (
+    <article className="ch">
+      <header className="ch-head">
+        {school.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={school.logoUrl} alt="" />
+        ) : null}
+        <div>
+          <h1>{school.name}</h1>
+          <b>FEE CHALLAN</b>
+        </div>
+      </header>
+      <div className="ch-grid">
+        <div className="ch-line split"><span>Challan No.</span><u>{c.challanNo}</u></div>
+        <div className="ch-line"><span>Name:</span> <u>{c.student.name}</u></div>
+        <div className="ch-line"><span>Father / Guardian:</span> <u>{c.student.fatherName || "—"}</u></div>
+        <div className="ch-line split"><span>Admission No.</span><u>{c.student.admissionNo}</u></div>
+        <div className="ch-line"><span>Class:</span> <u>{c.student.classLabel}</u>{c.student.rollNo ? <> &nbsp;<span>Roll No:</span> <u>{c.student.rollNo}</u></> : null}</div>
+        <div className="ch-line"><span>Issue Date:</span> <u>{shortDate(c.issueDate)}</u> <span>Fee Period:</span> <u>{period(c.billingMonth, c.title)}</u></div>
+        <div className="ch-line"><span>Due Date:</span> <u>{shortDate(c.dueDate)}</u> <span>Expiry Date:</span> <u>{shortDate(c.expiryDate)}</u></div>
+      </div>
+      <table className="ch-table">
+        <thead>
+          <tr><th className="sr">Sr#</th><th>Particulars</th><th className="amt">Amount ({cur})</th></tr>
+        </thead>
+        <tbody>
+          {rows.map(([label, amount], i) => (
+            <tr key={label + i}>
+              <td className="sr">{i + 1}.</td>
+              <td>{label}</td>
+              <td className="amt">{amount == null ? "" : money(amount)}</td>
+            </tr>
+          ))}
+          <tr><td /><td>Subtotal (this month)</td><td className="amt">{money(subtotal)}</td></tr>
+          <tr className="gap"><td /><td /><td /></tr>
+          <tr className="strong"><td /><td>Grand Total</td><td className="amt">{money(c.payable)}</td></tr>
+          <tr className="strong"><td /><td>Total Payable within Due Date</td><td className="amt">{money(c.payable)}</td></tr>
+          <tr className="strong"><td /><td>Total Payable after Due Date</td><td className="amt">{money(c.payableAfterDue)}</td></tr>
+        </tbody>
+      </table>
+      <div className="ch-words">{amountInWords(c.payable)}</div>
+      <div className="ch-copy">{copy}</div>
+      <div className="ch-notes">
+        <b>Important Notes:</b>
+        <ul>
+          <li>Please pay on or before the due date ({shortDate(c.dueDate)}).</li>
+          {school.lateFeePercent ? (
+            <li>After the due date a late fee of {school.lateFeePercent}% applies — total {cur} {money(c.payableAfterDue)}.</li>
+          ) : null}
+          <li>This challan is valid until {shortDate(c.expiryDate)}.</li>
+          {school.notes.map((n) => <li key={n}>{n}</li>)}
+          {school.banks.length ? (
+            <li>
+              Fee can be deposited at:
+              {school.banks.map((b, i) => <span key={b} className="ch-bank">{i + 1}. {b}</span>)}
+            </li>
+          ) : null}
+          {school.phone ? <li>For any query, please contact {school.phone}.</li> : null}
+        </ul>
+      </div>
+    </article>
+  );
+}
+
+export function FeeChallansPrint({ query, copies, src }: { query: string; copies: number; src?: string }) {
+  const url = src || (query ? `/api/fees/challans?${query}` : null);
+  const { data, error } = usePrintData<{ school: ChallanSchool; challans: Challan[] }>(url);
+  const labels =
+    copies >= 3 ? ["Bank Copy", "School Copy", "Parent / Student Copy"] : copies === 2 ? ["School Copy", "Parent / Student Copy"] : ["Parent / Student Copy"];
   return (
     <PrintShell
       title="Fee Challans"
@@ -95,69 +193,12 @@ export function FeeChallansPrint({ query, copies }: { query: string; copies: num
       error={error || (data && !data.challans.length ? "No challans match this selection." : "")}
       loading={!data}
       landscape={labels.length >= 3}
+      closable={!src}
     >
       {data?.challans.map((c) => (
-        <section key={c._id} className={`doc-page fee-sheet copies-${labels.length}`}>
+        <section key={c._id} className={`doc-page ch-sheet copies-${labels.length}`}>
           {labels.map((copy) => (
-            <article key={copy} className="fee-doc">
-              <Head school={data.school} title="FEE CHALLAN" copy={copy} />
-              <dl className="fee-info">
-                <div><dt>Challan No.</dt><dd>{c.challanNo}</dd></div>
-                <div><dt>Month</dt><dd>{c.billingMonth ? fmtDate(`${c.billingMonth}-01`).slice(3) : c.title}</dd></div>
-                <div><dt>Student</dt><dd>{c.student.name}</dd></div>
-                <div><dt>Father / Guardian</dt><dd>{c.student.fatherName || "—"}</dd></div>
-                <div><dt>Class</dt><dd>{c.student.classLabel}{c.student.rollNo ? ` · Roll ${c.student.rollNo}` : ""}</dd></div>
-                <div><dt>Admission No.</dt><dd>{c.student.admissionNo}</dd></div>
-              </dl>
-              <table className="doc-table fee-lines">
-                <tbody>
-                  {c.lines.map((l, i) => (
-                    <tr key={l.head + i}>
-                      <td>{l.head}</td>
-                      <td className="num">{money(l.amount)}</td>
-                    </tr>
-                  ))}
-                  {c.discountAmount ? (
-                    <tr>
-                      <td>Concession {c.discountLabel ? `(${c.discountLabel})` : ""}</td>
-                      <td className="num">− {money(c.discountAmount)}</td>
-                    </tr>
-                  ) : null}
-                  {c.paid ? (
-                    <tr>
-                      <td>Already paid</td>
-                      <td className="num">− {money(c.paid)}</td>
-                    </tr>
-                  ) : null}
-                  <tr>
-                    <td>This month</td>
-                    <td className="num"><b>{money(c.balance)}</b></td>
-                  </tr>
-                  {c.arrears ? (
-                    <tr>
-                      <td>Arrears (previous unpaid)</td>
-                      <td className="num">{money(c.arrears)}</td>
-                    </tr>
-                  ) : null}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td><b>Payable by {fmtDate(c.dueDate)}</b></td>
-                    <td className="num"><b>{data.school.currency} {money(c.payable)}</b></td>
-                  </tr>
-                </tfoot>
-              </table>
-              <p className="fee-words">{amountInWords(c.payable)}</p>
-              {data.school.lateFeePercent ? (
-                <p className="fee-note">
-                  A late fee of {data.school.lateFeePercent}% applies if not paid within {data.school.lateFeeGraceDays} days of the due date.
-                </p>
-              ) : null}
-              <div className="signs">
-                <span>Depositor</span>
-                <span>Received by / Stamp</span>
-              </div>
-            </article>
+            <ChallanCopy key={copy} c={c} school={data.school} copy={copy} />
           ))}
         </section>
       ))}
