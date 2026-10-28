@@ -34,6 +34,16 @@ export default function AttendancePage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [absentSaved, setAbsentSaved] = useState(0);
+  const [alertsOn, setAlertsOn] = useState(true);
+
+  useEffect(() => {
+    // Settings → Notifications → "WhatsApp attendance alerts"
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((d) => setAlertsOn(d.settings?.whatsappAttendance !== false))
+      .catch(() => {});
+  }, []);
 
   const loadMeta = useCallback(async () => {
     const [c, a] = await Promise.all([
@@ -116,6 +126,7 @@ export default function AttendancePage() {
         return;
       }
       setMessage("Attendance saved for this date.");
+      setAbsentSaved(records.filter((r) => r.status === "absent").length);
       loadMeta();
     } finally {
       setSaving(false);
@@ -183,7 +194,19 @@ export default function AttendancePage() {
       <form onSubmit={onSubmit}>
         <Panel title="Daily Roll Call" meta={records.length ? `${presentCount}/${records.length} PRESENT${unmarkedCount ? ` · ${unmarkedCount} UNMARKED` : ""}` : undefined}>
           {error ? <div className="alert err">{error}</div> : null}
-          {message ? <div className="alert ok">{message}</div> : null}
+          {message ? (
+            <div className="alert ok">
+              {message}
+              {alertsOn && absentSaved ? (
+                <>
+                  {" "}
+                  <Link href={`/messages?kind=absence&date=${date}&classIds=${classId}`} className="link-btn">
+                    Notify parents of {absentSaved} absent student{absentSaved === 1 ? "" : "s"} →
+                  </Link>
+                </>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="form-grid">
             <Field label="Class" required>

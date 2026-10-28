@@ -44,6 +44,21 @@ export type SalaryTaxConfig = {
   certificateTitle: string;
 };
 
+export type MessagingConfig = {
+  /** none = WhatsApp click-to-send by staff; twilio / http = sent automatically by a gateway. */
+  provider: "none" | "twilio" | "http";
+  channel: "sms" | "whatsapp";
+  /** Country calling code added to local numbers (92 Pakistan, 91 India). */
+  countryCode: string;
+  twilioSid?: string;
+  twilioToken?: string;
+  twilioFrom?: string;
+  /** Gateway link with {to} and {message}, e.g. https://sms.example.com/send?to={to}&text={message}&key=… */
+  httpUrl?: string;
+  httpMethod?: "GET" | "POST";
+  templates: { absence: string; fee: string; result: string };
+};
+
 export interface ISettings {
   schoolName: string;
   registrationNo?: string;
@@ -62,6 +77,7 @@ export interface ISettings {
   currency: string;
   smsFeeReminders: boolean;
   whatsappAttendance: boolean;
+  messaging?: MessagingConfig;
   emailResults: boolean;
   primaryColor?: string;
   /** Tax / GST */
@@ -140,6 +156,7 @@ const SettingsSchema = new Schema<ISettings>(
     currency: { type: String, default: "PKR" },
     smsFeeReminders: { type: Boolean, default: true },
     whatsappAttendance: { type: Boolean, default: true },
+    messaging: { type: Schema.Types.Mixed, select: false },
     emailResults: { type: Boolean, default: false },
     primaryColor: { type: String, default: "#157A5C" },
     taxEnabled: { type: Boolean, default: false },

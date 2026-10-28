@@ -1101,8 +1101,8 @@ export default function SettingsPage() {
             <div>
               {(
                 [
-                  { key: "smsFeeReminders" as const, title: "SMS fee reminders", desc: "Send SMS 3 days before due date" },
-                  { key: "whatsappAttendance" as const, title: "WhatsApp attendance alerts", desc: "Notify parents when marked absent" },
+                  { key: "smsFeeReminders" as const, title: "Fee reminders to parents", desc: "Parent Messages → Fee reminders (unpaid, overdue or due soon)" },
+                  { key: "whatsappAttendance" as const, title: "Attendance alerts to parents", desc: "After saving attendance, offer to message parents of absent students" },
                   { key: "emailResults" as const, title: "Exam result emails", desc: "Email report cards when published" },
                 ] as const
               ).map((row) => (

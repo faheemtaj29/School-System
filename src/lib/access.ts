@@ -40,6 +40,8 @@ export function canOpenPage(role: string, pathname: string) {
     if (pathname === "/hr" || pathname.startsWith("/hr/")) return true;
     // A teacher's own profile (salary, tax certificate, classes).
     if (pathname === "/teachers/me") return true;
+    // Telling parents about absences.
+    if (pathname === "/messages") return true;
     return false;
   }
 
@@ -48,6 +50,7 @@ export function canOpenPage(role: string, pathname: string) {
     if (pathname === "/fees" || pathname.startsWith("/fees/")) return true;
     if (pathname === "/inventory" || pathname.startsWith("/inventory/")) return true;
     if (pathname === "/approvals" || pathname.startsWith("/approvals/")) return true;
+    if (pathname === "/messages") return true;
     return false;
   }
 
