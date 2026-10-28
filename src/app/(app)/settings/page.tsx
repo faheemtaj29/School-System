@@ -1,5 +1,6 @@
 "use client";
 
+import { CampusLogo } from "@/components/settings/CampusLogo";
 import { DEFAULT_CHALLAN_TERMS } from "@/lib/challanTerms";
 import { CURRENCIES, normalizeCurrency } from "@/lib/currency";
 import { FormEvent, useCallback, useEffect, useState } from "react";
@@ -8,7 +9,7 @@ import { DEFAULT_THEME, THEME_PRESETS, themeVars, type Theme } from "@/lib/theme
 import { prettyDate } from "@/lib/types";
 import { Download } from "lucide-react";
 
-type Branch = { code: string; name: string; address?: string; phone?: string };
+type Branch = { code: string; name: string; address?: string; phone?: string; email?: string; logoUpdatedAt?: string };
 
 type AcademicSession = {
   _id: string;
@@ -1107,22 +1108,29 @@ export default function SettingsPage() {
                   ))}
                 </select>
               </Field>
-              <div style={{ marginTop: 16 }}>
-                {form.branches.map((b) => (
-                  <div className="deadline-row" key={b.code}>
-                    <div>
-                      <div className="dname">
-                        {b.name} <span style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>({b.code})</span>
+              <p className="coa-hint" style={{ marginTop: 14 }}>
+                Each campus prints its own name, address, phone, email and logo on challans, receipts, result cards,
+                date sheets, vouchers and reports. Leave a field blank to use the school&apos;s.
+              </p>
+              <div className="campus-list">
+                {form.branches.map((b, i) => {
+                  const setB = (patch: Partial<Branch>) =>
+                    setForm({ ...form, branches: form.branches.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
+                  return (
+                    <div className="campus-row" key={b.code}>
+                      <CampusLogo code={b.code} logoUpdatedAt={b.logoUpdatedAt} />
+                      <div className="campus-fields">
+                        <label><span>Name ({b.code})</span><input className={inputClass} value={b.name} onChange={(e) => setB({ name: e.target.value })} /></label>
+                        <label><span>Address</span><input className={inputClass} value={b.address || ""} placeholder={form.address || "School address"} onChange={(e) => setB({ address: e.target.value })} /></label>
+                        <label><span>Phone</span><input className={inputClass} value={b.phone || ""} placeholder={form.phone || "School phone"} onChange={(e) => setB({ phone: e.target.value })} /></label>
+                        <label><span>Email</span><input className={inputClass} value={b.email || ""} placeholder={form.email || "School email"} onChange={(e) => setB({ email: e.target.value })} /></label>
                       </div>
-                      <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
-                        {[b.address, b.phone].filter(Boolean).join(" · ") || "No address"}
-                      </div>
+                      <button type="button" className="link-btn danger" onClick={() => removeBranch(b.code)}>
+                        Remove
+                      </button>
                     </div>
-                    <button type="button" className="link-btn danger" onClick={() => removeBranch(b.code)}>
-                      Remove
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="form-grid" style={{ marginTop: 16 }}>
                 <Field label="Code">

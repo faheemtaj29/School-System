@@ -5,6 +5,9 @@ export interface IBranch {
   name: string;
   address?: string;
   phone?: string;
+  email?: string;
+  /** Set when the campus has its own logo (stored in Settings.branchLogos). */
+  logoUpdatedAt?: Date;
 }
 
 export interface IOptionLists {
@@ -88,6 +91,8 @@ export interface ISettings {
   /** Multi-campus */
   defaultBranchCode: string;
   branches: IBranch[];
+  /** Campus logos (data URLs) keyed by branch code. */
+  branchLogos?: Record<string, string>;
   /** Admin-managed reusable dropdown values. */
   optionLists: IOptionLists;
   /** Look & feel applied across the dashboard, login and public site. */
@@ -141,6 +146,8 @@ const BranchSchema = new Schema<IBranch>(
     name: { type: String, required: true, trim: true },
     address: String,
     phone: String,
+    email: String,
+    logoUpdatedAt: Date,
   },
   { _id: false }
 );
@@ -163,6 +170,8 @@ const SettingsSchema = new Schema<ISettings>(
     smsFeeReminders: { type: Boolean, default: true },
     whatsappAttendance: { type: Boolean, default: true },
     messaging: { type: Schema.Types.Mixed, select: false },
+    /** Campus logos as data URLs, keyed by branch code (served by /api/settings/logo?branch=). */
+    branchLogos: { type: Schema.Types.Mixed, select: false },
     emailResults: { type: Boolean, default: false },
     primaryColor: { type: String, default: "#157A5C" },
     taxEnabled: { type: Boolean, default: false },

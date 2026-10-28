@@ -2,6 +2,7 @@
  * Monthly fee billing — class fee structures, automatic monthly challans,
  * counter collection with receipts, and data for printing challans / receipts.
  */
+import { letterhead, letterheads } from "@/backend/lib/letterhead";
 import { Types } from "mongoose";
 import { dbConnect } from "@/backend/config/database";
 import { ClassModel } from "@/backend/models/Class";
@@ -45,17 +46,20 @@ function wholeRupees(parts: { label: string; amount: number }[], total: number) 
 
 const lines = (text?: string | null) => String(text || "").split("\n").map((l) => l.trim()).filter(Boolean);
 
-async function schoolHeader() {
+/** Fee settings plus the letterhead of one campus (the default campus when none is given). */
+async function schoolHeader(branchCode?: string | null) {
   const s = await Settings.findOne()
-    .select("schoolName address phone email logoUpdatedAt currency lateFeePercent lateFeeGraceDays registrationNo challanValidityDays challanBanks challanNotes branches defaultBranchCode")
+    .select("lateFeePercent lateFeeGraceDays challanValidityDays challanBanks challanNotes branches defaultBranchCode")
     .lean();
+  const head = await letterhead(branchCode);
   return {
-    name: s?.schoolName || "School",
-    address: s?.address || "",
-    phone: s?.phone || "",
-    email: s?.email || "",
-    registrationNo: s?.registrationNo || "",
-    currency: s?.currency || "PKR",
+    name: head.name,
+    campus: head.campus,
+    address: head.address,
+    phone: head.phone,
+    email: head.email,
+    registrationNo: head.registrationNo,
+    currency: head.currency,
     lateFeePercent: s?.lateFeePercent ?? 0,
     lateFeeGraceDays: s?.lateFeeGraceDays ?? 0,
     challanValidityDays: s?.challanValidityDays ?? 5,
@@ -64,7 +68,7 @@ async function schoolHeader() {
     notes: lines(s?.challanNotes || DEFAULT_CHALLAN_TERMS),
     branches: (s?.branches || []).map((b: { code: string; name: string }) => ({ code: b.code, name: b.name })),
     defaultBranchCode: s?.defaultBranchCode || "",
-    logoUrl: s?.logoUpdatedAt ? `/api/settings/logo?v=${new Date(s.logoUpdatedAt).getTime()}` : null,
+    logoUrl: head.logoUrl,
   };
 }
 
@@ -451,7 +455,7 @@ export const feeBillingService = {
       return [...m.entries()].map(([label, v]) => ({ label, ...v }));
     };
     return {
-      school: await schoolHeader(),
+      school: await schoolHeader(filters.branch),
       from: filters.from,
       to: filters.to,
       rows,
@@ -491,6 +495,7 @@ export const feeBillingService = {
       throw new ServiceError("VALIDATION", "Pick a month or class to print", 400);
     }
     const header = await schoolHeader();
+    const heads = await letterheads();
     const fees = (await Fee.find(query).populate(studentFields).sort({ dueDate: 1 }).lean()) as unknown as FeeLean[];
     const studentIds = [...new Set(fees.map((f) => String(f.studentId?._id)))];
     const open = (await Fee.find({
@@ -549,10 +554,9 @@ export const feeBillingService = {
           // For the QR code / link to this challan's online copy.
           token: challanToken(String(f._id)),
           // Fees saved without a campus belong to the main (default) campus.
-          campus:
-            header.branches.find((b: { code: string; name: string }) => b.code === (f.branchCode || header.defaultBranchCode))?.name ||
-            header.branches[0]?.name ||
-            "",
+          campus: heads(f.branchCode).campus,
+          // Each challan carries its own campus letterhead (name, address, phone, logo).
+          head: (({ name, campus, address, phone, logoUrl }) => ({ name, campus, address, phone, logoUrl }))(heads(f.branchCode)),
           issueDate: f.createdAt || null,
           expiryDate: expiry,
           student: {
@@ -595,7 +599,7 @@ export const feeBillingService = {
     const paidBefore = round(payments.slice(0, index).reduce((s, p) => s + p.amount, 0));
     const paidAfter = round(paidBefore + payment.amount);
     return {
-      school: await schoolHeader(),
+      school: await schoolHeader(fee.branchCode),
       receipt: {
         receiptNo: payment.receiptNo,
         date: payment.date,

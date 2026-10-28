@@ -1,6 +1,6 @@
 "use client";
 
-import { PrintShell, fmtDate, usePrintData } from "./PrintShell";
+import { PrintShell, fmtDate, usePrintData, QbLetterhead } from "./PrintShell";
 import { amountInWords } from "./FeePrints";
 
 type Item = { sku: string; name: string; unit: string; quantity: number; rate: number; amount: number; description?: string };
@@ -65,18 +65,7 @@ export function StockVoucherPrintPage({ id }: { id: string }) {
     <PrintShell title={v ? `${TITLE[v.voucherType]} ${v.number}` : "Stock voucher"} error={error} loading={!data}>
       {v && data ? (
         <section className="doc-page qbp">
-          <div className="qbp-top">
-            <div className="qbp-co">
-              <b>{data.school.name}</b>
-              {data.school.address ? <span>{data.school.address}</span> : null}
-              {data.school.phone ? <span>{data.school.phone}</span> : null}
-              {data.school.email ? <span>{data.school.email}</span> : null}
-            </div>
-            {data.school.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img className="qbp-logo" src={data.school.logoUrl} alt="" />
-            ) : null}
-          </div>
+          <QbLetterhead school={data.school} />
 
           <h1 className="qbp-title">{TITLE[v.voucherType] || "STOCK VOUCHER"}</h1>
 

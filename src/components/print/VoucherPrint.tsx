@@ -1,6 +1,6 @@
 "use client";
 
-import { PrintShell, fmtDate, usePrintData } from "./PrintShell";
+import { PrintShell, fmtDate, usePrintData, QbLetterhead } from "./PrintShell";
 import { amountInWords } from "./FeePrints";
 
 type Line = {
@@ -80,18 +80,7 @@ export function VoucherPrintPage({ id }: { id: string }) {
     <PrintShell title={v ? `${title} ${v.number}` : "Voucher"} error={error} loading={!data}>
       {v && data ? (
         <section className="doc-page qbp">
-          <div className="qbp-top">
-            <div className="qbp-co">
-              <b>{data.school.name}</b>
-              {data.school.address ? <span>{data.school.address}</span> : null}
-              {data.school.phone ? <span>{data.school.phone}</span> : null}
-              {data.school.email ? <span>{data.school.email}</span> : null}
-            </div>
-            {data.school.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img className="qbp-logo" src={data.school.logoUrl} alt="" />
-            ) : null}
-          </div>
+          <QbLetterhead school={data.school} />
 
           <h1 className="qbp-title">{title}</h1>
 

@@ -2,6 +2,7 @@
  * Double-entry accounting: 5-level COA, vouchers, invoices and legacy projection.
  * Existing modules keep using upsertLinked/removeBySource unchanged.
  */
+import { letterhead } from "@/backend/lib/letterhead";
 import { dbConnect } from "@/backend/config/database";
 import { Account, AccountingCounter, Voucher } from "@/backend/models/Accounting";
 import { LedgerEntry, type LedgerSource } from "@/backend/models/Ledger";
@@ -350,18 +351,18 @@ async function stockDocNumbers(vouchers: { sourceType?: string; sourceId?: unkno
 
 /** School letterhead for printed reports, and the campus name for a branch code. */
 export async function printHeader(branchCode?: string | null) {
-  const s = await Settings.findOne().select("schoolName address phone email currency logoUpdatedAt branches").lean();
-  const code = branchCode ? branchCode.toUpperCase() : "";
-  const branch = code ? (s?.branches || []).find((b: { code: string; name: string }) => b.code === code) : null;
+  // One letterhead for every document: the campus's own details and logo, else the school's.
+  const head = await letterhead(branchCode);
   return {
-    branchName: branch?.name || code || "All campuses",
+    branchName: branchCode ? head.campus || branchCode.toUpperCase() : "All campuses",
     school: {
-      name: s?.schoolName || "School",
-      address: s?.address || "",
-      phone: s?.phone || "",
-      email: s?.email || "",
-      currency: s?.currency || "PKR",
-      logoUrl: s?.logoUpdatedAt ? `/api/settings/logo?v=${new Date(s.logoUpdatedAt).getTime()}` : null,
+      name: head.name,
+      campus: head.campus,
+      address: head.address,
+      phone: head.phone,
+      email: head.email,
+      currency: head.currency,
+      logoUrl: head.logoUrl,
     },
   };
 }

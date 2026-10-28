@@ -1,6 +1,6 @@
 "use client";
 
-import { PrintShell, fmtDate, usePrintData } from "./PrintShell";
+import { PrintShell, fmtDate, usePrintData, QbLetterhead } from "./PrintShell";
 
 type School = { name: string; address: string; phone: string; email: string; currency: string; logoUrl: string | null };
 
@@ -83,20 +83,7 @@ function period(from: string | null, to: string | null) {
 }
 
 function Letterhead({ school }: { school: School }) {
-  return (
-    <div className="qbp-top">
-      <div className="qbp-co">
-        <b>{school.name}</b>
-        {school.address ? <span>{school.address}</span> : null}
-        {school.phone ? <span>{school.phone}</span> : null}
-        {school.email ? <span>{school.email}</span> : null}
-      </div>
-      {school.logoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img className="qbp-logo" src={school.logoUrl} alt="" />
-      ) : null}
-    </div>
-  );
+  return <QbLetterhead school={school} />;
 }
 
 /** QuickBooks-style account statement for any ledger account (supplier, customer, bank, expense…). */

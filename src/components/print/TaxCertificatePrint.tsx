@@ -1,6 +1,6 @@
 "use client";
 
-import { PrintShell, fmtDate, usePrintData } from "./PrintShell";
+import { PrintShell, QbLetterhead, fmtDate, usePrintData } from "./PrintShell";
 import { amountInWords } from "./FeePrints";
 
 type Row = { month: string; basic: number; allowances: number; gross: number; exempt: number; taxable: number; tax: number; status: string };
@@ -11,7 +11,7 @@ type Data = {
   period: { from: string; to: string };
   rules: { slabs: { from: number; rate: number }[]; standardDeduction: number; rebateUpTo: number; cessPercent: number; medicalExemptPercent: number };
   teacher: { name: string; employeeId: string; cnic: string; taxNumber: string; designation: string; address: string };
-  employer: { name: string; address: string; phone: string; email: string; taxNumber: string; currency: string; logoUrl: string | null };
+  employer: { name: string; campus?: string; address: string; phone: string; email: string; taxNumber: string; currency: string; logoUrl: string | null };
   rows: Row[];
   totals: Totals;
   taxOnYear: number;
@@ -39,18 +39,7 @@ export function TaxCertificatePrintPage({ query }: { query: string }) {
     <PrintShell title={data ? `${data.title} ${data.taxYear}` : "Tax certificate"} error={error} loading={!data}>
       {data ? (
         <section className="doc-page qbp">
-          <div className="qbp-top">
-            <div className="qbp-co">
-              <b>{data.employer.name}</b>
-              {data.employer.address ? <span>{data.employer.address}</span> : null}
-              {data.employer.phone ? <span>{data.employer.phone}</span> : null}
-              {data.employer.taxNumber ? <span>Employer tax no.: {data.employer.taxNumber}</span> : null}
-            </div>
-            {data.employer.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img className="qbp-logo" src={data.employer.logoUrl} alt="" />
-            ) : null}
-          </div>
+          <QbLetterhead school={data.employer} extra={data.employer.taxNumber ? `Employer tax no.: ${data.employer.taxNumber}` : undefined} />
 
           <h1 className="qbp-title" style={{ fontSize: 22 }}>{data.title}</h1>
 

@@ -25,6 +25,7 @@ export const settingsSchema = z.object({
         name: z.string().min(1),
         address: z.string().optional(),
         phone: z.string().optional(),
+        email: z.string().optional(),
       })
     )
     .default([{ code: "MAIN", name: "Main Campus" }]),

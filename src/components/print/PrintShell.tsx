@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 export type SchoolHeader = {
   name: string;
+  /** Campus name, when the document belongs to one campus. */
+  campus?: string;
   address?: string;
   phone?: string;
   logoUrl?: string | null;
@@ -105,12 +107,8 @@ export function SchoolHead({ school, title, sub }: { school: SchoolHeader; title
       ) : null}
       <div className="doc-head-text">
         <h1>{school.name}</h1>
-        {school.address || school.phone ? (
-          <p>
-            {school.address}
-            {school.address && school.phone ? " · " : ""}
-            {school.phone ? `Ph: ${school.phone}` : ""}
-          </p>
+        {school.campus || school.address || school.phone ? (
+          <p>{[school.campus, school.address, school.phone ? `Ph: ${school.phone}` : ""].filter(Boolean).join(" · ")}</p>
         ) : null}
       </div>
       <div className="doc-head-title">
@@ -140,4 +138,34 @@ export function chunk<T>(list: T[], size: number) {
   const out: T[][] = [];
   for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
   return out;
+}
+
+/**
+ * Letterhead for the account-style documents (vouchers, ledgers, stock vouchers, certificates):
+ * name, campus, contact lines and logo, all from the campus letterhead set in Settings.
+ */
+export function QbLetterhead({
+  school,
+  extra,
+}: {
+  school: SchoolHeader & { email?: string };
+  /** An extra contact line, e.g. the employer's tax number. */
+  extra?: string;
+}) {
+  return (
+    <div className="qbp-top">
+      <div className="qbp-co">
+        <b>{school.name}</b>
+        {school.campus ? <span>{school.campus}</span> : null}
+        {school.address ? <span>{school.address}</span> : null}
+        {school.phone ? <span>{school.phone}</span> : null}
+        {school.email ? <span>{school.email}</span> : null}
+        {extra ? <span>{extra}</span> : null}
+      </div>
+      {school.logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="qbp-logo" src={school.logoUrl} alt="" />
+      ) : null}
+    </div>
+  );
 }

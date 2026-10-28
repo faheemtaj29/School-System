@@ -19,6 +19,8 @@ type SlipData = {
   batches: {
     classId: string;
     classLabel: string;
+    /** The class's campus letterhead. */
+    head?: SchoolHeader;
     papers: Paper[];
     students: { _id: string; name: string; fatherName: string; admissionNo: string; rollNo: string }[];
   }[];
@@ -79,7 +81,7 @@ export function RollSlipsPrint({ termId, classIds, perPage }: { termId: string; 
               {page.map((s) => (
                 <article key={s._id} className="slip">
                   <SchoolHead
-                    school={data.school}
+                    school={s.batch.head || data.school}
                     title="ROLL NUMBER SLIP"
                     sub={`${data.term.name} · ${data.term.academicYear}`}
                   />
@@ -120,7 +122,7 @@ export function DateSheetPrint({ termId, classIds, src }: { termId: string; clas
     <PrintShell title="Date Sheet" info={data ? `${data.batches.length} class(es)` : undefined} error={error} loading={!data} closable={!src}>
       {data?.batches.map((b) => (
         <section key={b.classId} className="doc-page">
-          <SchoolHead school={data.school} title="DATE SHEET" sub={`${data.term.name} · ${data.term.academicYear}`} />
+          <SchoolHead school={b.head || data.school} title="DATE SHEET" sub={`${data.term.name} · ${data.term.academicYear}`} />
           <h2 className="doc-sub">Class: {b.classLabel}</h2>
           <PaperTable papers={b.papers} />
           <div className="signs">
@@ -142,6 +144,8 @@ type ResultData = {
   batches: {
     classId: string;
     classLabel: string;
+    /** The class's campus letterhead. */
+    head?: SchoolHeader;
     subjects: { _id: string; name: string; code: string; totalMarks: number; passingMarks: number; components: Component[] }[];
     stats: { students: number; complete: number; passed: number; failed: number; average: number; highest: number };
     cards: {
@@ -203,7 +207,7 @@ export function ResultCardsPrint({ termId, classIds, studentId, src }: { termId:
             {b.cards.map((card) => (
               <section key={card.student._id} className="doc-page result-card-doc">
                 <SchoolHead
-                  school={data.school}
+                  school={b.head || data.school}
                   title="RESULT CARD"
                   sub={`${data.term.name} · ${data.term.academicYear}`}
                 />
@@ -301,7 +305,7 @@ export function ResultSheetPrint({ termId, classIds }: { termId: string; classId
     <PrintShell title="Class Result Sheet" info={data ? `${data.batches.length} class(es)` : undefined} error={error} loading={!data} landscape>
       {data?.batches.map((b) => (
         <section key={b.classId} className="doc-page">
-          <SchoolHead school={data.school} title="RESULT SHEET" sub={`${data.term.name} · ${data.term.academicYear} · ${b.classLabel}`} />
+          <SchoolHead school={b.head || data.school} title="RESULT SHEET" sub={`${data.term.name} · ${data.term.academicYear} · ${b.classLabel}`} />
           <table className="doc-table rs-table">
             <thead>
               <tr>

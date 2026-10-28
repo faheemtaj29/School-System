@@ -1,4 +1,5 @@
 import { dbConnect } from "@/backend/config/database";
+import { ServiceError } from "@/backend/types";
 import { normalizeCurrency } from "@/lib/currency";
 import { Settings } from "@/backend/models/Settings";
 import { DEFAULT_THEME } from "@/lib/theme";
@@ -101,10 +102,12 @@ export const settingsService = {
     // The logo is managed by /api/settings/logo; never overwrite it from the profile form.
     delete (data as { logoUrl?: string }).logoUrl;
     const current = await Settings.findOne().lean();
-    const branches = (data.branches || []).map((b) => ({
-      ...b,
-      code: b.code.toUpperCase().trim(),
-    }));
+    const branches = (data.branches || []).map((b) => {
+      const code = b.code.toUpperCase().trim();
+      // The campus logo is uploaded separately; saving the form must not drop it.
+      const before = (current?.branches || []).find((x: { code: string }) => x.code === code) as { logoUpdatedAt?: Date } | undefined;
+      return { ...b, code, ...(before?.logoUpdatedAt ? { logoUpdatedAt: before.logoUpdatedAt } : {}) };
+    });
     const optionLists = Object.fromEntries(
       (Object.keys(defaults.optionLists) as OptionKey[]).map((key) => [
         key,
@@ -142,6 +145,34 @@ export const settingsService = {
     await dbConnect();
     const doc = await Settings.findOne().select("+logoData logoUpdatedAt").lean();
     return doc?.logoData ? { data: doc.logoData as string, updatedAt: doc.logoUpdatedAt } : null;
+  },
+
+  /** A campus's own logo, or null when it uses the school logo. */
+  async getBranchLogo(code: string) {
+    await dbConnect();
+    const key = code.toUpperCase();
+    const doc = await Settings.findOne().select("+branchLogos branches").lean();
+    const data = doc?.branchLogos?.[key];
+    if (!data) return null;
+    const b = (doc?.branches || []).find((x: { code: string }) => x.code === key) as { logoUpdatedAt?: Date } | undefined;
+    return { data: data as string, updatedAt: b?.logoUpdatedAt };
+  },
+
+  /** Upload (or remove, with null) a campus's own logo; it then heads that campus's documents. */
+  async setBranchLogo(code: string, dataUrl: string | null) {
+    await dbConnect();
+    const key = code.toUpperCase();
+    if (!/^[A-Z0-9_-]{1,20}$/.test(key)) throw new ServiceError("VALIDATION", "Invalid campus code", 400);
+    const doc = await Settings.findOne({ "branches.code": key }).select("_id").lean();
+    if (!doc) throw new ServiceError("NOT_FOUND", "Campus not found", 404);
+    const now = new Date();
+    await Settings.updateOne(
+      { _id: doc._id, "branches.code": key },
+      dataUrl
+        ? { $set: { [`branchLogos.${key}`]: dataUrl, "branches.$.logoUpdatedAt": now } }
+        : { $unset: { [`branchLogos.${key}`]: 1, "branches.$.logoUpdatedAt": 1 } }
+    );
+    return dataUrl ? `/api/settings/logo?branch=${key}&v=${now.getTime()}` : null;
   },
 
   async setLogo(dataUrl: string | null) {

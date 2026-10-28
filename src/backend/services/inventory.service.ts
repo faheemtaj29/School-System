@@ -16,7 +16,7 @@ import type {
   inventorySchema,
   stockVoucherSchema,
 } from "@/backend/validators/modules.validator";
-import { accountingService } from "@/backend/services/accounting.service";
+import { accountingService, printHeader } from "@/backend/services/accounting.service";
 import { partyService } from "@/backend/services/party.service";
 import { Account, Voucher as AccountingVoucher } from "@/backend/models/Accounting";
 
@@ -625,14 +625,7 @@ export const inventoryService = {
       toCampus: branchName(voucher.toBranchCode),
       settlement: settle,
       journal,
-      school: {
-        name: s?.schoolName || "School",
-        address: s?.address || "",
-        phone: s?.phone || "",
-        email: s?.email || "",
-        currency: s?.currency || "PKR",
-        logoUrl: s?.logoUpdatedAt ? `/api/settings/logo?v=${new Date(s.logoUpdatedAt).getTime()}` : null,
-      },
+      school: (await printHeader(voucher.branchCode)).school,
     };
   },
 
@@ -721,14 +714,7 @@ export const inventoryService = {
         : "All campuses",
       from: opts.from || null,
       to: opts.to || null,
-      school: {
-        name: s?.schoolName || "School",
-        address: s?.address || "",
-        phone: s?.phone || "",
-        email: s?.email || "",
-        currency: s?.currency || "PKR",
-        logoUrl: s?.logoUpdatedAt ? `/api/settings/logo?v=${new Date(s.logoUpdatedAt).getTime()}` : null,
-      },
+      school: (await printHeader(branch)).school,
       opening,
       rows,
       closing: balance,

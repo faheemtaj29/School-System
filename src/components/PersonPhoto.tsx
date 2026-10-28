@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { photoApi } from "@/lib/types";
 
 /** Shrinks a picked image to at most `max` px on its longest side, as a JPEG data URL. */
-async function shrink(file: File, max = 600): Promise<string> {
+export async function shrink(file: File, max = 600): Promise<string> {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {

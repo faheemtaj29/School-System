@@ -2,6 +2,7 @@
  * Salary income tax: yearly slabs (configurable, with Pakistan and India presets),
  * the tax to deduct from each month's pay, and the yearly certificate for an employee.
  */
+import { letterhead } from "@/backend/lib/letterhead";
 import { dbConnect } from "@/backend/config/database";
 import { Payslip } from "@/backend/models/HR";
 import { Settings, type SalaryTaxConfig } from "@/backend/models/Settings";
@@ -183,6 +184,7 @@ export const salaryTaxService = {
         .lean(),
     ]);
     if (!teacher) throw new ServiceError("NOT_FOUND", "Teacher not found", 404);
+    const head = await letterhead((teacher as { branchCode?: string }).branchCode);
     const rows = months.map((month) => {
       const p = slips.find((x) => x.month === month);
       const gross = p ? round((p.basic || 0) + (p.allowances || 0)) : 0;
@@ -215,14 +217,16 @@ export const salaryTaxService = {
         designation: teacher.designation || "Teacher",
         address: [teacher.address, teacher.city].filter(Boolean).join(", "),
       },
+      // The teacher's campus letterhead; the employer tax number is the school's.
       employer: {
-        name: s?.schoolName || "School",
-        address: s?.address || "",
-        phone: s?.phone || "",
-        email: s?.email || "",
+        name: head.name,
+        campus: head.campus,
+        address: head.address,
+        phone: head.phone,
+        email: head.email,
         taxNumber: s?.employerTaxNumber || s?.registrationNo || "",
-        currency: s?.currency || "PKR",
-        logoUrl: s?.logoUpdatedAt ? `/api/settings/logo?v=${new Date(s.logoUpdatedAt).getTime()}` : null,
+        currency: head.currency,
+        logoUrl: head.logoUrl,
       },
       rows,
       totals: {

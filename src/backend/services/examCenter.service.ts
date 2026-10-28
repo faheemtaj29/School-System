@@ -5,6 +5,7 @@
  *   3. Marks entry: component-wise marks (theory / practical / viva / assignment …).
  *   4. Result cards: totals, grades, GPA, class position — for many classes at once.
  */
+import { letterheads, type Letterhead } from "@/backend/lib/letterhead";
 import { Types } from "mongoose";
 import { dbConnect } from "@/backend/config/database";
 import { ClassModel } from "@/backend/models/Class";
@@ -142,7 +143,7 @@ async function loadSchedules(termId: string, classIds?: string[]) {
   const query: Record<string, unknown> = { termId };
   if (classIds?.length) query.classId = { $in: classIds };
   return ExamSchedule.find(query)
-    .populate("classId", "name section academicYear level")
+    .populate("classId", "name section academicYear level branchCode")
     .populate("rows.subjectId", "name code credits")
     .lean();
 }
@@ -155,6 +156,11 @@ function sortClasses<T extends { name: string; section?: string; level?: number 
       a.name.localeCompare(b.name, undefined, { numeric: true }) ||
       (a.section || "").localeCompare(b.section || "")
   );
+}
+
+/** The parts of a campus letterhead the exam prints use. */
+function pickHead(h: Letterhead) {
+  return { name: h.name, campus: h.campus, address: h.address, phone: h.phone, logoUrl: h.logoUrl };
 }
 
 export const examCenterService = {
@@ -409,7 +415,7 @@ export const examCenterService = {
     await dbConnect();
     const term = await loadTerm(termId);
     const schedules = await loadSchedules(termId, classIds);
-    const settings = await Settings.findOne().select("schoolName address phone logoUpdatedAt").lean();
+    const heads = await letterheads();
     const classes = sortClasses(schedules.map((s) => ({ ...(s.classId as unknown as ClassLean), s })));
     const batches = [];
     for (const cls of classes) {
@@ -434,6 +440,8 @@ export const examCenterService = {
       batches.push({
         classId: String(cls._id),
         classLabel: classLabel(cls),
+        branchCode: (cls as { branchCode?: string }).branchCode || "",
+        head: pickHead(heads((cls as { branchCode?: string }).branchCode)),
         papers,
         students: students.map((s) => ({
           _id: String(s._id),
@@ -445,14 +453,8 @@ export const examCenterService = {
       });
     }
     return {
-      school: {
-        name: settings?.schoolName || "School",
-        address: settings?.address || "",
-        phone: settings?.phone || "",
-        logoUrl: settings?.logoUpdatedAt
-          ? `/api/settings/logo?v=${new Date(settings.logoUpdatedAt).getTime()}`
-          : null,
-      },
+      // The campus letterhead of the (first) class; each batch also carries its own.
+      school: pickHead(heads(batches[0]?.branchCode)),
       term: { name: term.name, academicYear: term.academicYear },
       batches,
     };
@@ -586,9 +588,8 @@ export const examCenterService = {
     await dbConnect();
     const term = await loadTerm(termId);
     const schedules = await loadSchedules(termId, classIds);
-    const settings = await Settings.findOne()
-      .select("schoolName address phone logoUpdatedAt institutionType passPercent")
-      .lean();
+    const settings = await Settings.findOne().select("institutionType passPercent").lean();
+    const heads = await letterheads();
     const university = ["college", "university"].includes(settings?.institutionType || "");
     const classes = sortClasses(schedules.map((s) => ({ ...(s.classId as unknown as ClassLean), s })));
 
@@ -681,6 +682,8 @@ export const examCenterService = {
       batches.push({
         classId: String(cls._id),
         classLabel: classLabel(cls),
+        branchCode: (cls as { branchCode?: string }).branchCode || "",
+        head: pickHead(heads((cls as { branchCode?: string }).branchCode)),
         subjects: rows.map((r) => ({
           _id: r._id,
           name: r.name,
@@ -704,14 +707,8 @@ export const examCenterService = {
     }
 
     return {
-      school: {
-        name: settings?.schoolName || "School",
-        address: settings?.address || "",
-        phone: settings?.phone || "",
-        logoUrl: settings?.logoUpdatedAt
-          ? `/api/settings/logo?v=${new Date(settings.logoUpdatedAt).getTime()}`
-          : null,
-      },
+      // The campus letterhead of the (first) class; each batch also carries its own.
+      school: pickHead(heads(batches[0]?.branchCode)),
       term: { name: term.name, academicYear: term.academicYear, type: term.examTypeId?.name || "" },
       showGpa: university,
       batches,

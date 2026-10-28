@@ -57,7 +57,7 @@ function Head({ school, title, copy }: { school: School; title: string; copy: st
       <div>
         <h1>{school.name}</h1>
         <p>
-          {[school.address, school.phone ? `Ph: ${school.phone}` : ""].filter(Boolean).join(" · ")}
+          {[school.campus, school.address, school.phone ? `Ph: ${school.phone}` : ""].filter(Boolean).join(" · ")}
         </p>
       </div>
       <div className="fee-doc-copy">
@@ -90,6 +90,7 @@ type Challan = {
   payableAfterDue: number;
   token: string;
   campus: string;
+  head: { name: string; campus: string; address: string; phone: string; logoUrl: string | null };
   lastPayment: { date: string | null; method: string; receiptNo: string } | null;
   student: { name: string; admissionNo: string; rollNo: string; fatherName: string; phone: string; classLabel: string };
 };
@@ -155,14 +156,14 @@ function ChallanCopy({ c, school, copy, qr }: { c: Challan; school: ChallanSchoo
         </div>
       ) : null}
       <header className="ch-head">
-        {school.logoUrl ? (
+        {c.head.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={school.logoUrl} alt="" />
+          <img src={c.head.logoUrl} alt="" />
         ) : null}
         <div>
-          <h1>{school.name}</h1>
-          {c.campus || school.address || school.phone ? (
-            <small>{[c.campus, school.address, school.phone ? `Ph: ${school.phone}` : ""].filter(Boolean).join(" · ")}</small>
+          <h1>{c.head.name}</h1>
+          {c.head.campus || c.head.address || c.head.phone ? (
+            <small>{[c.head.campus, c.head.address, c.head.phone ? `Ph: ${c.head.phone}` : ""].filter(Boolean).join(" · ")}</small>
           ) : null}
           <b>FEE CHALLAN</b>
         </div>
@@ -217,7 +218,7 @@ function ChallanCopy({ c, school, copy, qr }: { c: Challan; school: ChallanSchoo
               {school.banks.map((b, i) => <span key={b} className="ch-bank">{i + 1}. {b}</span>)}
             </li>
           ) : null}
-          {school.phone ? <li>For any query, please contact {school.phone}.</li> : null}
+          {c.head.phone ? <li>For any query, please contact {c.head.phone}.</li> : null}
         </ul>
       </div>
       <footer className="ch-foot">

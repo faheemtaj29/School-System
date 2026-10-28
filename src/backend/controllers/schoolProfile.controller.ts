@@ -10,10 +10,11 @@ import { settingsService } from "@/backend/services/settings.service";
 import { imageProblem, imageResponse } from "@/backend/lib/images";
 
 export const schoolProfileController = {
-  /** Public: the logo also appears on the login screen and printed documents. */
-  async getLogo() {
+  /** Public: the logo also appears on the login screen and printed documents. ?branch=CODE gives a campus's own logo. */
+  async getLogo(req: Request) {
     try {
-      const logo = await settingsService.getLogo();
+      const branch = new URL(req.url).searchParams.get("branch");
+      const logo = (branch && (await settingsService.getBranchLogo(branch))) || (await settingsService.getLogo());
       return imageResponse(logo?.data);
     } catch (e) {
       return fromServiceError(e);
@@ -27,17 +28,21 @@ export const schoolProfileController = {
       const body = await req.json().catch(() => ({}));
       const problem = imageProblem(body.dataUrl, "Logo");
       if (problem) return jsonError(problem);
+      const branch = new URL(req.url).searchParams.get("branch");
+      if (branch) return jsonOk({ logoUrl: await settingsService.setBranchLogo(branch, body.dataUrl) });
       return jsonOk({ logoUrl: await settingsService.setLogo(body.dataUrl) });
     } catch (e) {
       return fromServiceError(e);
     }
   },
 
-  async removeLogo() {
+  async removeLogo(req: Request) {
     const { error } = await requireAuth(["admin"]);
     if (error) return error;
     try {
-      await settingsService.setLogo(null);
+      const branch = new URL(req.url).searchParams.get("branch");
+      if (branch) await settingsService.setBranchLogo(branch, null);
+      else await settingsService.setLogo(null);
       return jsonOk({ logoUrl: null });
     } catch (e) {
       return fromServiceError(e);
