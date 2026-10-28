@@ -12,7 +12,7 @@ import {
   inputClass,
 } from "@/components/ui";
 import { FeeForm } from "@/components/forms/SchoolForms";
-import { CollectModal, FeeStructurePanel, monthName, type CollectTarget } from "@/components/fees/FeeTools";
+import { AdvanceFeeModal, CollectModal, FeeStructurePanel, monthName, type CollectTarget } from "@/components/fees/FeeTools";
 import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import {
   FeeItem,
@@ -66,6 +66,7 @@ export default function FeesPage() {
 
   // Counter collection (opens the 2-copy receipt)
   const [collecting, setCollecting] = useState<CollectTarget | null>(null);
+  const [advanceOpen, setAdvanceOpen] = useState(false);
   const [filterMonth, setFilterMonth] = useState("");
 
   // Voucher print
@@ -358,10 +359,14 @@ export default function FeesPage() {
           >{label}</button>
         ))}
         {canEdit ? (
+          <button type="button" className="btn-ghost no-print" style={{ marginLeft: "auto" }} onClick={() => setAdvanceOpen(true)}>
+            Advance Fee
+          </button>
+        ) : null}
+        {canEdit ? (
           <button
             type="button"
             className="btn-ghost no-print"
-            style={{ marginLeft: "auto" }}
             title="Adds the late fee from Settings to overdue vouchers past the grace days"
             onClick={async () => {
               setSysMsg("");
@@ -478,6 +483,16 @@ export default function FeesPage() {
       ) : null}
 
       {tab === "structure" && canEdit ? <FeeStructurePanel onGenerated={load} /> : null}
+
+      {advanceOpen ? (
+        <AdvanceFeeModal
+          onClose={() => setAdvanceOpen(false)}
+          onDone={() => {
+            setAdvanceOpen(false);
+            load();
+          }}
+        />
+      ) : null}
 
       {collecting ? (
         <CollectModal

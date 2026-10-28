@@ -11,7 +11,7 @@ import { Student } from "@/backend/models/Student";
 import { allocateCode } from "@/backend/services/numbering.service";
 import { feeService, syncFeeLedger } from "@/backend/services/fee.service";
 import { ServiceError, type SessionUser } from "@/backend/types";
-import type { CollectFeeInput, FeeStructureInput } from "@/backend/validators/fee.validator";
+import type { AdvanceFeeInput, CollectFeeInput, FeeStructureInput } from "@/backend/validators/fee.validator";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -239,7 +239,63 @@ export const feeBillingService = {
   },
 
   /** Record money received at the counter and issue a receipt number for it. */
-  async collect(feeId: string, data: CollectFeeInput, actor?: SessionUser) {
+  /**
+   * Fee paid in advance: the coming months' challans are raised now from the class fee
+   * structure (concession applied) and paid together under one receipt number. Monthly
+   * billing later finds those months already billed and skips them.
+   */
+  async advance(input: AdvanceFeeInput, actor?: SessionUser) {
+    await dbConnect();
+    if (!Types.ObjectId.isValid(input.studentId)) throw new ServiceError("VALIDATION", "Invalid student", 400);
+    const student = await Student.findById(input.studentId).select("classId status branchCode firstName lastName").lean();
+    if (!student) throw new ServiceError("NOT_FOUND", "Student not found", 404);
+    if (student.status !== "active") throw new ServiceError("VALIDATION", "Only an active student can pay in advance", 400);
+    const cls = await ClassModel.findById(student.classId).select("name section feeStructure").lean();
+    if (!cls?.feeStructure?.length) {
+      throw new ServiceError("VALIDATION", "Set this class's monthly fee first (Fees → Fee Structure & Monthly Billing)", 400);
+    }
+    const settings = await Settings.findOne().select("feeDueDay").lean();
+    const dueDay = Math.min(28, settings?.feeDueDay || 10);
+    const [y0, m0] = input.fromMonth.split("-").map(Number);
+    const months = Array.from({ length: input.months }, (_, i) => {
+      const d = new Date(Date.UTC(y0, m0 - 1 + i, 1));
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    });
+    for (const month of months) {
+      await feeService.generateBulk({
+        classId: String(cls._id),
+        studentId: input.studentId,
+        lines: cls.feeStructure,
+        title: `Monthly Fee · ${monthLabel(month)}`,
+        dueDate: `${month}-${String(dueDay).padStart(2, "0")}`,
+        billingMonth: month,
+      });
+    }
+    const fees = await Fee.find({ studentId: input.studentId, billingMonth: { $in: months } })
+      .select("billingMonth amount paidAmount branchCode")
+      .sort({ billingMonth: 1 })
+      .lean();
+    const open = fees.filter((f) => round(f.amount - (f.paidAmount || 0)) > 0);
+    if (!open.length) throw new ServiceError("VALIDATION", "These months are already paid", 400);
+    const receiptNo = await allocateCode("receipt", open[0].branchCode || student.branchCode);
+    const note = input.note || `Advance fee — ${monthLabel(months[0])} to ${monthLabel(months[months.length - 1])}`;
+    const paid = [];
+    for (const [i, f] of open.entries()) {
+      const amount = round(f.amount - (f.paidAmount || 0));
+      // One receipt for the whole advance; each month carries it as /1, /2 … (receipt numbers are unique per challan).
+      const monthReceipt = open.length > 1 ? `${receiptNo}/${i + 1}` : receiptNo;
+      await this.collect(String(f._id), { amount, method: input.method, date: input.date, note }, actor, monthReceipt);
+      paid.push({ month: f.billingMonth, monthLabel: monthLabel(f.billingMonth!), amount, feeId: String(f._id) });
+    }
+    return {
+      receiptNo,
+      months: paid,
+      alreadyPaid: fees.length - open.length,
+      total: round(paid.reduce((t, p) => t + p.amount, 0)),
+    };
+  },
+
+  async collect(feeId: string, data: CollectFeeInput, actor?: SessionUser, sharedReceiptNo?: string) {
     await dbConnect();
     if (!Types.ObjectId.isValid(feeId)) {
       throw new ServiceError("VALIDATION", "Invalid fee voucher ID", 400);
@@ -259,7 +315,8 @@ export const feeBillingService = {
 
     // Atomic balance predicate prevents concurrent counter requests from collecting
     // more than the outstanding amount on the same voucher.
-    const receiptNo = await allocateCode("receipt", existing.branchCode);
+    // Advance payments for several months use one receipt number (see advance()).
+    const receiptNo = sharedReceiptNo || (await allocateCode("receipt", existing.branchCode));
     const fee = await Fee.findOneAndUpdate(
       {
         _id: feeId,
@@ -352,7 +409,7 @@ export const feeBillingService = {
     const list = fees
       .filter((f) => f.studentId)
       .map((f) => {
-        const arrears = round(
+        let arrears = round(
           open
             .filter(
               (o) =>
@@ -363,6 +420,8 @@ export const feeBillingService = {
             .reduce((s, o) => s + (o.amount - (o.paidAmount || 0)), 0)
         );
         const balance = round(f.amount - (f.paidAmount || 0));
+        // A fully paid challan (e.g. paid in advance) doesn't carry older dues — they stay on their own challans.
+        if (balance <= 0) arrears = 0;
         const payable = round(balance + arrears);
         // The late fee is added to the voucher only once (Apply Late Fees); until then show what it would be.
         // Whole rupees, as collected at the counter.
@@ -387,6 +446,12 @@ export const feeBillingService = {
           payable,
           lateAfterDue,
           payableAfterDue: round(payable + lateAfterDue),
+          // Stamped on the challan once money is in: last payment's date, method and receipt.
+          lastPayment: (() => {
+            const p = f.payments?.length ? f.payments[f.payments.length - 1] : null;
+            if (p) return { date: p.date, method: p.method, receiptNo: p.receiptNo };
+            return f.paidAmount ? { date: f.paymentDate || null, method: f.method || "cash", receiptNo: f.receiptNo || "" } : null;
+          })(),
           // For the QR code / link to this challan's online copy.
           token: challanToken(String(f._id)),
           // Fees saved without a campus belong to the main (default) campus.

@@ -1,5 +1,6 @@
 "use client";
 
+import { AdvanceFeeModal } from "@/components/fees/FeeTools";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState, Panel, StatusBadge } from "@/components/ui";
@@ -112,6 +113,7 @@ export function StudentProfileView({ id, portal = false }: { id: string; portal?
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [marking, setMarking] = useState("");
 
+  const [advanceOpen, setAdvanceOpen] = useState(false);
   const load = useCallback(async () => {
     const res = await fetch(`/api/students/${id}/profile`);
     const d = await res.json();
@@ -358,6 +360,17 @@ export function StudentProfileView({ id, portal = false }: { id: string; portal?
         </>
       ) : null}
 
+      {advanceOpen ? (
+        <AdvanceFeeModal
+          studentId={id}
+          onClose={() => setAdvanceOpen(false)}
+          onDone={() => {
+            setAdvanceOpen(false);
+            load();
+          }}
+        />
+      ) : null}
+
       {/* ── fee ledger ─────────────────────────────────────────── */}
       {tab === "fees" ? (
         <Panel title="Fee Ledger" meta={`BALANCE ${cur} ${formatNumber(data.ledger.balance)}`}>
@@ -366,7 +379,10 @@ export function StudentProfileView({ id, portal = false }: { id: string; portal?
               Print fee ledger
             </button>
             {!portal ? (
-              <Link href={`/fees?q=${encodeURIComponent(s.admissionNo)}`} className="btn-ghost">Collect fee / challans</Link>
+              <>
+                <Link href={`/fees?q=${encodeURIComponent(s.admissionNo)}`} className="btn-ghost">Collect fee / challans</Link>
+                <button type="button" className="btn-ghost" onClick={() => setAdvanceOpen(true)}>Advance fee</button>
+              </>
             ) : null}
           </div>
           {!data.ledger.rows.length ? (

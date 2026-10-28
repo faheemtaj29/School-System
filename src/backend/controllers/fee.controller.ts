@@ -11,7 +11,7 @@ import {
 import { feeService } from "@/backend/services/fee.service";
 import { feeBillingService } from "@/backend/services/feeBilling.service";
 import { resolveChildren } from "@/backend/lib/portal";
-import { bulkFeeSchema, feeSchema, installmentFeeSchema } from "@/backend/validators/fee.validator";
+import { advanceFeeSchema, bulkFeeSchema, feeSchema, installmentFeeSchema } from "@/backend/validators/fee.validator";
 import { z } from "zod";
 
 const waiverSchema = z.object({
@@ -62,6 +62,11 @@ export const feeController = {
         const parsed = bulkFeeSchema.safeParse(body);
         if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
         return jsonOk(await feeService.generateBulk(parsed.data), 201);
+      }
+      if (body.kind === "advance") {
+        const parsed = advanceFeeSchema.safeParse(body);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        return jsonOk(await feeBillingService.advance(parsed.data, session!), 201);
       }
       if (body.kind === "installments") {
         const parsed = installmentFeeSchema.safeParse(body);

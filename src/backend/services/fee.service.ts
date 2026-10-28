@@ -315,7 +315,7 @@ export const feeService = {
    * Raises a multi-head challan for every active student of a class.
    * Re-running the same summary title in the same month is skipped.
    */
-  async generateBulk(data: BulkFeeInput) {
+  async generateBulk(data: BulkFeeInput & { studentId?: string }) {
     await dbConnect();
     const lines = cleanLines(data.lines);
     const gross = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
@@ -323,6 +323,8 @@ export const feeService = {
 
     const studentQuery: Record<string, unknown> = { status: "active" };
     if (data.classId) studentQuery.classId = data.classId;
+    // One student only (advance fee for coming months).
+    if (data.studentId) studentQuery._id = data.studentId;
     if (data.branchCode) studentQuery.branchCode = data.branchCode.toUpperCase();
 
     const students = await Student.find(studentQuery)

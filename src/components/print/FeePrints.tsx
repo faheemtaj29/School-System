@@ -90,6 +90,7 @@ type Challan = {
   payableAfterDue: number;
   token: string;
   campus: string;
+  lastPayment: { date: string | null; method: string; receiptNo: string } | null;
   student: { name: string; admissionNo: string; rollNo: string; fatherName: string; phone: string; classLabel: string };
 };
 
@@ -130,6 +131,9 @@ function useQr(text: string) {
 function ChallanCopy({ c, school, copy, qr }: { c: Challan; school: ChallanSchool; copy: string; qr: string }) {
   const cur = school.currency;
   const paid = c.status === "paid";
+  const part = !paid && c.paid > 0;
+  const lp = c.lastPayment;
+  const via = lp ? ({ bank: "Bank", online: "Online", card: "Card", cash: "Cash" } as Record<string, string>)[lp.method] || lp.method : "";
   const subtotal = c.lines.reduce((t, l) => t + l.amount, 0);
   const rows: [string, number | null][] = [
     ...c.lines.map((l): [string, number] => [l.head, l.amount]),
@@ -139,7 +143,17 @@ function ChallanCopy({ c, school, copy, qr }: { c: Challan; school: ChallanSchoo
   ];
   return (
     <article className="ch">
-      {paid ? <div className="ch-paid">PAID</div> : null}
+      {paid || part ? (
+        <div className={`ch-paid${part ? " part" : ""}`}>
+          <b>{paid ? "PAID" : "PARTLY PAID"}</b>
+          {lp ? (
+            <span>
+              {[lp.date ? shortDate(lp.date) : "", via ? `via ${via}` : "", lp.receiptNo].filter(Boolean).join(" · ")}
+            </span>
+          ) : null}
+          {part ? <span>{cur} {money(c.paid)} received</span> : null}
+        </div>
+      ) : null}
       <header className="ch-head">
         {school.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -186,11 +200,16 @@ function ChallanCopy({ c, school, copy, qr }: { c: Challan; school: ChallanSchoo
       <div className="ch-notes">
         <b>Terms &amp; Conditions:</b>
         <ul>
-          <li>Please pay on or before the due date ({shortDate(c.dueDate)}).</li>
-          {school.lateFeePercent ? (
-            <li>After the due date a late fee of {school.lateFeePercent}% applies — total {cur} {money(c.payableAfterDue)}.</li>
+          {/* Due-date reminders only matter while something is still to pay. */}
+          {!paid ? (
+            <>
+              <li>Please pay on or before the due date ({shortDate(c.dueDate)}).</li>
+              {school.lateFeePercent && c.lateAfterDue ? (
+                <li>After the due date a late fee of {school.lateFeePercent}% applies — total {cur} {money(c.payableAfterDue)}.</li>
+              ) : null}
+              <li>This challan is valid until {shortDate(c.expiryDate)}.</li>
+            </>
           ) : null}
-          <li>This challan is valid until {shortDate(c.expiryDate)}.</li>
           {school.notes.map((n) => <li key={n}>{n}</li>)}
           {school.banks.length ? (
             <li>

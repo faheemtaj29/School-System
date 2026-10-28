@@ -62,4 +62,15 @@ export const feeStructureSchema = z.object({
 });
 
 export type CollectFeeInput = z.infer<typeof collectFeeSchema>;
+
+/** Fee paid in advance for several coming months (one receipt). */
+export const advanceFeeSchema = z.object({
+  studentId: z.string().min(1),
+  fromMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Pick the first month"),
+  months: z.coerce.number().int().min(1).max(12),
+  method: z.enum(["cash", "card", "bank", "online"]),
+  date: z.string().optional(),
+  note: z.string().max(500).optional(),
+});
+export type AdvanceFeeInput = z.infer<typeof advanceFeeSchema>;
 export type FeeStructureInput = z.infer<typeof feeStructureSchema>;

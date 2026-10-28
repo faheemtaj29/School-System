@@ -1,4 +1,5 @@
 import { dbConnect } from "@/backend/config/database";
+import { normalizeCurrency } from "@/lib/currency";
 import { Settings } from "@/backend/models/Settings";
 import { DEFAULT_THEME } from "@/lib/theme";
 import type { z } from "zod";
@@ -71,6 +72,12 @@ export const settingsService = {
       );
       doc = { ...doc, logoUpdatedAt, logoUrl: undefined };
     }
+    // Older versions stored a typed symbol ("₹", "Rs"); keep a proper currency code instead.
+    const currency = normalizeCurrency(doc.currency);
+    if (currency !== doc.currency) {
+      await Settings.updateOne({ _id: doc._id }, { $set: { currency } });
+      doc = { ...doc, currency };
+    }
     if (!doc.branches?.length) {
       doc = {
         ...doc,
@@ -112,6 +119,7 @@ export const settingsService = {
     ) as typeof defaults.optionLists;
     const payload = {
       ...data,
+      currency: normalizeCurrency(data.currency),
       email: data.email || undefined,
       admissionPrefix: data.admissionPrefix?.toUpperCase() || current?.admissionPrefix || "STD",
       receiptPrefix: data.receiptPrefix?.toUpperCase() || current?.receiptPrefix || "RCP",

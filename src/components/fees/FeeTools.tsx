@@ -349,7 +349,7 @@ export function CollectModal({
 
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
-      <form className="modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={submit}>
+      <form className="modal pad" onMouseDown={(e) => e.stopPropagation()} onSubmit={submit}>
         <h2 style={{ fontSize: 18, marginBottom: 4 }}>Collect fee</h2>
         <div style={{ ...hint, marginBottom: 14 }}>
           {fee.studentName} · {fee.title}
@@ -397,6 +397,189 @@ export function CollectModal({
           </button>
         </div>
         <div style={hint}>The receipt prints with a Parent copy and an Office copy on one page.</div>
+      </form>
+    </div>
+  );
+}
+
+type AdvanceStudent = {
+  _id: string;
+  name: string;
+  admissionNo: string;
+  classId: string;
+  classLabel: string;
+  discountPercent: number;
+};
+
+/**
+ * Fee paid in advance for coming months: pick the student, the first month and how many
+ * months. Those months' challans are raised from the class fee structure and marked paid
+ * under one receipt; monthly billing later skips them.
+ */
+export function AdvanceFeeModal({
+  studentId,
+  onClose,
+  onDone,
+}: {
+  /** Pre-selected student (from the profile); otherwise searched here. */
+  studentId?: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [students, setStudents] = useState<AdvanceStudent[]>([]);
+  const [structure, setStructure] = useState<Structure | null>(null);
+  const [query, setQuery] = useState("");
+  const [pick, setPick] = useState(studentId || "");
+  const [form, setForm] = useState({
+    fromMonth: monthKey(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)),
+    months: 3,
+    method: "cash",
+    date: new Date().toISOString().slice(0, 10),
+    note: "",
+  });
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/students")
+      .then((r) => r.json())
+      .then((d) =>
+        setStudents(
+          (d.students || []).map((s: { _id: string; firstName: string; lastName: string; admissionNo: string; discountPercent?: number; classId?: { _id: string; name: string; section: string } | string }) => ({
+            _id: s._id,
+            name: `${s.firstName} ${s.lastName}`,
+            admissionNo: s.admissionNo,
+            classId: typeof s.classId === "object" && s.classId ? s.classId._id : String(s.classId || ""),
+            classLabel: typeof s.classId === "object" && s.classId ? `${s.classId.name}-${s.classId.section}` : "",
+            discountPercent: s.discountPercent || 0,
+          }))
+        )
+      )
+      .catch(() => {});
+    fetch("/api/fees/structure")
+      .then((r) => r.json())
+      .then((d) => setStructure(d))
+      .catch(() => {});
+  }, []);
+
+  const student = students.find((s) => s._id === pick);
+  const cls = structure?.classes.find((c) => c._id === student?.classId);
+  const perMonth = cls ? Math.round(cls.monthly * (1 - (student?.discountPercent || 0) / 100)) : 0;
+  const cur = structure?.settings.currency || "";
+  const term = query.trim().toLowerCase();
+  const matches = term
+    ? students.filter((s) => `${s.name} ${s.admissionNo}`.toLowerCase().includes(term)).slice(0, 8)
+    : [];
+  const lastMonth = (() => {
+    const [y, m] = form.fromMonth.split("-").map(Number);
+    return monthKey(new Date(y, m - 1 + form.months - 1, 1));
+  })();
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!pick) {
+      setErr("Choose the student");
+      return;
+    }
+    setErr("");
+    const tab = window.open("about:blank", "_blank");
+    setBusy(true);
+    try {
+      const res = await fetch("/api/fees", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "advance", studentId: pick, ...form }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Could not record the advance");
+      // The paid challans (stamped PAID with the receipt number) serve as the parent's proof.
+      const url = `/print/fee-challans?ids=${d.months.map((m: { feeId: string }) => m.feeId).join(",")}&copies=2`;
+      if (tab) tab.location.href = url;
+      else window.open(url, "_blank");
+      onDone();
+    } catch (e) {
+      tab?.close();
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <form className="modal pad" onMouseDown={(e) => e.stopPropagation()} onSubmit={submit}>
+        <h2 style={{ fontSize: 18, marginBottom: 4 }}>Advance fee</h2>
+        <div style={{ ...hint, marginBottom: 14 }}>
+          Fee received now for coming months. Their challans are made and marked paid on one receipt; monthly billing skips them later.
+        </div>
+        {err ? <div className="alert err">{err}</div> : null}
+        <div className="form-grid">
+          {studentId ? null : (
+            <Field label="Student" required>
+              <input
+                className={inputClass}
+                value={student ? `${student.name} · ${student.admissionNo}` : query}
+                placeholder="Type a name or admission no."
+                onChange={(e) => {
+                  setPick("");
+                  setQuery(e.target.value);
+                }}
+              />
+              {!student && matches.length ? (
+                <div className="adv-matches">
+                  {matches.map((s) => (
+                    <button type="button" key={s._id} onClick={() => setPick(s._id)}>
+                      <b>{s.name}</b> <span>{s.admissionNo} · {s.classLabel}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </Field>
+          )}
+          <Field label="From month" required>
+            <input type="month" className={inputClass} value={form.fromMonth} onChange={(e) => setForm({ ...form, fromMonth: e.target.value })} />
+          </Field>
+          <Field label="Number of months" required>
+            <select className={inputClass} value={form.months} onChange={(e) => setForm({ ...form, months: Number(e.target.value) })}>
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>{n} month{n > 1 ? "s" : ""}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Method">
+            <select className={inputClass} value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}>
+              <option value="cash">Cash</option>
+              <option value="bank">Bank</option>
+              <option value="online">Online</option>
+              <option value="card">Card</option>
+            </select>
+          </Field>
+          <Field label="Date received">
+            <input type="date" className={inputClass} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+          </Field>
+        </div>
+        {student ? (
+          <div className="ec-stats" style={{ marginTop: 12 }}>
+            <span>{student.classLabel}</span>
+            <span>{monthName(form.fromMonth)} → {monthName(lastMonth)}</span>
+            {cls ? (
+              <span>
+                About <b>{cur} {formatNumber(perMonth * form.months)}</b> ({cur} {formatNumber(perMonth)} × {form.months})
+              </span>
+            ) : (
+              <span style={{ color: "var(--red)" }}>This class has no monthly fee set yet</span>
+            )}
+          </div>
+        ) : null}
+        <div className="form-actions">
+          <button type="submit" className="btn-dark" disabled={busy || !pick}>
+            {busy ? "Saving…" : "Save & print paid challans"}
+          </button>
+          <button type="button" className="btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+        <div style={hint}>Months that already have a paid challan are left as they are.</div>
       </form>
     </div>
   );

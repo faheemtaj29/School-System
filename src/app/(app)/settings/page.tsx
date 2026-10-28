@@ -1,6 +1,7 @@
 "use client";
 
 import { DEFAULT_CHALLAN_TERMS } from "@/lib/challanTerms";
+import { CURRENCIES, normalizeCurrency } from "@/lib/currency";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Field, Hero, Panel, StatusBadge, inputClass } from "@/components/ui";
 import { DEFAULT_THEME, THEME_PRESETS, themeVars, type Theme } from "@/lib/theme";
@@ -614,8 +615,12 @@ export default function SettingsPage() {
                 <Field label="Fee Due Day (of month)">
                   <input type="number" min="1" max="28" className={inputClass} value={form.feeDueDay} onChange={(e) => setForm({ ...form, feeDueDay: Number(e.target.value) })} />
                 </Field>
-                <Field label="Currency Symbol">
-                  <input className={inputClass} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} placeholder="e.g. Rs, PKR, ₹" />
+                <Field label="Currency (used on challans, receipts, vouchers and reports)">
+                  <select className={inputClass} value={normalizeCurrency(form.currency)} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
+                    {CURRENCIES.map((c) => (
+                      <option key={c.code} value={c.code}>{c.label}</option>
+                    ))}
+                  </select>
                 </Field>
                 <Field label="Pass Percentage">
                   <input type="number" min="1" max="100" className={inputClass} value={form.passPercent ?? 40} onChange={(e) => setForm({ ...form, passPercent: Number(e.target.value) })} />
