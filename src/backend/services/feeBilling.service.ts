@@ -33,11 +33,14 @@ function classLabel(c?: { name?: string; section?: string } | null) {
   return c.section ? `${c.name} - ${c.section}` : c.name;
 }
 
+import { DEFAULT_CHALLAN_TERMS } from "@/lib/challanTerms";
+import { challanToken } from "@/backend/lib/challanLink";
+
 const lines = (text?: string | null) => String(text || "").split("\n").map((l) => l.trim()).filter(Boolean);
 
 async function schoolHeader() {
   const s = await Settings.findOne()
-    .select("schoolName address phone email logoUpdatedAt currency lateFeePercent lateFeeGraceDays registrationNo challanValidityDays challanBanks challanNotes")
+    .select("schoolName address phone email logoUpdatedAt currency lateFeePercent lateFeeGraceDays registrationNo challanValidityDays challanBanks challanNotes branches defaultBranchCode")
     .lean();
   return {
     name: s?.schoolName || "School",
@@ -50,7 +53,10 @@ async function schoolHeader() {
     lateFeeGraceDays: s?.lateFeeGraceDays ?? 0,
     challanValidityDays: s?.challanValidityDays ?? 5,
     banks: lines(s?.challanBanks),
-    notes: lines(s?.challanNotes),
+    // Until the school writes its own, the standard terms are printed.
+    notes: lines(s?.challanNotes || DEFAULT_CHALLAN_TERMS),
+    branches: (s?.branches || []).map((b: { code: string; name: string }) => ({ code: b.code, name: b.name })),
+    defaultBranchCode: s?.defaultBranchCode || "",
     logoUrl: s?.logoUpdatedAt ? `/api/settings/logo?v=${new Date(s.logoUpdatedAt).getTime()}` : null,
   };
 }
@@ -85,6 +91,7 @@ type FeeLean = {
   lateFeeAmount?: number;
   lateFeeApplied?: boolean;
   createdAt?: Date;
+  branchCode?: string;
 };
 
 const studentFields = {
@@ -358,7 +365,8 @@ export const feeBillingService = {
         const balance = round(f.amount - (f.paidAmount || 0));
         const payable = round(balance + arrears);
         // The late fee is added to the voucher only once (Apply Late Fees); until then show what it would be.
-        const lateAfterDue = f.lateFeeApplied ? 0 : round((balance * header.lateFeePercent) / 100);
+        // Whole rupees, as collected at the counter.
+        const lateAfterDue = f.lateFeeApplied ? 0 : Math.round((balance * header.lateFeePercent) / 100);
         const expiry = new Date(f.dueDate);
         expiry.setDate(expiry.getDate() + header.challanValidityDays);
         return {
@@ -379,6 +387,13 @@ export const feeBillingService = {
           payable,
           lateAfterDue,
           payableAfterDue: round(payable + lateAfterDue),
+          // For the QR code / link to this challan's online copy.
+          token: challanToken(String(f._id)),
+          // Fees saved without a campus belong to the main (default) campus.
+          campus:
+            header.branches.find((b: { code: string; name: string }) => b.code === (f.branchCode || header.defaultBranchCode))?.name ||
+            header.branches[0]?.name ||
+            "",
           issueDate: f.createdAt || null,
           expiryDate: expiry,
           student: {

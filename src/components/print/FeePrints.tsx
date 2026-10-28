@@ -1,5 +1,7 @@
 "use client";
 
+import QRCode from "qrcode";
+import { useEffect, useState } from "react";
 import { PrintShell, fmtDate, usePrintData, type SchoolHeader } from "./PrintShell";
 
 type School = SchoolHeader & {
@@ -86,6 +88,8 @@ type Challan = {
   payable: number;
   lateAfterDue: number;
   payableAfterDue: number;
+  token: string;
+  campus: string;
   student: { name: string; admissionNo: string; rollNo: string; fatherName: string; phone: string; classLabel: string };
 };
 
@@ -107,9 +111,25 @@ function period(month: string | null, fallback: string) {
   return `${new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" })}-${String(y).slice(2)}`;
 }
 
-/** One copy of the challan: header band, student block, particulars, totals, copy bar, notes. */
-function ChallanCopy({ c, school, copy }: { c: Challan; school: ChallanSchool; copy: string }) {
+/** QR code (as an image) of this challan's online copy, which the parent can open and pay from. */
+function useQr(text: string) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    let live = true;
+    QRCode.toDataURL(text, { margin: 0, width: 160, errorCorrectionLevel: "M" })
+      .then((url) => live && setSrc(url))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [text]);
+  return src;
+}
+
+/** One copy of the challan: header band, student block, particulars, totals, copy bar, terms, signatures. */
+function ChallanCopy({ c, school, copy, qr }: { c: Challan; school: ChallanSchool; copy: string; qr: string }) {
   const cur = school.currency;
+  const paid = c.status === "paid";
   const subtotal = c.lines.reduce((t, l) => t + l.amount, 0);
   const rows: [string, number | null][] = [
     ...c.lines.map((l): [string, number] => [l.head, l.amount]),
@@ -119,6 +139,7 @@ function ChallanCopy({ c, school, copy }: { c: Challan; school: ChallanSchool; c
   ];
   return (
     <article className="ch">
+      {paid ? <div className="ch-paid">PAID</div> : null}
       <header className="ch-head">
         {school.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -126,6 +147,9 @@ function ChallanCopy({ c, school, copy }: { c: Challan; school: ChallanSchool; c
         ) : null}
         <div>
           <h1>{school.name}</h1>
+          {c.campus || school.address || school.phone ? (
+            <small>{[c.campus, school.address, school.phone ? `Ph: ${school.phone}` : ""].filter(Boolean).join(" · ")}</small>
+          ) : null}
           <b>FEE CHALLAN</b>
         </div>
       </header>
@@ -160,7 +184,7 @@ function ChallanCopy({ c, school, copy }: { c: Challan; school: ChallanSchool; c
       <div className="ch-words">{amountInWords(c.payable)}</div>
       <div className="ch-copy">{copy}</div>
       <div className="ch-notes">
-        <b>Important Notes:</b>
+        <b>Terms &amp; Conditions:</b>
         <ul>
           <li>Please pay on or before the due date ({shortDate(c.dueDate)}).</li>
           {school.lateFeePercent ? (
@@ -177,7 +201,31 @@ function ChallanCopy({ c, school, copy }: { c: Challan; school: ChallanSchool; c
           {school.phone ? <li>For any query, please contact {school.phone}.</li> : null}
         </ul>
       </div>
+      <footer className="ch-foot">
+        {qr ? (
+          <div className="ch-qr">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={qr} alt="QR code of this challan" />
+            <span>Scan to view this challan online</span>
+          </div>
+        ) : null}
+        <div className="ch-signs">
+          <span>Depositor&apos;s signature</span>
+          <span>{copy.startsWith("Parent") ? "Received by (stamp & sign)" : "Cashier / bank stamp & sign"}</span>
+        </div>
+      </footer>
     </article>
+  );
+}
+
+function ChallanCopies({ c, school, labels }: { c: Challan; school: ChallanSchool; labels: string[] }) {
+  const qr = useQr(typeof window === "undefined" ? "" : `${window.location.origin}/challan/${c.token}`);
+  return (
+    <>
+      {labels.map((copy) => (
+        <ChallanCopy key={copy} c={c} school={school} copy={copy} qr={qr} />
+      ))}
+    </>
   );
 }
 
@@ -197,9 +245,7 @@ export function FeeChallansPrint({ query, copies, src }: { query: string; copies
     >
       {data?.challans.map((c) => (
         <section key={c._id} className={`doc-page ch-sheet copies-${labels.length}`}>
-          {labels.map((copy) => (
-            <ChallanCopy key={copy} c={c} school={data.school} copy={copy} />
-          ))}
+          <ChallanCopies c={c} school={data.school} labels={labels} />
         </section>
       ))}
     </PrintShell>

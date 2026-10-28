@@ -117,6 +117,7 @@ export async function syncFeeLedger(fee: {
   branchCode?: string;
   studentId: unknown;
   payments?: { amount: number; date: Date; method: string; receiptNo: string }[];
+  lines?: { head: string; amount: number }[];
 }) {
   const paid = fee.paidAmount || 0;
   const id = String(fee._id);
@@ -129,6 +130,12 @@ export async function syncFeeLedger(fee: {
   }
   // Counter collections: one receipt voucher per payment, on its own date and cash/bank account,
   // so the cash book, bank book and cash flow show each payment where and when it was received.
+  // Each fee head credits its own income account; a payment is spread over the heads
+  // in proportion to their amounts on the voucher.
+  const splits = [];
+  for (const l of fee.lines || []) {
+    if (l.amount > 0) splits.push({ accountCode: await accountingService.feeHeadAccount(l.head), amount: l.amount });
+  }
   if (fee.payments?.length) {
     await accountingService.removeBySource("fee", id);
     for (const p of fee.payments) {
@@ -144,6 +151,7 @@ export async function syncFeeLedger(fee: {
         branchCode: fee.branchCode,
         sourceType: "fee",
         sourceId: `${id}:${p.receiptNo}`,
+        splits,
       });
     }
     return;
@@ -160,6 +168,7 @@ export async function syncFeeLedger(fee: {
     branchCode: fee.branchCode,
     sourceType: "fee",
     sourceId: String(fee._id),
+    splits,
   });
 }
 

@@ -51,6 +51,11 @@ export type LinkedPost = {
   recordedBy?: string;
   /** Overrides the default income/expense account chosen from sourceType. */
   accountKey?: string;
+  /**
+   * Income only: spread the credit over several accounts (e.g. one per fee head) instead of
+   * one. Amounts are weights — they are scaled to the posted amount after tax.
+   */
+  splits?: { accountCode: string; amount: number }[];
 };
 
 type SeedAccount = {
@@ -539,6 +544,30 @@ async function previewVoucherNumber(type: string, branchCode: string, date: Date
   return `${prefix}-${branch}-${year}-${String(next).padStart(5, "0")}`;
 }
 
+/**
+ * Credit lines for a split income posting: weights scaled to `base`, merged per account,
+ * the last line taking any rounding difference. Without splits, one line to `fallback`.
+ */
+function splitCredits(splits: LinkedPost["splits"], base: number, fallback: string) {
+  const parts = (splits || []).filter((x) => x.amount > 0);
+  const weight = parts.reduce((t, x) => t + x.amount, 0);
+  if (!parts.length || weight <= 0) return [{ accountCode: fallback, debit: 0, credit: base }];
+  const merged = new Map<string, number>();
+  for (const x of parts) merged.set(x.accountCode, (merged.get(x.accountCode) || 0) + x.amount);
+  const out: { accountCode: string; debit: number; credit: number }[] = [];
+  let given = 0;
+  const entries = [...merged.entries()];
+  entries.forEach(([accountCode, w], i) => {
+    const credit = i === entries.length - 1 ? round(base - given) : round((base * w) / weight);
+    given = round(given + credit);
+    if (credit > 0) out.push({ accountCode, debit: 0, credit });
+  });
+  return out.length ? out : [{ accountCode: fallback, debit: 0, credit: base }];
+}
+
+/** Fee heads that post to the standard tuition account rather than one of their own. */
+const TUITION_HEADS = new Set(["tuition fee", "tuition", "monthly fee", "student fees"]);
+
 async function systemAccount(key: string) {
   await ensureSeeded();
   const account = await Account.findOne({ systemKey: key, isActive: true }).lean();
@@ -860,6 +889,37 @@ export const accountingService = {
    * Make sure an account exists (by system key or name) and return it. Used for accounts that
    * older databases were seeded without, e.g. customer receivables or sales of goods.
    */
+  /**
+   * The income account a fee head posts to: its own level-5 account under the fee income
+   * group (made the first time the head is used), or the tuition account for tuition.
+   */
+  async feeHeadAccount(head: string) {
+    const fee = await systemAccount("feeIncome");
+    const name = String(head || "").trim();
+    if (!name || TUITION_HEADS.has(name.toLowerCase())) return fee.code;
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const found = await Account.findOne({ parentCode: fee.parentCode, name: { $regex: `^${escaped}$`, $options: "i" } }).lean();
+    if (found) return found.code;
+    const created = await Account.create({
+      code: await this.nextAccountCode(fee.parentCode),
+      name,
+      type: "income",
+      nature: "credit",
+      level: 5,
+      parentCode: fee.parentCode,
+      isControl: false,
+      isPosting: true,
+      isCashBank: false,
+      isActive: true,
+    });
+    return created.code;
+  },
+
+  /** Makes sure every fee head has its income account (called when fee heads are saved). */
+  async ensureFeeHeadAccounts(heads: string[]) {
+    for (const h of heads) await this.feeHeadAccount(h);
+  },
+
   async ensureAccount(spec: {
     systemKey?: string;
     code: string;
@@ -2176,11 +2236,12 @@ export const accountingService = {
         ? await systemAccount(post.type === "income" ? "taxPayable" : "taxInput")
         : null;
     const base = round(tax.amount - tax.taxAmount);
+    const credits = post.type === "income" ? splitCredits(post.splits, base, opposite.code) : [];
     const lines =
       post.type === "income"
         ? [
             { accountCode: cash.code, debit: tax.amount, credit: 0 },
-            { accountCode: opposite.code, debit: 0, credit: base },
+            ...credits,
             ...(taxAccount
               ? [{ accountCode: taxAccount.code, debit: 0, credit: tax.taxAmount }]
               : []),

@@ -3168,3 +3168,12 @@ table.qbp-je { width: 100%; border-collapse: collapse; margin-top: 22px; font-si
   .ch + .ch { border-left: 1px solid #222; border-top: 0; margin-top: 12px; }
   .ch { font-size: 12px; }
 }
+.ch { position: relative; }
+.ch-head small { display: block; font-size: 9px; color: #333; margin-top: 1px; }
+.ch-foot { margin-top: auto; display: flex; gap: 8px; align-items: flex-end; padding: 6px 7px 7px; border-top: 1px dashed #888; }
+.ch-qr { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 64px; flex: none; }
+.ch-qr img { width: 58px; height: 58px; }
+.ch-qr span { font-size: 7px; text-align: center; line-height: 1.15; color: #333; }
+.ch-signs { flex: 1; display: flex; gap: 10px; }
+.ch-signs span { flex: 1; border-top: 1px solid #222; padding-top: 3px; margin-top: 34px; font-size: 8.5px; text-align: center; }
+.ch-paid { position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%) rotate(-18deg); border: 3px solid rgba(21, 122, 92, .55); color: rgba(21, 122, 92, .55); font-size: 34px; font-weight: 800; letter-spacing: .12em; padding: 2px 14px; border-radius: 8px; pointer-events: none; }

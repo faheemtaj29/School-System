@@ -125,6 +125,8 @@ export const settingsService = {
       new: true,
       setDefaultsOnInsert: true,
     }).lean();
+    const { accountingService } = await import("@/backend/services/accounting.service");
+    await accountingService.ensureFeeHeadAccounts(optionLists.feeHeads || []);
     return { ...doc, logoUrl: logoUrl(doc) };
   },
 
@@ -158,6 +160,11 @@ export const settingsService = {
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
+    // A new fee head gets its own income account in the chart of accounts straight away.
+    if (key === "feeHeads") {
+      const { accountingService } = await import("@/backend/services/accounting.service");
+      await accountingService.feeHeadAccount(clean);
+    }
     return clean;
   },
 };

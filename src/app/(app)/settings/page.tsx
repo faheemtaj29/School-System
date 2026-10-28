@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_CHALLAN_TERMS } from "@/lib/challanTerms";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Field, Hero, Panel, StatusBadge, inputClass } from "@/components/ui";
 import { DEFAULT_THEME, THEME_PRESETS, themeVars, type Theme } from "@/lib/theme";
@@ -1052,14 +1053,21 @@ export default function SettingsPage() {
                     placeholder={"Meezan Bank — A/C 0123-4567890\nHabib Bank — A/C 9876-5432100"}
                   />
                 </Field>
-                <Field label="Fee challan — important notes (one per line)">
+                <Field label="Fee challan — terms & conditions (one per line; the due date, late fee and validity lines are added automatically)">
                   <textarea
                     className={inputClass}
-                    rows={4}
-                    value={form.challanNotes ?? ""}
+                    rows={6}
+                    value={form.challanNotes || DEFAULT_CHALLAN_TERMS}
                     onChange={(e) => setForm({ ...form, challanNotes: e.target.value })}
-                    placeholder={"Please pay on or before the due date to avoid the late fee.\nPayment once made is not refundable.\nFor any query contact the school office."}
                   />
+                  <button
+                    type="button"
+                    className="link-btn"
+                    style={{ justifySelf: "start", marginTop: 6 }}
+                    onClick={() => setForm({ ...form, challanNotes: DEFAULT_CHALLAN_TERMS })}
+                  >
+                    Reset to standard terms
+                  </button>
                 </Field>
               </div>
               <Field label="WHT rate % (FBR-style)">
