@@ -352,6 +352,13 @@ export default function DashboardPage() {
                 Reports & Print
               </Link>
               <Link
+                href="/exams?tab=results"
+                className="btn-primary"
+                style={{ background: "rgba(255,255,255,.18)", color: "#fff", boxShadow: "none" }}
+              >
+                Result Cards
+              </Link>
+              <Link
                 href="/help"
                 className="btn-primary"
                 style={{ background: "rgba(255,255,255,.12)", color: "#fff", boxShadow: "none" }}

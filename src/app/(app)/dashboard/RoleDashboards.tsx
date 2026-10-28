@@ -438,6 +438,13 @@ export function StudentDashboard({ data }: { data: StudentData }) {
           </Panel>
 
           <Panel title="Exam Results" meta="LATEST 6">
+            <Link
+              href={`/portal?${data.studentId ? `child=${data.studentId}&` : ""}tab=results`}
+              className="btn-dark no-print"
+              style={{ display: "inline-block", marginBottom: 12 }}
+            >
+              View / print result cards
+            </Link>
             {!data.results.length ? (
               <EmptyState message="No results published yet." />
             ) : (

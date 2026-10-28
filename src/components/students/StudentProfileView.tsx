@@ -110,6 +110,12 @@ export function StudentProfileView({ id, portal = false }: { id: string; portal?
   const [data, setData] = useState<Profile | null>(null);
   const [err, setErr] = useState("");
   const [tab, setTab] = useState<Tab>("overview");
+  // Links such as /portal?tab=results or /students/<id>?tab=fees open that tab directly.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("tab");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads the URL once on arrival
+    if (wanted && ["overview", "record", "attendance", "fees", "results"].includes(wanted)) setTab(wanted as Tab);
+  }, []);
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [marking, setMarking] = useState("");
 
@@ -498,13 +504,15 @@ export function StudentProfileView({ id, portal = false }: { id: string; portal?
                   </tbody>
                 </table>
               </div>
-              <button
-                type="button"
-                className="link-btn no-print"
-                onClick={() => window.open(`/print/result-cards?termId=${c.termId}&classIds=${c.classId}&student=${s._id}`, "_blank")}
-              >
-                Print result card
-              </button>
+              <div className="no-print" style={{ marginTop: 12 }}>
+                <button
+                  type="button"
+                  className="btn-dark"
+                  onClick={() => window.open(`/print/result-cards?termId=${c.termId}&classIds=${c.classId}&student=${s._id}`, "_blank")}
+                >
+                  View / print result card
+                </button>
+              </div>
             </Panel>
           ))}
           {data.results.tests.length && !data.results.cards.length ? (
