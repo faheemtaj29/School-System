@@ -707,49 +707,12 @@ export function FeeForm({
         <div className="voucher-balance">Gross total · {cur} {gross.toLocaleString()}</div>
       </div>
 
-      <div className="form-grid" style={{ marginTop: 16 }}>
-        <Field label="Paid Amount">
-          <input
-            type="number"
-            className={inputClass}
-            value={form.paidAmount}
-            onChange={(e) => setForm({ ...form, paidAmount: Number(e.target.value) })}
-          />
-        </Field>
-        <Field label="Payment Date">
-          <input
-            type="date"
-            className={inputClass}
-            value={form.paymentDate}
-            onChange={(e) => setForm({ ...form, paymentDate: e.target.value })}
-          />
-        </Field>
-        <Field label="Status">
-          <select
-            className={inputClass}
-            value={form.status}
-            onChange={(e) => setForm({ ...form, status: e.target.value })}
-          >
-            <option value="pending">Pending</option>
-            <option value="partial">Partial</option>
-            <option value="paid">Paid</option>
-            <option value="overdue">Overdue</option>
-          </select>
-        </Field>
-        <Field label="Payment Method">
-          <select
-            className={inputClass}
-            value={form.method}
-            onChange={(e) => setForm({ ...form, method: e.target.value })}
-          >
-            <option value="">Select</option>
-            <option value="cash">Cash</option>
-            <option value="card">Card</option>
-            <option value="bank">Bank</option>
-            <option value="online">Online</option>
-          </select>
-        </Field>
-      </div>
+      {initial ? (
+        <div className="alert ok" style={{ marginTop: 16 }}>
+          Paid so far: {cur} {(initial.paidAmount || 0).toLocaleString()} · status {initial.status}. Record money received with
+          the <b>Collect</b> button on the fee list — it prints the receipt and posts to the cash book.
+        </div>
+      ) : null}
       <div style={{ marginTop: 16 }}>
         <Field label="Notes">
           <textarea

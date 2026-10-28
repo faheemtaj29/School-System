@@ -20,6 +20,19 @@ export const studentDocsController = {
     }
   },
 
+  /** GET ?kind=teacher|staff&ids=a,b — employee ID cards (all active when no ids). */
+  async staffIdCards(req: Request) {
+    const { error } = await requireAuth(["admin"]);
+    if (error) return error;
+    try {
+      const q = new URL(req.url).searchParams;
+      const kind = q.get("kind") === "staff" ? "staff" : "teacher";
+      return jsonOk(await studentDocsService.staffIdCards({ kind, ids: list(q.get("ids")) }));
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
   async certificate(req: Request, ctx: Ctx) {
     const { error } = await requireAuth(["admin", "staff"]);
     if (error) return error;

@@ -146,6 +146,11 @@ export default function StaffPage() {
           setEditing(null);
           setOpen(true);
         }}
+        extra={
+          <button type="button" className="btn-hero" onClick={() => window.open("/print/id-cards?kind=staff", "_blank")}>
+            Print ID cards
+          </button>
+        }
       />
 
       {staff.length > 0 ? (

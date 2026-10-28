@@ -299,9 +299,14 @@ export function FeeStructurePanel({ onGenerated }: { onGenerated: () => void }) 
 export type CollectTarget = {
   _id: string;
   studentName: string;
+  admissionNo?: string;
   title: string;
   amount: number;
   paidAmount: number;
+  dueDate?: string;
+  lines?: { head: string; amount: number }[];
+  discountAmount?: number;
+  lateFeeAmount?: number;
 };
 
 /** Counter collection: record money received and open the 2-copy receipt. */
@@ -356,9 +361,41 @@ export function CollectModal({
     <div className="modal-backdrop" onMouseDown={onClose}>
       <form className="modal pad" onMouseDown={(e) => e.stopPropagation()} onSubmit={submit}>
         <h2 style={{ fontSize: 18, marginBottom: 4 }}>Collect fee</h2>
-        <div style={{ ...hint, marginBottom: 14 }}>
-          {fee.studentName} · {fee.title}
+        <div style={{ ...hint, marginBottom: 10 }}>
+          {fee.studentName}
+          {fee.admissionNo ? ` · ${fee.admissionNo}` : ""} · {fee.title}
+          {fee.dueDate ? ` · due ${new Date(fee.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : ""}
         </div>
+        {fee.lines?.length ? (
+          <div className="collect-lines">
+            {fee.lines.map((l, i) => (
+              <div key={`${l.head}-${i}`}>
+                <span>{l.head}</span>
+                <span>{formatNumber(l.amount)}</span>
+              </div>
+            ))}
+            {fee.discountAmount ? (
+              <div>
+                <span>Concession</span>
+                <span>− {formatNumber(fee.discountAmount)}</span>
+              </div>
+            ) : null}
+            {fee.lateFeeAmount ? (
+              <div>
+                <span>Late fee</span>
+                <span>+ {formatNumber(fee.lateFeeAmount)}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        <button
+          type="button"
+          className="link-btn"
+          style={{ marginBottom: 12 }}
+          onClick={() => window.open(`/print/fee-challans?ids=${fee._id}`, "_blank", "noopener")}
+        >
+          View this challan
+        </button>
         <div className="ec-stats">
           <span>Voucher <b>{currency} {formatNumber(fee.amount)}</b></span>
           <span>Paid <b>{currency} {formatNumber(fee.paidAmount)}</b></span>

@@ -75,7 +75,6 @@ export default function FeesPage() {
   const [filterMonth, setFilterMonth] = useState("");
 
   // Voucher print
-  const [voucherId, setVoucherId] = useState("");
 
   // Late-fees msg
   const [sysMsg, setSysMsg] = useState("");
@@ -189,8 +188,10 @@ export default function FeesPage() {
       (!feeSearch || feeStudentName(f).includes(feeSearch.toLowerCase()))),
     [fees, filterClass, filterMonth, feeSearch]);
 
-  const voucher = fees.find((f) => f._id === voucherId) ?? null;
-  const voucherStudent = voucher && typeof voucher.studentId === "object" ? voucher.studentId : null;
+  /** The same printed challan (bank / school / parent copies) used for bulk printing and the student ledger. */
+  function openChallan(id: string) {
+    window.open(`/print/fee-challans?ids=${id}`, "_blank", "noopener");
+  }
 
   // ── Render helpers ──────────────────────────────────────────────────────
   function FeeRow({ fee, showPay }: { fee: FeeItem; showPay?: boolean }) {
@@ -223,7 +224,7 @@ export default function FeesPage() {
           </td>
           <td>
             <div className="row-actions">
-              <button type="button" className="link-btn" onClick={() => setVoucherId(fee._id)}>Voucher</button>
+              <button type="button" className="link-btn" onClick={() => openChallan(fee._id)}>Voucher</button>
               {canEdit ? (
                 <>
                   {showPay && fee.amount - fee.paidAmount > 0 ? (
@@ -234,9 +235,14 @@ export default function FeesPage() {
                         setCollecting({
                           _id: fee._id,
                           studentName: s ? fullName(s) : "Student",
+                          admissionNo: s?.admissionNo,
                           title: fee.title,
                           amount: fee.amount,
                           paidAmount: fee.paidAmount,
+                          dueDate: fee.dueDate,
+                          lines: fee.lines?.length ? fee.lines : [{ head: fee.title, amount: fee.amount }],
+                          discountAmount: fee.discountAmount,
+                          lateFeeAmount: fee.lateFeeAmount,
                         })
                       }
                     >
@@ -606,89 +612,6 @@ export default function FeesPage() {
             </div>
           )}
         </Panel>
-      ) : null}
-
-      {/* ── Voucher print modal ─────────────────────────────────────────── */}
-      {voucher ? (
-        <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setVoucherId(""); }}>
-          <div className="modal">
-            <div className="fee-voucher">
-              <div className="fv-head">
-                <div>
-                  <h2 style={{ fontSize: 17 }}>Fee Challan</h2>
-                  <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginTop: 3 }}>
-                    Due {prettyDate(voucher.dueDate)}
-                  </div>
-                </div>
-                <div className="fv-tag">{voucher.status}</div>
-              </div>
-              <div className="fee-row">
-                <span>Student</span>
-                <span style={{ fontWeight: 600 }}>
-                  {voucherStudent ? `${fullName(voucherStudent)} — ${voucherStudent.admissionNo}` : "Unknown"}
-                </span>
-              </div>
-              <div className="fee-row">
-                <span>Class</span>
-                <span>{voucherStudent ? labelOfClass(voucherStudent.classId as never) : "—"}</span>
-              </div>
-              {(voucher.lines?.length
-                ? voucher.lines
-                : [{ head: voucher.title, amount: voucher.amount }]
-              ).map((line, i) => (
-                <div className="fee-row" key={`${line.head}-${i}`}>
-                  <span>{line.head}</span>
-                  <span className="mono">{formatNumber(line.amount)}</span>
-                </div>
-              ))}
-              {voucher.discountAmount ? (
-                <div className="fee-row">
-                  <span>Concession {voucher.discountType ? `(${voucher.discountType})` : ""} {voucher.discountPercent ? `${voucher.discountPercent}%` : ""}</span>
-                  <span className="mono">- {formatNumber(voucher.discountAmount)}</span>
-                </div>
-              ) : null}
-              {voucher.lateFeeAmount ? (
-                <div className="fee-row" style={{ color: "#dc2626" }}>
-                  <span>Late Fee</span>
-                  <span className="mono">+ {formatNumber(voucher.lateFeeAmount)}</span>
-                </div>
-              ) : null}
-              <div className="fee-row"><span>Net Payable</span><span className="mono">{formatNumber(voucher.amount)}</span></div>
-              <div className="fee-row"><span>Paid</span><span className="mono">- {formatNumber(voucher.paidAmount)}</span></div>
-              <div className="fee-row total">
-                <span>BALANCE DUE</span>
-                <span>{cur} {formatNumber(voucher.amount - voucher.paidAmount)}</span>
-              </div>
-              {voucher.paymentDate ? (
-                <div className="fee-row" style={{ fontSize: 12, color: "var(--text-dim)" }}>
-                  <span>Paid on</span>
-                  <span>{prettyDate(voucher.paymentDate)} via {voucher.method || "—"}</span>
-                </div>
-              ) : null}
-              <div className="form-actions" style={{ flexWrap: "wrap", gap: 8 }}>
-                <button type="button" className="btn-dark" onClick={() => {
-                  document.body.classList.add("printing-modal");
-                  window.print();
-                  setTimeout(() => document.body.classList.remove("printing-modal"), 500);
-                }}>Print Challan</button>
-                {voucherStudent?.parentPhone ? (
-                  <a
-                    href={`https://api.whatsapp.com/send?phone=${voucherStudent.parentPhone.replace(/\D/g, "")}&text=${encodeURIComponent(
-                      `*Fee Challan*\nStudent: ${fullName(voucherStudent)}\nAdmission No: ${voucherStudent.admissionNo}\nTitle: ${voucher.title}\nDue Date: ${prettyDate(voucher.dueDate)}\nBalance Due: ${cur} ${formatNumber(voucher.amount - voucher.paidAmount)}\nStatus: ${voucher.status}`
-                    )}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn-ghost"
-                    style={{ textDecoration: "none" }}
-                  >
-                    Share on WhatsApp
-                  </a>
-                ) : null}
-                <button type="button" className="btn-ghost" onClick={() => setVoucherId("")}>Close</button>
-              </div>
-            </div>
-          </div>
-        </div>
       ) : null}
 
       {/* Single voucher form */}

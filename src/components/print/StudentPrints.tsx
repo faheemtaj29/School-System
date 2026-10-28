@@ -20,6 +20,22 @@ type Card = {
 
 type CardData = { principalName: string; session: string; validTill: string | null; cards: Card[] };
 
+type StaffCard = {
+  _id: string;
+  name: string;
+  employeeId: string;
+  designation: string;
+  department: string;
+  cnic: string;
+  bloodGroup: string;
+  phone: string;
+  joinDate: string | null;
+  photoUrl: string | null;
+  head: Head;
+};
+
+type StaffCardData = { principalName: string; kind: "teacher" | "staff"; cards: StaffCard[] };
+
 function Photo({ url, name }: { url: string | null; name: string }) {
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
   return (
@@ -34,48 +50,57 @@ function Photo({ url, name }: { url: string | null; name: string }) {
   );
 }
 
-function IdCard({ c, data }: { c: Card; data: CardData }) {
-  const qr = useQr(
-    [c.name, `Adm No: ${c.admissionNo}`, `Class: ${c.classLabel}`, c.fatherName && `Father: ${c.fatherName}`, c.phone && `Emergency: ${c.phone}`, c.head.name]
-      .filter(Boolean)
-      .join("\n")
-  );
+type CardRow = { label: string; value: string; className?: string };
+
+/**
+ * One credit-card-size ID card. Every value sits on its own line and is cut short with "…"
+ * rather than running into the photo, the QR code or the footer.
+ */
+function IdCardView({
+  head,
+  band,
+  name,
+  photoUrl,
+  rows,
+  qrText,
+  validity,
+}: {
+  head: Head;
+  band: string;
+  name: string;
+  photoUrl: string | null;
+  rows: CardRow[];
+  qrText: string;
+  validity: string;
+}) {
+  const qr = useQr(qrText);
+  const returnTo = [head.address, head.phone].filter(Boolean).join(" · ") || head.name;
   return (
     <article className="idc">
       <header className="idc-top">
-        {c.head.logoUrl ? (
+        {head.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={c.head.logoUrl} alt="" />
+          <img src={head.logoUrl} alt="" />
         ) : null}
         <div>
-          <b>{c.head.name}</b>
-          <span>{c.head.campus || c.head.address}</span>
+          <b>{head.name}</b>
+          <span>{head.campus || head.address}</span>
         </div>
       </header>
-      <div className="idc-band">STUDENT IDENTITY CARD{data.session ? ` · ${data.session}` : ""}</div>
+      <div className="idc-band">{band}</div>
       <div className="idc-body">
-        <Photo url={c.photoUrl} name={c.name} />
-        <dl>
-          <dt>Name</dt>
-          <dd className="idc-name">{c.name}</dd>
-          <dt>Father</dt>
-          <dd>{c.fatherName || "—"}</dd>
-          <dt>Class</dt>
-          <dd>
-            {c.classLabel}
-            {c.rollNumber ? <span> · Roll {c.rollNumber}</span> : null}
-          </dd>
-          <dt>Adm No</dt>
-          <dd className="idc-adm">{c.admissionNo}</dd>
-          {c.dateOfBirth ? (
-            <>
-              <dt>DOB</dt>
-              <dd>{fmtDate(c.dateOfBirth)}</dd>
-            </>
-          ) : null}
-          <dt>Emergency</dt>
-          <dd>{c.phone || "—"}</dd>
-        </dl>
+        <Photo url={photoUrl} name={name} />
+        <div className="idc-info">
+          <div className="idc-name" title={name}>{name}</div>
+          <dl>
+            {rows.map((r) => (
+              <div key={r.label} className="idc-row">
+                <dt>{r.label}</dt>
+                <dd className={r.className} title={r.value}>{r.value || "—"}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
         <div className="idc-qr">
           {qr ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -88,10 +113,32 @@ function IdCard({ c, data }: { c: Card; data: CardData }) {
         </div>
       </div>
       <footer className="idc-foot">
-        <span>{data.validTill ? `Valid till ${fmtDate(data.validTill)}` : "Valid for the current session"}</span>
-        <span>If found, return to: {[c.head.address, c.head.phone].filter(Boolean).join(" · ") || c.head.name}</span>
+        <span>{validity}</span>
+        <span title={returnTo}>If found, return to: {returnTo}</span>
       </footer>
     </article>
+  );
+}
+
+function IdCard({ c, data }: { c: Card; data: CardData }) {
+  return (
+    <IdCardView
+      head={c.head}
+      band={`STUDENT IDENTITY CARD${data.session ? ` · ${data.session}` : ""}`}
+      name={c.name}
+      photoUrl={c.photoUrl}
+      rows={[
+        { label: "Father", value: c.fatherName },
+        { label: "Class", value: `${c.classLabel}${c.rollNumber ? ` · Roll ${c.rollNumber}` : ""}` },
+        { label: "Adm No", value: c.admissionNo, className: "idc-code" },
+        ...(c.dateOfBirth ? [{ label: "DOB", value: fmtDate(c.dateOfBirth) }] : []),
+        { label: "Phone", value: c.phone },
+      ]}
+      qrText={[c.name, `Adm No: ${c.admissionNo}`, `Class: ${c.classLabel}`, c.fatherName && `Father: ${c.fatherName}`, c.phone && `Emergency: ${c.phone}`, c.head.name]
+        .filter(Boolean)
+        .join("\n")}
+      validity={data.validTill ? `Valid till ${fmtDate(data.validTill)}` : "Valid for the current session"}
+    />
   );
 }
 
@@ -111,6 +158,47 @@ export function IdCardsPrint({ classIds, ids }: { classIds: string; ids: string 
         ? chunk(data.cards, 10).map((page, i) => (
             <section key={i} className="doc-page idc-page">
               {page.map((c) => <IdCard key={c._id} c={c} data={data} />)}
+            </section>
+          ))
+        : null}
+    </PrintShell>
+  );
+}
+
+/** Teacher or campus-staff ID cards, same size and layout as the student cards. */
+export function StaffIdCardsPrint({ kind, ids }: { kind: "teacher" | "staff"; ids: string }) {
+  const qs = new URLSearchParams({ kind, ...(ids ? { ids } : {}) }).toString();
+  const { data, error } = usePrintData<StaffCardData>(`/api/staff/id-cards?${qs}`);
+  const who = kind === "teacher" ? "teachers" : "staff";
+  const empty = data && !data.cards.length ? `No active ${who} to print` : "";
+  return (
+    <PrintShell
+      title={kind === "teacher" ? "Teacher ID Cards" : "Staff ID Cards"}
+      info={data ? `${data.cards.length} cards · ${Math.ceil(data.cards.length / 10)} page(s) · cut along the lines` : undefined}
+      error={error || empty}
+      loading={!data}
+    >
+      {data
+        ? chunk(data.cards, 10).map((page, i) => (
+            <section key={i} className="doc-page idc-page">
+              {page.map((c) => (
+                <IdCardView
+                  key={c._id}
+                  head={c.head}
+                  band={kind === "teacher" ? "TEACHER IDENTITY CARD" : "STAFF IDENTITY CARD"}
+                  name={c.name}
+                  photoUrl={c.photoUrl}
+                  rows={[
+                    { label: "Post", value: `${c.designation}${c.department ? ` · ${c.department}` : ""}` },
+                    { label: "Emp ID", value: c.employeeId, className: "idc-code" },
+                    ...(c.cnic ? [{ label: "CNIC", value: c.cnic, className: "idc-code" }] : []),
+                    ...(c.bloodGroup ? [{ label: "Blood", value: c.bloodGroup }] : []),
+                    { label: "Phone", value: c.phone },
+                  ]}
+                  qrText={[c.name, `Employee ID: ${c.employeeId}`, c.designation, c.phone && `Phone: ${c.phone}`, c.head.name].filter(Boolean).join("\n")}
+                  validity={c.joinDate ? `Joined ${fmtDate(c.joinDate)}` : "Employee card"}
+                />
+              ))}
             </section>
           ))
         : null}

@@ -7,6 +7,8 @@ import { ClassModel } from "@/backend/models/Class";
 import { Fee } from "@/backend/models/Fee";
 import { Settings } from "@/backend/models/Settings";
 import { Student } from "@/backend/models/Student";
+import { Staff } from "@/backend/models/Staff";
+import { Teacher } from "@/backend/models/Teacher";
 import { letterheads } from "@/backend/lib/letterhead";
 import { photoUrl } from "@/backend/lib/images";
 import { sessionService } from "@/backend/services/session.service";
@@ -85,6 +87,52 @@ export const studentDocsService = {
         address: s.address || "",
         photoUrl: photoUrl("student", s._id, s.photoUpdatedAt),
         head: head(s.branchCode || (s.classId as unknown as { branchCode?: string })?.branchCode),
+      })),
+    };
+  },
+
+  /** Employee ID cards for teachers or campus staff: chosen ids, or every active one. */
+  async staffIdCards(opts: { kind: "teacher" | "staff"; ids?: string[] }) {
+    await dbConnect();
+    const filter: Record<string, unknown> = { status: "active" };
+    if (opts.ids?.length) filter._id = { $in: opts.ids };
+    const fields = "firstName lastName employeeId designation department phone cnic bloodGroup emergencyPhone joinDate branchCode photoUpdatedAt";
+    const [people, head, settings] = await Promise.all([
+      opts.kind === "teacher"
+        ? Teacher.find(filter).select(fields).sort({ firstName: 1 }).lean()
+        : Staff.find(filter).select(fields).sort({ firstName: 1 }).lean(),
+      letterheads(),
+      Settings.findOne().select("principalName").lean(),
+    ]);
+    return {
+      principalName: settings?.principalName || "",
+      kind: opts.kind,
+      cards: (people as unknown as {
+        _id: unknown;
+        firstName: string;
+        lastName?: string;
+        employeeId: string;
+        designation?: string;
+        department?: string;
+        phone?: string;
+        cnic?: string;
+        bloodGroup?: string;
+        emergencyPhone?: string;
+        joinDate?: Date;
+        branchCode?: string;
+        photoUpdatedAt?: Date;
+      }[]).map((p) => ({
+        _id: String(p._id),
+        name: `${p.firstName} ${p.lastName || ""}`.trim(),
+        employeeId: p.employeeId,
+        designation: p.designation || (opts.kind === "teacher" ? "Teacher" : "Staff"),
+        department: p.department || "",
+        cnic: p.cnic || "",
+        bloodGroup: p.bloodGroup || "",
+        phone: p.emergencyPhone || p.phone || "",
+        joinDate: iso(p.joinDate),
+        photoUrl: photoUrl(opts.kind, p._id, p.photoUpdatedAt),
+        head: head(p.branchCode),
       })),
     };
   },

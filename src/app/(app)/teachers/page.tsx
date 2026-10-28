@@ -62,6 +62,11 @@ export default function TeachersPage() {
           setEditing(null);
           setOpen(true);
         }}
+        extra={
+          <button type="button" className="btn-hero" onClick={() => window.open("/print/id-cards?kind=teacher", "_blank")}>
+            Print ID cards
+          </button>
+        }
       />
 
       <div className="toolbar">
