@@ -3280,3 +3280,11 @@ table.rc2-table { width: 100%; border-collapse: collapse; font-variant-numeric: 
 .ds2-notes { border: 1px dashed #9db8aa; border-radius: 8px; padding: 8px 12px; font-size: 11px; }
 .ds2-notes b { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #157a5c; }
 .ds2-notes ul { margin: 4px 0 0; padding-left: 16px; }
+
+/* Fee defaulters */
+.def-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.def-bulk > span { font-size: 12px; color: var(--text-dim); margin-right: auto; }
+.def-bulk a.disabled { opacity: .45; pointer-events: none; }
+.def-months { display: flex; flex-wrap: wrap; gap: 4px; }
+.def-months span { font-size: 10.5px; padding: 1px 7px; border-radius: 99px; background: var(--red-light); color: var(--red); white-space: nowrap; }
+tr.def-hot td { background: #fff6f5; }

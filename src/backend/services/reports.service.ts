@@ -39,16 +39,10 @@ export const reportsService = {
     ]);
   },
 
+  /** One row per student with unpaid fee (shared with the Fees page's Defaulters list). */
   async feeDefaulters() {
-    await dbConnect();
-    return Fee.find({ status: { $in: ["pending", "partial", "overdue"] } })
-      .populate({
-        path: "studentId",
-        select: "firstName lastName admissionNo classId phone parentPhone",
-        populate: { path: "classId", select: "name section" },
-      })
-      .sort({ dueDate: 1 })
-      .lean();
+    const { feeBillingService } = await import("@/backend/services/feeBilling.service");
+    return feeBillingService.defaulters();
   },
 
   async attendanceSummary() {

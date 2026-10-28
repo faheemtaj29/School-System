@@ -16,6 +16,7 @@ const prepareSchema = z.object({
   termId: z.string().optional(),
   text: z.string().max(1000).optional(),
   batch: z.string().regex(/^[A-Z0-9]{4,30}$/).optional(),
+  onlyStudents: z.array(id).max(3000).optional(),
 });
 const actionSchema = prepareSchema.extend({
   action: z.enum(["prepare", "send"]),

@@ -12,6 +12,7 @@ import {
   inputClass,
 } from "@/components/ui";
 import { FeeForm } from "@/components/forms/SchoolForms";
+import { Defaulters } from "@/components/fees/Defaulters";
 import { FeeCollections } from "@/components/fees/FeeCollections";
 import { BatchActions } from "@/components/fees/BatchActions";
 import { AdvanceFeeModal, CollectModal, FeeStructurePanel, monthName, type CollectTarget } from "@/components/fees/FeeTools";
@@ -27,7 +28,7 @@ import {
   photoSrc,
 } from "@/lib/types";
 
-type MainTab = "generate" | "structure" | "received" | "pending" | "all" | "collections";
+type MainTab = "generate" | "structure" | "received" | "pending" | "all" | "collections" | "defaulters";
 
 export default function FeesPage() {
   const [fees, setFees] = useState<FeeItem[]>([]);
@@ -358,7 +359,7 @@ export default function FeesPage() {
           { key: "pending",  label: `Pending (${stats.pending})` },
           { key: "received", label: `Received (${stats.paid})` },
           { key: "all",      label: "All Vouchers" },
-          ...(canEdit ? [{ key: "collections", label: "Collections Report" }] : []),
+          ...(canEdit ? [{ key: "defaulters", label: "Defaulters" }, { key: "collections", label: "Collections Report" }] : []),
         ].map(({ key, label }) => (
           <button key={key} type="button"
             className={`filter-chip${tab === key ? " active" : ""}`}
@@ -493,6 +494,8 @@ export default function FeesPage() {
       {tab === "structure" && canEdit ? <FeeStructurePanel onGenerated={load} /> : null}
 
       {tab === "collections" && canEdit ? <FeeCollections classes={classes} /> : null}
+
+      {tab === "defaulters" && canEdit ? <Defaulters /> : null}
 
       {advanceOpen ? (
         <AdvanceFeeModal

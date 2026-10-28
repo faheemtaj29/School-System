@@ -66,6 +66,7 @@ export default function MessagesPage() {
   const [termId, setTermId] = useState("");
   const [text, setText] = useState("");
   const [batch, setBatch] = useState("");
+  const [onlyStudents, setOnlyStudents] = useState<string[]>([]);
   // list
   const [rows, setRows] = useState<Row[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -93,14 +94,20 @@ export default function MessagesPage() {
     if (q.get("termId")) setTermId(q.get("termId")!);
     // Opened right after generating challans: /messages?kind=fee&batch=…
     if (q.get("batch")) setBatch(q.get("batch")!);
+    // Opened from the defaulters list: /messages?kind=fee&students=id,id…
+    if (q.get("students")) setOnlyStudents(q.get("students")!.split(",").filter(Boolean));
     // Opened from a notice: /messages?kind=custom&text=…
     if (q.get("text")) setText(q.get("text")!);
   }, []);
 
   const kind: Kind | null = ["absence", "fee", "result", "datesheet", "custom"].includes(tab) ? (tab as Kind) : null;
   const filters = useMemo(
-    () => ({ kind, date, classIds, feeScope, dueWithinDays: days, termId, text, batch: kind === "fee" && batch ? batch : undefined }),
-    [kind, date, classIds, feeScope, days, termId, text, batch]
+    () => ({
+      kind, date, classIds, feeScope, dueWithinDays: days, termId, text,
+      batch: kind === "fee" && batch ? batch : undefined,
+      onlyStudents: kind === "fee" && onlyStudents.length ? onlyStudents : undefined,
+    }),
+    [kind, date, classIds, feeScope, days, termId, text, batch, onlyStudents]
   );
 
   const loadLog = useCallback(() => {
@@ -211,6 +218,12 @@ export default function MessagesPage() {
                 <span>Date</span>
                 <input type="date" className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
               </label>
+            ) : null}
+            {kind === "fee" && onlyStudents.length ? (
+              <div className="alert ok" style={{ flexBasis: "100%", margin: 0 }}>
+                Only the {onlyStudents.length} student(s) picked on the defaulters list.{" "}
+                <button type="button" className="link-btn" onClick={() => setOnlyStudents([])}>Show everyone instead</button>
+              </div>
             ) : null}
             {kind === "fee" && batch ? (
               <div className="alert ok" style={{ flexBasis: "100%", margin: 0 }}>

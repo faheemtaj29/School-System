@@ -385,6 +385,75 @@ export const feeBillingService = {
   },
 
   /**
+   * Fee defaulters: one row per student with unpaid challans — how many months, which ones,
+   * the total due, the oldest due date and how late it is, the parent's phone and the latest
+   * challan (whose arrears line carries the older dues).
+   */
+  async defaulters(filters: { classId?: string; minMonths?: number; overdueOnly?: boolean; branch?: string } = {}) {
+    await dbConnect();
+    const now = new Date();
+    const query: Record<string, unknown> = { status: { $in: ["pending", "partial", "overdue"] } };
+    if (filters.overdueOnly) query.dueDate = { $lt: now };
+    if (filters.branch) query.branchCode = filters.branch.toUpperCase();
+    if (filters.classId && Types.ObjectId.isValid(filters.classId)) {
+      const ids = await Student.find({ classId: filters.classId }).select("_id").lean();
+      query.studentId = { $in: ids.map((x) => x._id) };
+    }
+    const fees = await Fee.find(query)
+      .select("studentId title billingMonth dueDate amount paidAmount")
+      .sort({ dueDate: 1 })
+      .lean();
+    const by = new Map<string, { due: number; months: { label: string; feeId: string; due: number }[]; oldest: Date; latestFee: string }>();
+    for (const f of fees) {
+      const bal = round(f.amount - (f.paidAmount || 0));
+      if (bal <= 0) continue;
+      const key = String(f.studentId);
+      const cur = by.get(key) || { due: 0, months: [] as { label: string; feeId: string; due: number }[], oldest: f.dueDate, latestFee: String(f._id) };
+      cur.due = round(cur.due + bal);
+      cur.months.push({ label: f.billingMonth ? monthLabel(f.billingMonth) : f.title, feeId: String(f._id), due: bal });
+      if (f.dueDate < cur.oldest) cur.oldest = f.dueDate;
+      cur.latestFee = String(f._id);
+      by.set(key, cur);
+    }
+    const students = await Student.find({ _id: { $in: [...by.keys()] }, status: "active" })
+      .select("firstName lastName admissionNo rollNumber parentName parentPhone phone classId photoUpdatedAt")
+      .populate("classId", "name section")
+      .lean();
+    const min = Math.max(1, filters.minMonths || 1);
+    const rows = students
+      .map((st) => {
+        const d = by.get(String(st._id))!;
+        const late = Math.floor((now.getTime() - new Date(d.oldest).getTime()) / 86400000);
+        return {
+          studentId: String(st._id),
+          name: `${st.firstName} ${st.lastName}`,
+          admissionNo: st.admissionNo,
+          rollNo: st.rollNumber || "",
+          classLabel: classLabel(st.classId as never),
+          parentName: st.parentName || "",
+          phone: st.parentPhone || st.phone || "",
+          photoUpdatedAt: st.photoUpdatedAt || null,
+          months: d.months,
+          monthCount: d.months.length,
+          due: d.due,
+          oldestDue: d.oldest,
+          daysLate: Math.max(0, late),
+          latestFeeId: d.latestFee,
+        };
+      })
+      .filter((r) => r.monthCount >= min)
+      .sort((a, b) => b.monthCount - a.monthCount || b.due - a.due);
+    return {
+      currency: (await Settings.findOne().select("currency").lean())?.currency || "PKR",
+      rows,
+      total: round(rows.reduce((t, r) => t + r.due, 0)),
+      count: rows.length,
+      threePlus: rows.filter((r) => r.monthCount >= 3).length,
+      noPhone: rows.filter((r) => !r.phone).length,
+    };
+  },
+
+  /**
    * Fee collection report (daily cash closing): every payment received between two dates,
    * with totals by method, by day, by fee head and by class.
    */

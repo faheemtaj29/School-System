@@ -43,6 +43,8 @@ export type PrepareInput = {
   text?: string;
   /** Fee messages for exactly the challans raised in one go. */
   batch?: string;
+  /** Fee messages only for these students (e.g. picked on the defaulters list). */
+  onlyStudents?: string[];
   /** Public address of this app (for challan links), e.g. https://school.example.com */
   baseUrl?: string;
 };
@@ -199,8 +201,9 @@ export const messagingService = {
         if ((f.amount || 0) - (f.paidAmount || 0) <= 0) continue;
         latest.set(String(f.studentId), f);
       }
+      const wanted = (input.onlyStudents || []).filter((x) => isValidObjectId(x));
       const students = await Student.find({
-        _id: { $in: [...latest.keys()] },
+        _id: { $in: wanted.length ? [...latest.keys()].filter((k) => wanted.includes(k)) : [...latest.keys()] },
         status: "active",
         ...(classIds.length ? { classId: { $in: classIds } } : {}),
       })

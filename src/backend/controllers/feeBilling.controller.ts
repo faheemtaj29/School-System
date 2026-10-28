@@ -90,6 +90,23 @@ export const feeBillingController = {
     }
   },
 
+  /** GET /api/fees/defaulters?classId=&minMonths=&overdue=1&branch= */
+  async defaulters(req: Request) {
+    const { error } = await requireAuth(["admin", "staff"]);
+    if (error) return error;
+    try {
+      const q = new URL(req.url).searchParams;
+      return jsonOk(await feeBillingService.defaulters({
+        classId: q.get("classId") || undefined,
+        minMonths: Number(q.get("minMonths")) || 1,
+        overdueOnly: q.get("overdue") === "1",
+        branch: q.get("branch") || undefined,
+      }));
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
   /** GET /api/fees/collections?from=YYYY-MM-DD&to=…&method=&classId=&branch= */
   async collections(req: Request) {
     const { error } = await requireAuth(["admin", "staff"]);

@@ -1,5 +1,6 @@
 "use client";
 
+import { Defaulters } from "@/components/fees/Defaulters";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState, Hero, Panel, StatusBadge, NameCell, inputClass } from "@/components/ui";
 import { PrintIcon } from "@/components/Icons";
@@ -340,10 +341,11 @@ export default function ReportsPage() {
               <FinanceBlock data={data!.data as Record<string, unknown>} />
             ) : null}
           </div>
+        ) : type === "fees" ? (
+          // Loads its own data (one row per student, with WhatsApp reminders).
+          <Defaulters bare />
         ) : !rows.length ? (
           <EmptyState message="No rows for this report yet." />
-        ) : type === "fees" ? (
-          <FeeRows rows={rows} />
         ) : type === "attendance" ? (
           <AttRows rows={rows} />
         ) : type === "staff" ? (
@@ -547,44 +549,6 @@ function GenericRows({ rows }: { rows: Record<string, unknown>[] }) {
             <td className="num">{String(r.active ?? "—")}</td>
           </tr>
         ))}
-      </tbody>
-    </table>
-  );
-}
-
-function FeeRows({ rows }: { rows: Record<string, unknown>[] }) {
-  return (
-    <table className="reg">
-      <thead>
-        <tr>
-          <th>Student</th>
-          <th>Title</th>
-          <th>Due</th>
-          <th className="right">Balance</th>
-          <th className="right">Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => {
-          const s = r.studentId as { firstName?: string; lastName?: string; classId?: unknown } | string;
-          const student = typeof s === "object" && s ? s : null;
-          const amount = Number(r.amount || 0);
-          const paid = Number(r.paidAmount || 0);
-          return (
-            <tr key={String(r._id)}>
-              <td>
-                <NameCell
-                  name={student ? `${student.firstName} ${student.lastName}` : "—"}
-                  sub={student ? labelOfClass(student.classId as never) : undefined}
-                />
-              </td>
-              <td>{String(r.title)}</td>
-              <td>{prettyDate(r.dueDate as string)}</td>
-              <td className="num">{formatNumber(amount - paid)}</td>
-              <td className="right"><StatusBadge status={String(r.status)} /></td>
-            </tr>
-          );
-        })}
       </tbody>
     </table>
   );
