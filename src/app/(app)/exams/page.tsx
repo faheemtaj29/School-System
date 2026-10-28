@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState, Hero, NameCell, Panel, StatusBadge, inputClass } from "@/components/ui";
 import { ExamForm } from "@/components/forms/SchoolForms";
 import { ExamCenter, type ExamStep } from "@/components/exams/ExamCenter";
@@ -629,14 +629,14 @@ export default function ExamsPage() {
                       </tr>
                       <tr>
                         {sheetSubjects.map((sub) => (
-                          <>
+                          <Fragment key={sub.subjectId}>
                             {COMP_KEYS.map((k) => (
                               <th key={`${sub.subjectId}-${k}`} style={{ textAlign: "right", fontWeight: 500, color: "var(--text-dim)", borderLeft: k === "theory" ? "2px solid var(--border)" : undefined }}>
                                 {COMP_LABEL[k]}<br /><span style={{ fontSize: 9 }}>/{sub.markComponents[k]}</span>
                               </th>
                             ))}
                             <th style={{ textAlign: "right", fontWeight: 700 }}>Tot</th>
-                          </>
+                          </Fragment>
                         ))}
                       </tr>
                     </thead>
@@ -656,7 +656,7 @@ export default function ExamsPage() {
                               const comp = row.marks[sub.subjectId] || { theory: 0, viva: 0, assignment: 0, attendance: 0, project: 0 };
                               const subTotal = sumComp(comp);
                               return (
-                                <>
+                                <Fragment key={sub.subjectId}>
                                   {COMP_KEYS.map((k) => (
                                     <td key={`${row.studentId}-${sub.subjectId}-${k}`} style={{ borderLeft: k === "theory" ? "2px solid var(--border)" : undefined, padding: "2px 3px" }}>
                                       <input
@@ -670,7 +670,7 @@ export default function ExamsPage() {
                                     </td>
                                   ))}
                                   <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{subTotal}</td>
-                                </>
+                                </Fragment>
                               );
                             })}
                             <td style={{ textAlign: "right", fontWeight: 700, borderLeft: "2px solid var(--border)" }}>{grandTotal}/{grandMax}</td>
