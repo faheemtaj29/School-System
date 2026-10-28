@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { photoApi } from "@/lib/types";
 
 /** Shrinks a picked image to at most `max` px on its longest side, as a JPEG data URL. */
 async function shrink(file: File, max = 600): Promise<string> {
@@ -38,7 +39,7 @@ export function PersonPhoto({
   onChanged,
   onPicked,
 }: {
-  kind: "student" | "teacher";
+  kind: "student" | "teacher" | "staff";
   id?: string;
   url?: string | null;
   name: string;
@@ -71,7 +72,7 @@ export function PersonPhoto({
         onPicked?.(dataUrl);
         return;
       }
-      const res = await fetch(`/api/${kind}s/${id}/photo`, {
+      const res = await fetch(photoApi(kind, id), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dataUrl }),
@@ -96,7 +97,7 @@ export function PersonPhoto({
     }
     if (!confirm("Remove this photo?")) return;
     setBusy(true);
-    await fetch(`/api/${kind}s/${id}/photo`, { method: "DELETE" });
+    await fetch(photoApi(kind, id), { method: "DELETE" });
     setBusy(false);
     setLocal(null);
     onChanged?.(null);
@@ -128,9 +129,9 @@ export function PersonPhoto({
 }
 
 /** Uploads a photo picked on a not-yet-saved record, once it has an id. */
-export async function savePickedPhoto(kind: "student" | "teacher", id: string | undefined, dataUrl: string | null) {
+export async function savePickedPhoto(kind: "student" | "teacher" | "staff", id: string | undefined, dataUrl: string | null) {
   if (!id || !dataUrl) return;
-  await fetch(`/api/${kind}s/${id}/photo`, {
+  await fetch(photoApi(kind, id), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ dataUrl }),

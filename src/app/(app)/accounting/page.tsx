@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import { useSearchParams } from "next/navigation";
 import {
+  Breadcrumb,
   EmptyState,
   Field,
   Hero,
@@ -1153,17 +1154,7 @@ export default function AccountingPage() {
         />
       ) : null}
 
-      <div className="chips" style={{ marginBottom: 10, alignItems: "center" }}>
-        <span className="filter-chip">Accounting</span>
-        <span style={{ color: "var(--text-dim)", fontSize: 13, userSelect: "none" }}>›</span>
-        <span className="filter-chip">{breadcrumb.section}</span>
-        {breadcrumb.section !== breadcrumb.leaf ? (
-          <>
-            <span style={{ color: "var(--text-dim)", fontSize: 13, userSelect: "none" }}>›</span>
-            <span className="filter-chip active">{breadcrumb.leaf}</span>
-          </>
-        ) : null}
-      </div>
+      <Breadcrumb items={["Accounting", breadcrumb.section, breadcrumb.leaf]} />
 
       {isDashboardNode ? (
       <div className="pay-stat-row">

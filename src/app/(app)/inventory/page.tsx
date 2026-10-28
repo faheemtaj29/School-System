@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import { useSearchParams } from "next/navigation";
 import {
+  Breadcrumb,
   EmptyState,
   Field,
   Hero,
@@ -666,11 +667,7 @@ export default function InventoryPage() {
         />
       ) : null}
 
-      <div className="chips" style={{ marginBottom: 10 }}>
-        <span className="filter-chip active">Inventory</span>
-        <span className="filter-chip">{breadcrumb.section}</span>
-        <span className="filter-chip">{breadcrumb.leaf}</span>
-      </div>
+      <Breadcrumb items={["Inventory", breadcrumb.section, breadcrumb.leaf]} />
 
       {!isFocusedInventoryNode ? (
       <div className="pay-stat-row">

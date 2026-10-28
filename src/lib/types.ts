@@ -128,8 +128,13 @@ export type StudentItem = {
 };
 
 /** Photo URL for a student/teacher record, or null when no photo has been uploaded. */
-export function photoSrc(kind: "student" | "teacher", rec: { _id: string; photoUpdatedAt?: string }) {
-  return rec.photoUpdatedAt ? `/api/${kind}s/${rec._id}/photo?v=${new Date(rec.photoUpdatedAt).getTime()}` : null;
+export function photoSrc(kind: "student" | "teacher" | "staff", rec: { _id: string; photoUpdatedAt?: string }) {
+  return rec.photoUpdatedAt ? `${photoApi(kind, rec._id)}?v=${new Date(rec.photoUpdatedAt).getTime()}` : null;
+}
+
+/** Photo endpoint for a person ("staff" is already plural). */
+export function photoApi(kind: "student" | "teacher" | "staff", id: string) {
+  return `/api/${kind === "staff" ? "staff" : `${kind}s`}/${id}/photo`;
 }
 
 /** Campus selected in the top bar (shared across admin pages). */

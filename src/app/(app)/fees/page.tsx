@@ -307,7 +307,6 @@ export default function FeesPage() {
       />
 
       {/* ── Stats bar ──────────────────────────────────────────────────── */}
-      <Panel>
         <div className="pay-stat-row">
           <div className="pay-stat">
             <div className="tag">Total Billed</div>
@@ -333,24 +332,10 @@ export default function FeesPage() {
           </div>
         </div>
 
-        {sysMsg ? <div className="alert" style={{ marginTop: 10 }}>{sysMsg}</div> : null}
-
-        {/* Action buttons */}
-        {canEdit ? (
-          <div className="form-actions no-print" style={{ marginTop: 12, marginBottom: 0 }}>
-            <button type="button" className="btn-ghost" onClick={async () => {
-              setSysMsg("");
-              const res = await fetch("/api/fees", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "late-fees" }) });
-              const d = await res.json();
-              setSysMsg(res.ok ? `Late fees applied on ${d.updated || 0} voucher(s) — ${d.percent}% after ${d.graceDays} grace days` : d.error || "Failed");
-              load();
-            }}>Apply Late Fees</button>
-          </div>
-        ) : null}
-      </Panel>
+      {sysMsg ? <div className="alert ok">{sysMsg}</div> : null}
 
       {/* ── Main tabs ──────────────────────────────────────────────────── */}
-      <div className="chips" style={{ padding: "0 24px", marginBottom: 0 }}>
+      <div className="chips fee-tabs">
         {[
           { key: "generate", label: "Generate Fees" },
           ...(canEdit ? [{ key: "structure", label: "Fee Structure & Monthly Billing" }] : []),
@@ -363,6 +348,23 @@ export default function FeesPage() {
             onClick={() => setTab(key as MainTab)}
           >{label}</button>
         ))}
+        {canEdit ? (
+          <button
+            type="button"
+            className="btn-ghost no-print"
+            style={{ marginLeft: "auto" }}
+            title="Adds the late fee from Settings to overdue vouchers past the grace days"
+            onClick={async () => {
+              setSysMsg("");
+              const res = await fetch("/api/fees", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "late-fees" }) });
+              const d = await res.json();
+              setSysMsg(res.ok ? `Late fees applied on ${d.updated || 0} voucher(s) — ${d.percent}% after ${d.graceDays} grace days` : d.error || "Failed");
+              load();
+            }}
+          >
+            Apply Late Fees
+          </button>
+        ) : null}
       </div>
 
       {/* ══ GENERATE TAB ══════════════════════════════════════════════════ */}

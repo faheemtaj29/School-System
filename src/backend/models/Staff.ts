@@ -10,6 +10,10 @@ export interface IStaff {
   lastName: string;
   email: string;
   phone?: string;
+  cnic?: string;
+  address?: string;
+  photoData?: string;
+  photoUpdatedAt?: Date;
   department: string;
   designation: string;
   joinDate?: Date;
@@ -27,6 +31,10 @@ const StaffSchema = new Schema<IStaff>(
     lastName: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     phone: String,
+    cnic: { type: String, trim: true },
+    address: { type: String, trim: true },
+    photoData: { type: String, select: false },
+    photoUpdatedAt: Date,
     department: { type: String, required: true, trim: true },
     designation: { type: String, required: true, trim: true },
     joinDate: Date,

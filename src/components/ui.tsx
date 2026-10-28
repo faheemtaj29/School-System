@@ -340,6 +340,20 @@ export function NameCell({ name, sub, photo, href }: { name: string; sub?: strin
   );
 }
 
+/** "Accounting › Reports › Trial Balance" trail; repeated neighbours are shown once. */
+export function Breadcrumb({ items }: { items: string[] }) {
+  const trail = items.filter((x, i) => x && x !== items[i - 1]);
+  return (
+    <nav className="crumbs" aria-label="Breadcrumb">
+      {trail.map((x, i) => (
+        <span key={i} className={i === trail.length - 1 ? "here" : ""}>
+          {x}
+        </span>
+      ))}
+    </nav>
+  );
+}
+
 /** Secondary row actions folded into one "More" menu so table rows stay on one line. */
 export function RowMenu({ children }: { children: ReactNode }) {
   // Fixed position so the menu is not clipped by scrolling table wrappers.

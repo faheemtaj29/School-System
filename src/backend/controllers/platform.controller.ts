@@ -44,7 +44,7 @@ export const platformController = {
   async list(req: Request) {
     const view = new URL(req.url).searchParams.get("view") || "overview";
     const roles =
-      view === "instances" || view === "fields"
+      view === "instances" || view === "fields" || view === "workflows"
         ? (["admin", "staff", "teacher"] as const)
         : (["admin"] as const);
     const { session, error } = await requireAuth([...roles]);

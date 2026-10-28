@@ -13,7 +13,9 @@ import {
   StatusBadge,
   inputClass,
 } from "@/components/ui";
-import { fullName } from "@/lib/types";
+import { PersonPhoto, savePickedPhoto } from "@/components/PersonPhoto";
+import { formatCnic } from "@/components/forms/PeopleForms";
+import { fullName, photoSrc } from "@/lib/types";
 
 type StaffItem = {
   _id: string;
@@ -22,6 +24,9 @@ type StaffItem = {
   lastName: string;
   email: string;
   phone?: string;
+  cnic?: string;
+  address?: string;
+  photoUpdatedAt?: string;
   department: string;
   designation: string;
   status: string;
@@ -36,6 +41,8 @@ const blank = {
   lastName: "",
   email: "",
   phone: "",
+  cnic: "",
+  address: "",
   department: "Administration",
   designation: "Clerk",
   status: "active",
@@ -49,6 +56,7 @@ export default function StaffPage() {
   const [form, setForm] = useState(blank);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [pickedPhoto, setPickedPhoto] = useState<string | null>(null);
 
   const filtered = useMemo(() =>
     !search ? staff : staff.filter((s) =>
@@ -76,6 +84,8 @@ export default function StaffPage() {
         lastName: editing.lastName,
         email: editing.email,
         phone: editing.phone || "",
+        cnic: editing.cnic || "",
+        address: editing.address || "",
         department: editing.department,
         designation: editing.designation,
         status: editing.status,
@@ -114,6 +124,8 @@ export default function StaffPage() {
       setError(data.error || "Save failed");
       return;
     }
+    if (!editing) await savePickedPhoto("staff", data.staff?._id, pickedPhoto);
+    setPickedPhoto(null);
     setOpen(false);
     load();
   }
@@ -169,7 +181,7 @@ export default function StaffPage() {
                 {filtered.length ? filtered.map((s) => (
                   <tr key={s._id}>
                     <td>
-                      <NameCell name={fullName(s)} sub={[s.phone, s.email].filter(Boolean).join(" · ")} />
+                      <NameCell name={fullName(s)} sub={[s.phone, s.email].filter(Boolean).join(" · ")} photo={photoSrc("staff", s)} />
                     </td>
                     <td className="num">{s.employeeId}</td>
                     <td>{s.department}</td>
@@ -220,6 +232,21 @@ export default function StaffPage() {
         submitLabel={editing ? "Save" : "Create"}
       >
         {error ? <div className="alert err">{error}</div> : null}
+        <div className="form-photo-row">
+          <PersonPhoto
+            kind="staff"
+            id={editing?._id}
+            url={photoSrc("staff", editing ?? { _id: "" })}
+            name={`${form.firstName} ${form.lastName}`}
+            size={84}
+            editable
+            onPicked={setPickedPhoto}
+          />
+          <div className="form-photo-note">
+            <b>Staff photo</b>
+            <span>Shown on the staff list, payslips and ID card. It is resized automatically.</span>
+          </div>
+        </div>
         <div className="form-grid">
           <Field label="Employee ID" required>
             <div style={{ display: "grid", gap: 6 }}>
@@ -292,6 +319,21 @@ export default function StaffPage() {
               className={inputClass}
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            />
+          </Field>
+          <Field label="CNIC / National ID">
+            <input
+              className={inputClass}
+              value={form.cnic}
+              onChange={(e) => setForm({ ...form, cnic: formatCnic(e.target.value) })}
+              placeholder="12345-1234567-1"
+            />
+          </Field>
+          <Field label="Address">
+            <input
+              className={inputClass}
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
             />
           </Field>
           <Field label="Department" required>

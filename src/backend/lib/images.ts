@@ -36,6 +36,10 @@ export function imageResponse(dataUrl: string | null | undefined, cache = "publi
 }
 
 /** Photo URL for a record that has one (cache-busted by its upload time). */
-export function photoUrl(kind: "student" | "teacher", id: unknown, updatedAt?: Date | string | null) {
-  return updatedAt ? `/api/${kind}s/${String(id)}/photo?v=${new Date(updatedAt).getTime()}` : null;
+export type PhotoKind = "student" | "teacher" | "staff";
+/** API folder for each kind of person ("staff" is already plural). */
+export const PHOTO_BASE: Record<PhotoKind, string> = { student: "students", teacher: "teachers", staff: "staff" };
+
+export function photoUrl(kind: PhotoKind, id: unknown, updatedAt?: Date | string | null) {
+  return updatedAt ? `/api/${PHOTO_BASE[kind]}/${String(id)}/photo?v=${new Date(updatedAt).getTime()}` : null;
 }

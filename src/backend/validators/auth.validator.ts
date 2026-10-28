@@ -47,6 +47,8 @@ export const staffSchema = z.object({
   lastName: z.string().min(1),
   email: z.string().email(),
   phone: z.string().optional(),
+  cnic: z.string().optional(),
+  address: z.string().optional(),
   department: z.string().min(1),
   designation: z.string().min(1),
   joinDate: z.string().optional(),

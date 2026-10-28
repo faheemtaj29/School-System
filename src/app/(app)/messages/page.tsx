@@ -86,6 +86,8 @@ export default function MessagesPage() {
     if (k && ["absence", "fee", "result", "custom"].includes(k)) setTab(k);
     if (q.get("date")) setDate(q.get("date")!);
     if (q.get("classIds")) setClassIds(q.get("classIds")!.split(",").filter(Boolean));
+    // Opened from a notice: /messages?kind=custom&text=…
+    if (q.get("text")) setText(q.get("text")!);
   }, []);
 
   const kind: Kind | null = ["absence", "fee", "result", "custom"].includes(tab) ? (tab as Kind) : null;

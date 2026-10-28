@@ -68,6 +68,17 @@ async function syncWorkflowSubjects(
   }
 }
 
+/**
+ * The step a request waits on. A step keyed "submit" only records who asked — it is never an
+ * approval, so the request waits on the step after it (otherwise the requester's own role,
+ * e.g. any teacher for leave, could approve it).
+ */
+function approvalStep<T extends { key: string; order: number }>(sorted: T[], currentStep: number) {
+  const at = sorted.find((s) => s.order === currentStep) || sorted[0];
+  if (at?.key === "submit") return sorted.find((s) => s.order > at.order) || at;
+  return at;
+}
+
 const DEFAULT_WORKFLOWS = [
   {
     code: "LEAVE",
@@ -304,7 +315,7 @@ export const platformService = {
       const assigned = await WorkflowDefinition.find({
         institutionCode: inst.code,
         active: true,
-        steps: { $elemMatch: { role: session.role } },
+        steps: { $elemMatch: { role: session.role, key: { $ne: "submit" } } },
       }).select("code").lean();
       const assignedCodes = assigned.map((workflow) => workflow.code);
       filter.$or = [
@@ -336,7 +347,9 @@ export const platformService = {
       active: true,
     }).lean();
     if (!def) throw new ServiceError("NOT_FOUND", "Workflow not found — seed platform defaults first", 404);
-    const first = [...def.steps].sort((a, b) => a.order - b.order)[0];
+    const sorted = [...def.steps].sort((a, b) => a.order - b.order);
+    const first = sorted[0];
+    const waitingOn = approvalStep(sorted, first?.order ?? 0);
     const instance = await WorkflowInstance.create({
       institutionCode: inst.code,
       workflowCode: def.code,
@@ -345,7 +358,7 @@ export const platformService = {
       subjectId: input.subjectId,
       title: input.title,
       status: "pending",
-      currentStep: first?.order ?? 0,
+      currentStep: waitingOn?.order ?? 0,
       history: [
         {
           stepKey: first?.key || "submit",
@@ -386,7 +399,8 @@ export const platformService = {
     if (!def) throw new ServiceError("NOT_FOUND", "Workflow definition missing", 404);
 
     const steps = [...def.steps].sort((a, b) => a.order - b.order);
-    const current = steps.find((s) => s.order === instance.currentStep) || steps[0];
+    // Older requests may still sit on their "submit" step; they wait on the next one.
+    const current = approvalStep(steps, instance.currentStep);
     if (!current) {
       throw new ServiceError("VALIDATION", "This workflow has no configured approval steps", 409);
     }
@@ -447,7 +461,7 @@ export const platformService = {
       return instance;
     }
 
-    const next = steps.find((s) => s.order > instance.currentStep);
+    const next = steps.find((s) => s.order > current.order);
     instance.history.push({
       stepKey: current.key,
       action: "approve",

@@ -583,10 +583,20 @@ export const hrController = {
 
 export const noticeController = {
   async list() {
-    const { error } = await requireAuth();
+    const { session, error } = await requireAuth();
     if (error) return error;
     try {
-      return jsonOk({ notices: await noticeService.list() });
+      return jsonOk({ notices: await noticeService.list(session!) });
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+  async get(_: Request, ctx: Ctx) {
+    const { session, error } = await requireAuth();
+    if (error) return error;
+    try {
+      const { id } = await ctx.params;
+      return jsonOk(await noticeService.printable(id, session!));
     } catch (e) {
       return fromServiceError(e);
     }

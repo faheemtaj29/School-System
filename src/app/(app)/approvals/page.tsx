@@ -1,7 +1,8 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useState } from "react";
-import { EmptyState, Field, Hero, Panel, StatusBadge, inputClass } from "@/components/ui";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { EmptyState, Hero, Panel, StatusBadge, inputClass } from "@/components/ui";
 import { prettyDate } from "@/lib/types";
 
 type Instance = {
@@ -15,68 +16,81 @@ type Instance = {
   subjectId: string;
   history?: { stepKey: string; action: string; byName?: string; note?: string; at: string }[];
   payload?: Record<string, unknown>;
+  createdAt?: string;
   updatedAt: string;
 };
 
-const WORKFLOW_LABELS: Record<string, string> = {
-  FEE_WAIVER: "Fee Waiver / Concession",
-  LEAVE: "Leave Request",
-  PURCHASE: "Purchase Order",
-  SCHOLARSHIP: "Scholarship Application",
-  ADMISSION: "Admission Review",
-};
+type Workflow = { code: string; name: string; steps: { key: string; label: string; role: string; order: number }[] };
 
-const STEP_LABELS: Record<string, Record<number, string>> = {
-  FEE_WAIVER: { 1: "Class Teacher Review", 2: "Principal Approval", 3: "Finance Approval" },
-  LEAVE: { 1: "Class Teacher Review", 2: "Admin Approval" },
-  PURCHASE: { 1: "Department Review", 2: "Finance Approval", 3: "Principal Approval" },
-  SCHOLARSHIP: { 1: "Academic Review", 2: "Principal Approval", 3: "Finance Approval" },
-  ADMISSION: { 1: "Coordinator Review", 2: "Principal Approval" },
-};
+/** Where the record behind each kind of request lives. */
+function recordLink(row: Instance) {
+  if (row.subjectType === "leave") return { href: "/hr", label: "Open HR & leave" };
+  if (row.subjectType === "student") return { href: `/students/${row.subjectId}`, label: "Open student profile" };
+  if (row.subjectType === "admission") return { href: "/website", label: "Open applications" };
+  return null;
+}
+
+/** The useful facts from a request's payload, as label/value pairs. */
+function details(row: Instance): [string, string][] {
+  const p = row.payload || {};
+  const out: [string, string][] = [];
+  if (row.workflowCode === "LEAVE") {
+    if (p.leaveType) out.push(["Type", String(p.leaveType)]);
+    if (p.fromDate) out.push(["From", prettyDate(String(p.fromDate))]);
+    if (p.toDate) out.push(["To", prettyDate(String(p.toDate))]);
+    if (p.days) out.push(["Days", String(p.days)]);
+  } else if (row.workflowCode === "FEE_WAIVER") {
+    if (p.percent != null) out.push(["Concession", `${p.percent}%`]);
+    if (p.discountType) out.push(["Reason", String(p.discountType).replace(/_/g, " ")]);
+  } else if (row.workflowCode === "ADMISSION") {
+    if (p.classApplied) out.push(["Class", String(p.classApplied)]);
+    if (p.phone) out.push(["Phone", String(p.phone)]);
+    if (p.branchCode) out.push(["Campus", String(p.branchCode)]);
+  }
+  return out;
+}
 
 export default function ApprovalsPage() {
-  const [rows, setRows] = useState<Instance[]>([]);
+  const [all, setAll] = useState<Instance[]>([]);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [status, setStatus] = useState("pending");
+  const [kind, setKind] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const [expandedHistory, setExpandedHistory] = useState<string | null>(null);
+  const [openHistory, setOpenHistory] = useState<string | null>(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
-  const [counts, setCounts] = useState<Record<string, number>>({ pending: 0, approved: 0, rejected: 0 });
-
-  const loadCounts = useCallback(async () => {
-    const res = await fetch("/api/platform?view=instances");
-    const data = await res.json();
-    if (!res.ok) return;
-    const all: Instance[] = data.instances || [];
-    setCounts({
-      pending: all.filter((i) => i.status === "pending").length,
-      approved: all.filter((i) => i.status === "approved").length,
-      rejected: all.filter((i) => i.status === "rejected").length,
-    });
-  }, []);
 
   const load = useCallback(async () => {
-    const q = status ? `?view=instances&status=${status}` : "?view=instances";
-    const res = await fetch(`/api/platform${q}`);
+    const res = await fetch("/api/platform?view=instances");
     const data = await res.json();
     if (!res.ok) {
       setErr(data.error || "Could not load approvals");
       return;
     }
     setErr("");
-    setRows(data.instances || []);
-  }, [status]);
+    setAll(data.instances || []);
+  }, []);
 
   useEffect(() => {
     load();
+    fetch("/api/platform?view=workflows")
+      .then((r) => r.json())
+      .then((d) => setWorkflows(d.workflows || []))
+      .catch(() => {});
   }, [load]);
 
-  useEffect(() => {
-    loadCounts();
-  }, [loadCounts]);
+  const byCode = useMemo(() => new Map(workflows.map((w) => [w.code, w])), [workflows]);
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { pending: 0, approved: 0, rejected: 0, "": all.length };
+    for (const i of all) c[i.status] = (c[i.status] ?? 0) + 1;
+    return c;
+  }, [all]);
+  const kinds = useMemo(() => [...new Set(all.map((i) => i.workflowCode))], [all]);
+  const rows = all.filter((i) => (!status || i.status === status) && (!kind || i.workflowCode === kind));
 
-  async function act(id: string, action: "approve" | "reject" | "comment") {
+  async function act(id: string, action: "approve" | "reject") {
+    if (action === "reject" && !notes[id]?.trim() && !confirm("Reject without giving a reason?")) return;
     setBusy(id + action);
     setMsg("");
     const res = await fetch(`/api/platform/${id}`, {
@@ -90,14 +104,18 @@ export default function ApprovalsPage() {
       setErr(data.error || "Action failed");
       return;
     }
-    setNotes((prev) => { const n = { ...prev }; delete n[id]; return n; });
-    loadCounts();
+    setNotes((prev) => {
+      const n = { ...prev };
+      delete n[id];
+      return n;
+    });
+    const done = data.instance?.status;
     setMsg(
-      action === "approve"
-        ? "Step approved — linked leave / fee / admission records sync automatically."
-        : action === "reject"
-          ? "Request rejected and linked record updated."
-          : "Comment saved."
+      action === "reject"
+        ? "Request rejected — the linked record is updated."
+        : done === "approved"
+          ? "Approved — the leave, concession or admission is updated automatically."
+          : "Step approved — it has moved to the next approver."
     );
     load();
   }
@@ -106,147 +124,139 @@ export default function ApprovalsPage() {
     <div className="stack-lg">
       <Hero
         title="Approvals"
-        subtitle="Leave, fee waivers and admissions share one inbox — approve here to update the linked master record."
+        subtitle="Leave requests, fee concessions and online admission applications wait here — approving updates the linked record."
       />
 
       {err ? <div className="alert err">{err}</div> : null}
       {msg ? <div className="alert ok">{msg}</div> : null}
 
-      <div className="chips" style={{ marginBottom: 8 }}>
-        {(["pending", "approved", "rejected", ""] as const).map((f) => {
-          const count = f ? counts[f] : Object.values(counts).reduce((a, b) => a + b, 0);
-          return (
-            <button
-              key={f || "all"}
-              type="button"
-              className={`filter-chip${status === f ? " active" : ""}`}
-              onClick={() => setStatus(f)}
-            >
-              {f || "All"}
-              {count > 0 ? <span className="chip-badge">{count}</span> : null}
-            </button>
-          );
-        })}
+      <div className="stat-row">
+        <div className="stat-tile"><div className="st-val" style={{ color: counts.pending ? "#96650f" : undefined }}>{counts.pending}</div><div className="st-lab">Waiting for a decision</div></div>
+        <div className="stat-tile"><div className="st-val">{counts.approved}</div><div className="st-lab">Approved</div></div>
+        <div className="stat-tile"><div className="st-val">{counts.rejected}</div><div className="st-lab">Rejected</div></div>
       </div>
 
-      <Panel title="Pending & recent requests" meta={`${rows.length} ITEMS`}>
+      <div className="accounting-toolbar">
+        <div className="chips">
+          {(["pending", "approved", "rejected", ""] as const).map((f) => (
+            <button key={f || "all"} type="button" className={`filter-chip${status === f ? " active" : ""}`} onClick={() => setStatus(f)}>
+              {f ? f[0].toUpperCase() + f.slice(1) : "All"}
+              {counts[f] ? <span className="chip-badge">{counts[f]}</span> : null}
+            </button>
+          ))}
+        </div>
+        {kinds.length > 1 ? (
+          <select className="inp" value={kind} onChange={(e) => setKind(e.target.value)} style={{ maxWidth: 240 }}>
+            <option value="">All request types</option>
+            {kinds.map((k) => (
+              <option key={k} value={k}>{byCode.get(k)?.name || k}</option>
+            ))}
+          </select>
+        ) : null}
+      </div>
+
+      <Panel title={status === "pending" ? "Waiting for a decision" : "Requests"} meta={`${rows.length} ITEMS`}>
         {!rows.length ? (
-          <EmptyState message="No workflow instances. Seed platform defaults in Settings, then submit leave or a fee waiver." />
+          <EmptyState
+            message={
+              status === "pending"
+                ? "Nothing to approve. Leave requests from HR, fee concession requests and admission applications from the website appear here."
+                : "No requests here."
+            }
+          />
         ) : (
-          <div className="table-scroll">
-            <table className="reg">
-              <thead>
-                <tr>
-                  <th>Request</th>
-                  <th>Workflow</th>
-                  <th>Current step</th>
-                  <th>Updated</th>
-                  <th>Status</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const wLabel = WORKFLOW_LABELS[row.workflowCode] || row.workflowCode;
-                  const stepLabel =
-                    STEP_LABELS[row.workflowCode]?.[row.currentStep] ||
-                    `Step ${row.currentStep}`;
-                  const histOpen = expandedHistory === row._id;
-                  return (
-                    <Fragment key={row._id}>
-                      <tr>
-                        <td>
-                          <div className="name-main">{row.title}</div>
-                          <div className="muted small">
-                            {row.subjectType} · {String(row.subjectId).slice(-6)}
-                          </div>
-                        </td>
-                        <td>
-                          <div>{wLabel}</div>
-                          <div className="muted small">{row.category}</div>
-                        </td>
-                        <td>{stepLabel}</td>
-                        <td>{prettyDate(row.updatedAt)}</td>
-                        <td>
-                          <StatusBadge status={row.status} />
-                        </td>
-                        <td className="row-actions">
-                          {row.history?.length ? (
-                            <button
-                              type="button"
-                              className="link-btn"
-                              onClick={() => setExpandedHistory(histOpen ? null : row._id)}
-                            >
-                              {histOpen ? "Hide" : "History"}
-                            </button>
-                          ) : null}
-                          {row.status === "pending" ? (
-                            <>
-                              <button
-                                type="button"
-                                className="btn-dark"
-                                disabled={!!busy}
-                                onClick={() => act(row._id, "approve")}
-                              >
-                                Approve
-                              </button>
-                              <button
-                                type="button"
-                                className="btn-ghost"
-                                disabled={!!busy}
-                                onClick={() => act(row._id, "reject")}
-                              >
-                                Reject
-                              </button>
-                            </>
-                          ) : null}
-                        </td>
-                      </tr>
-                      {row.status === "pending" ? (
-                        <tr>
-                          <td colSpan={6} style={{ paddingTop: 0, paddingBottom: 8 }}>
-                            <Field label="Note for this decision (optional)">
-                              <input
-                                className={inputClass}
-                                value={notes[row._id] || ""}
-                                onChange={(e) =>
-                                  setNotes((prev) => ({ ...prev, [row._id]: e.target.value }))
-                                }
-                                placeholder="Reason for approve / reject"
-                              />
-                            </Field>
-                          </td>
-                        </tr>
-                      ) : null}
-                      {histOpen && row.history?.length ? (
-                        <tr>
-                          <td colSpan={6} style={{ background: "var(--surface-raised, var(--card))", padding: "12px 16px" }}>
-                            <div className="muted small" style={{ marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>
-                              Step history
-                            </div>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                              {row.history.map((h, i) => (
-                                <div key={i} style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
-                                  <span className="muted small" style={{ minWidth: 130 }}>{prettyDate(h.at)}</span>
-                                  <span style={{ fontSize: 13 }}>
-                                    <b>{h.stepKey}</b>
-                                    {" — "}
-                                    <span style={{ textTransform: "capitalize" }}>{h.action}</span>
-                                    {h.byName ? ` by ${h.byName}` : ""}
-                                    {h.note ? <span className="muted small"> · {h.note}</span> : null}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          rows.map((row) => {
+            const wf = byCode.get(row.workflowCode);
+            const sorted = [...(wf?.steps || [])].sort((a, b) => a.order - b.order);
+            // A "submit" step only records the request; it waits on the step after it (as the server does).
+            const steps = sorted.filter((s) => s.key !== "submit");
+            const at = sorted.find((s) => s.order === row.currentStep);
+            const step = at?.key === "submit" ? sorted.find((s) => s.order > at.order) : at;
+            const now = step?.order ?? row.currentStep;
+            const by = row.history?.[0]?.byName;
+            const link = recordLink(row);
+            const facts = details(row);
+            const histOpen = openHistory === row._id;
+            return (
+              <div key={row._id} className="ap-item">
+                <div className="ap-main">
+                  <div className="ap-head">
+                    <b>{row.title}</b>
+                    <StatusBadge status={row.status} />
+                  </div>
+                  <div className="ap-sub">
+                    {wf?.name || row.workflowCode}
+                    {by ? ` · requested by ${by}` : ""} · {prettyDate(row.createdAt || row.updatedAt)}
+                  </div>
+                  {facts.length ? (
+                    <div className="ap-facts">
+                      {facts.map(([k, v]) => (
+                        <span key={k}><em>{k}</em> {v}</span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {steps.length ? (
+                    <div className="ap-steps">
+                      {steps.map((s) => {
+                        const state =
+                          row.status === "approved" || s.order < now
+                            ? "done"
+                            : row.status === "pending" && s.order === now
+                              ? "now"
+                              : row.status === "rejected" && s.order === now
+                                ? "no"
+                                : "";
+                        return (
+                          <span key={s.key} className={`ap-step ${state}`} title={`Approver: ${s.role}`}>
+                            {s.label}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                  {row.history?.length ? (
+                    <button type="button" className="ap-hist-btn" onClick={() => setOpenHistory(histOpen ? null : row._id)}>
+                      {histOpen ? "Hide history" : `History (${row.history.length})`}
+                    </button>
+                  ) : null}
+                  {histOpen ? (
+                    <ul className="ap-history">
+                      {row.history!.map((h, i) => (
+                        <li key={i}>
+                          <span>{prettyDate(h.at)}</span>
+                          <b style={{ textTransform: "capitalize" }}>{h.action}</b>
+                          {h.byName ? ` by ${h.byName}` : ""}
+                          {h.note ? <em> — {h.note}</em> : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+                <div className="ap-side">
+                  {link ? <Link href={link.href} className="link-btn">{link.label}</Link> : null}
+                  {row.status === "pending" ? (
+                    <>
+                      {step ? <div className="ap-now">Now with: <b>{step.label}</b></div> : null}
+                      <input
+                        className={inputClass}
+                        value={notes[row._id] || ""}
+                        onChange={(e) => setNotes((prev) => ({ ...prev, [row._id]: e.target.value }))}
+                        placeholder="Note / reason (optional)"
+                      />
+                      <div className="row-actions">
+                        <button type="button" className="btn-ghost" disabled={!!busy} onClick={() => act(row._id, "reject")}>
+                          Reject
+                        </button>
+                        <button type="button" className="btn-dark" disabled={!!busy} onClick={() => act(row._id, "approve")}>
+                          {busy === row._id + "approve" ? "…" : "Approve"}
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })
         )}
       </Panel>
     </div>

@@ -1292,14 +1292,15 @@ textarea.inp {
 }
 .pay-stat,
 .stat-tile {
-  background: var(--paper);
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 14px 16px;
 }
-.content > .pay-stat-row .pay-stat,
-.content > .stat-row .stat-tile {
-  background: var(--card);
+/* Inside a white panel the cards sit on the paper tone instead. */
+.panel .pay-stat,
+.panel .stat-tile {
+  background: var(--paper);
 }
 .stat-tile .st-lab {
   font-size: 11px;
@@ -3076,3 +3077,50 @@ table.qbp-je { width: 100%; border-collapse: collapse; margin-top: 22px; font-si
 .cc-teacher-pick:hover { color: var(--jade-dark); }
 .stat-link { color: var(--jade-dark); text-decoration: none; font-family: var(--font-sans, inherit); font-weight: 700; }
 .stat-link:hover { text-decoration: underline; }
+
+/* Printed circular (notice) */
+.circular-meta { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 10px 0 18px; font-size: 12.5px; }
+.circular-meta span { color: #666; margin-right: 6px; }
+.circular-title { font-size: 20px; margin: 0 0 12px; text-align: center; text-decoration: underline; }
+.circular-body { white-space: pre-wrap; font-size: 14px; line-height: 1.7; flex: 1; }
+.circular-sign { display: flex; justify-content: flex-end; margin-top: 60px; font-size: 12.5px; }
+.circular-sign div { border-top: 1px solid #333; padding-top: 6px; min-width: 220px; text-align: center; }
+
+/* Notice board */
+.nb-item { display: flex; gap: 14px; padding: 14px 4px 14px 14px; border-bottom: 1px solid var(--line); border-left: 4px solid var(--line); margin-bottom: 8px; border-radius: 4px; }
+.nb-item.urgent { border-left-color: var(--red); }
+.nb-item.high { border-left-color: #e2a03f; }
+.nb-item.dim { opacity: 0.6; }
+.nb-item h4 { margin: 0; font-size: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.nb-item p { margin: 6px 0; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; }
+.nb-meta { font-family: var(--font-mono), monospace; font-size: 10px; color: var(--text-dim); text-transform: uppercase; }
+
+/* Approvals inbox */
+.ap-item { display: flex; gap: 18px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.ap-item:last-child { border-bottom: 0; }
+.ap-main { flex: 1; min-width: 0; }
+.ap-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+.ap-sub { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+.ap-facts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ap-facts span { background: var(--paper); border: 1px solid var(--line); border-radius: 99px; padding: 2px 10px; font-size: 12px; text-transform: capitalize; }
+.ap-facts em { font-style: normal; color: var(--text-dim); margin-right: 4px; }
+.ap-steps { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+.ap-step { font-size: 11px; padding: 3px 10px; border-radius: 4px; background: var(--paper); color: var(--text-dim); position: relative; }
+.ap-step.done { background: var(--jade-light); color: var(--jade-dark); }
+.ap-step.done::before { content: "✓ "; }
+.ap-step.now { background: var(--saffron-light); color: #96650f; font-weight: 700; }
+.ap-step.no { background: var(--red-light); color: var(--red); }
+.ap-hist-btn { border: 0; background: none; color: var(--jade-dark); font-size: 11.5px; padding: 0; margin-top: 8px; cursor: pointer; }
+.ap-history { list-style: none; padding: 0; margin: 6px 0 0; font-size: 12px; display: grid; gap: 4px; }
+.ap-history span { font-family: var(--font-mono), monospace; font-size: 10.5px; color: var(--text-dim); margin-right: 8px; }
+.ap-side { width: 260px; display: grid; gap: 8px; align-content: start; justify-items: stretch; }
+.ap-side > .link-btn { justify-self: end; }
+.ap-side .row-actions { justify-content: flex-end; }
+.ap-now { font-size: 11.5px; color: var(--text-dim); }
+@media (max-width: 760px) { .ap-item { flex-direction: column; } .ap-side { width: 100%; } }
+
+/* Breadcrumb trail (Accounting, Inventory) */
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 12px; font-size: 12.5px; color: var(--text-dim); }
+.crumbs span + span::before { content: "›"; margin-right: 6px; color: var(--text-dim); }
+.crumbs .here { color: var(--text); font-weight: 700; }
+.fee-tabs { align-items: center; margin-bottom: 0; }

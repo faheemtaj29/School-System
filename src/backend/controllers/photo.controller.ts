@@ -1,24 +1,29 @@
 /**
- * Student and teacher photos: GET serves the image, PUT uploads { dataUrl }, DELETE removes it.
+ * Student, teacher and campus-staff photos: GET serves the image, PUT uploads { dataUrl }, DELETE removes it.
  */
 import { isValidObjectId } from "mongoose";
 import { dbConnect } from "@/backend/config/database";
 import { fromServiceError, jsonError, jsonOk, requireAuth } from "@/backend/lib/http";
-import { imageProblem, imageResponse } from "@/backend/lib/images";
+import { PHOTO_BASE, PhotoKind, imageProblem, imageResponse } from "@/backend/lib/images";
 import { canSeeStudent, resolveTeacher } from "@/backend/lib/portal";
+import { Staff } from "@/backend/models/Staff";
 import { Student } from "@/backend/models/Student";
 import { Teacher } from "@/backend/models/Teacher";
 import type { SessionUser } from "@/backend/types";
 
 type Ctx = { params: Promise<{ id: string }> };
-type Kind = "student" | "teacher";
+type Kind = PhotoKind;
 
-const MODEL = { student: Student, teacher: Teacher };
+const MODEL = { student: Student, teacher: Teacher, staff: Staff };
 
 /** Who may change a photo: office staff and teachers for students; admin or the teacher themself. */
 async function canEdit(kind: Kind, id: string, session: SessionUser) {
   if (session.role === "admin") return true;
   if (kind === "student") return session.role === "staff" || session.role === "teacher";
+  if (kind === "staff") {
+    const me = await Staff.findById(id).select("user").lean();
+    return Boolean(me?.user && String(me.user) === session.id);
+  }
   if (session.role !== "teacher") return false;
   const me = await resolveTeacher(session);
   return Boolean(me && String(me._id) === id);
@@ -56,7 +61,7 @@ function handlers(kind: Kind) {
         const now = new Date();
         const doc = await Model.findByIdAndUpdate(id, { photoData: body.dataUrl, photoUpdatedAt: now });
         if (!doc) return jsonError("Not found", 404);
-        return jsonOk({ photoUrl: `/api/${kind}s/${id}/photo?v=${now.getTime()}` });
+        return jsonOk({ photoUrl: `/api/${PHOTO_BASE[kind]}/${id}/photo?v=${now.getTime()}` });
       } catch (e) {
         return fromServiceError(e);
       }
@@ -81,4 +86,5 @@ function handlers(kind: Kind) {
 
 export const studentPhotoController = handlers("student");
 export const teacherPhotoController = handlers("teacher");
+export const staffPhotoController = handlers("staff");
 
