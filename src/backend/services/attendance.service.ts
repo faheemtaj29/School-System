@@ -38,7 +38,8 @@ export const attendanceService = {
       .populate("classId", "name section")
       .populate("records.studentId", "firstName lastName admissionNo rollNumber")
       .sort({ date: -1 })
-      .limit(50)
+      // One class: about six months of daily sheets; all classes: the latest 50.
+      .limit(filters.classId && !filters.date ? 180 : 50)
       .lean();
   },
 

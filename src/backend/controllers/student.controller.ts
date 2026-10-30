@@ -9,6 +9,8 @@ import {
   requireAuth,
 } from "@/backend/lib/http";
 import { studentService } from "@/backend/services/student.service";
+import { cascadeService } from "@/backend/services/cascade.service";
+import { isValidObjectId } from "mongoose";
 import { resolveTeacher } from "@/backend/lib/portal";
 import { ClassModel } from "@/backend/models/Class";
 import { issueTcSchema, promoteAllSchema, promoteSchema, studentSchema } from "@/backend/validators/student.validator";
@@ -138,6 +140,18 @@ export const studentController = {
     }
   },
 
+  /** GET — what deleting this student will also remove, for the confirmation. */
+  async impact(_: Request, ctx: Ctx) {
+    const { error } = await requireAuth(["admin"]);
+    if (error) return error;
+    try {
+      const { id } = await ctx.params;
+      if (!isValidObjectId(id)) return jsonError("Invalid ID", 400);
+      return jsonOk(await cascadeService.studentImpact(id));
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
   async remove(_: Request, ctx: Ctx) {
     const { error } = await requireAuth(["admin"]);
     if (error) return error;

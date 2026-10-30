@@ -2700,7 +2700,8 @@ tr.ec-absent td { background: #faf6ee; color: var(--text-dim); }
 .print-toolbar b { margin-right: 10px; }
 .print-toolbar span { font-size: 12px; color: #a9c1b5; }
 .print-toolbar > div:last-child { display: flex; gap: 8px; }
-.print-toolbar .btn-ghost { color: #fff; border-color: #3a5449; }
+.print-toolbar .btn-ghost { background: transparent; color: #fff; border-color: #3a5449; box-shadow: none; }
+.print-toolbar .btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); color: #fff; }
 .print-msg { max-width: 780px; margin: 20px auto; }
 .print-pages { display: flex; flex-direction: column; align-items: center; gap: 18px; padding-top: 18px; }
 .doc-page {
@@ -3582,3 +3583,11 @@ tr.def-hot td { background: #fff6f5; }
 .budget-bar span { position: relative; display: block; text-align: center; font-size: 10.5px; font-weight: 700; line-height: 16px; color: var(--text); }
 .budget-none { font-size: 11px; color: var(--text-dim); }
 @media print { .budget-in { border: none; background: none; padding: 0; text-align: right; } }
+
+/* Attendance: sheet state, day navigation and history */
+.att-sheet-state { margin-bottom: 16px; padding: 10px 14px; border-radius: 8px; font-size: 13.5px; background: var(--saffron-light); color: #7a520c; border: 1px solid color-mix(in srgb, var(--saffron) 30%, white); }
+.att-sheet-state.saved { background: var(--jade-light); color: var(--jade-dark); border-color: color-mix(in srgb, var(--jade) 25%, white); }
+.att-day-nav { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; gap: 6px; }
+.att-day-nav .btn-ghost { padding: 0; font-size: 18px; line-height: 1; }
+.att-absentees { color: var(--red); font-size: 12.5px; max-width: 320px; }
+table.reg tr.att-row-open td { background: var(--jade-light); }

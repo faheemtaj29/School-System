@@ -55,6 +55,12 @@ function LoginInner() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const active = PORTALS.find((p) => p.key === portal)!;
+  // The school's name from Settings, published by the root layout as the application name.
+  const [schoolName, setSchoolName] = useState("");
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the page head
+    setSchoolName(document.querySelector<HTMLMetaElement>('meta[name="application-name"]')?.content || "");
+  }, []);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -95,7 +101,7 @@ function LoginInner() {
       <div className="auth-wrap auth-wrap-wide">
         <div className="auth-intro">
           <div className="kicker">Multi-portal campus system</div>
-          <h1>Sabaq</h1>
+          <h1>{schoolName || "Welcome"}</h1>
           <p>
             Separate portals for administrators, teachers, campus staff and students — one school,
             every role.

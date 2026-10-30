@@ -48,7 +48,20 @@ export function PrintShell({
   children: ReactNode;
 }) {
   useEffect(() => {
-    document.title = title;
+    // The printed page header shows this title, so it carries the school's name too. The app
+    // resets the title once after loading, so set it again then and right before printing.
+    const school = document.querySelector<HTMLMetaElement>('meta[name="application-name"]')?.content;
+    const full = school ? `${title} · ${school}` : title;
+    const apply = () => {
+      document.title = full;
+    };
+    apply();
+    const later = window.setTimeout(apply, 800);
+    window.addEventListener("beforeprint", apply);
+    return () => {
+      window.clearTimeout(later);
+      window.removeEventListener("beforeprint", apply);
+    };
   }, [title]);
   // On a phone the A4 page is shrunk to fit the screen; printing uses the real size.
   const pagesRef = useRef<HTMLDivElement>(null);

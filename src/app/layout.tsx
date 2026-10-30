@@ -18,10 +18,27 @@ const sans = Inter({
   weight: ["400", "500", "600", "700"],
 });
 
-export const metadata: Metadata = {
-  title: "Sabaq — School Management System",
-  description: "School management built with Next.js, React and MongoDB",
-};
+/**
+ * Tab title, print header and icon come from the school's own name and logo in Settings,
+ * e.g. "Fee Vouchers · Seek School". A missing database falls back to a plain name.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  let name = "School Management";
+  let icon: string | undefined;
+  try {
+    const s = await settingsService.get();
+    name = s.schoolName?.trim() || name;
+    if (s.logoUpdatedAt) icon = `/api/settings/logo?v=${new Date(s.logoUpdatedAt).getTime()}`;
+  } catch {
+    /* keep the plain name */
+  }
+  return {
+    title: { default: name, template: `%s · ${name}` },
+    applicationName: name,
+    description: `${name} — school management`,
+    ...(icon ? { icons: { icon } } : {}),
+  };
+}
 
 /** Theme comes from Settings; a missing database must never block rendering. */
 async function themeStyle() {
@@ -41,7 +58,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${display.variable} ${sans.variable}`}
     >
       <head>
-        <style id="sabaq-theme" dangerouslySetInnerHTML={{ __html: css }} />
+        <style id="school-theme" dangerouslySetInnerHTML={{ __html: css }} />
       </head>
       <body>{children}</body>
     </html>

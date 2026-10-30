@@ -140,7 +140,7 @@ async function ensureInstitution() {
   await dbConnect();
   const settings = await Settings.findOne().lean();
   const code = (settings?.institutionCode || settings?.defaultBranchCode || "MAIN").toUpperCase();
-  const name = settings?.schoolName || "Sabaq Institution";
+  const name = settings?.schoolName || "School";
   const type = settings?.institutionType || "school";
   let inst = await Institution.findOne({ code });
   if (!inst) {

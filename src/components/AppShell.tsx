@@ -217,7 +217,7 @@ export function AppShell({
   const [campus, setCampus] = useState("MAIN");
   const [academicYear, setAcademicYear] = useState("");
   const [school, setSchool] = useState<{ name: string; logoUrl: string | null }>({
-    name: "Sabaq",
+    name: "",
     logoUrl: null,
   });
   const [expandedTrees, setExpandedTrees] = useState({ accounting: false, inventory: false });

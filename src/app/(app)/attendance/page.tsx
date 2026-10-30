@@ -36,6 +36,10 @@ export default function AttendancePage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [absentSaved, setAbsentSaved] = useState(0);
+  /** Whether the open sheet was already saved for this class and date (else it is a new one). */
+  const [sheetSaved, setSheetSaved] = useState(false);
+  /** Day-by-day sheets of the selected class, newest first. */
+  const [classHistory, setClassHistory] = useState<AttendanceItem[]>([]);
   const [alertsOn, setAlertsOn] = useState(true);
 
   useEffect(() => {
@@ -97,9 +101,11 @@ export default function AttendancePage() {
           })
         );
         setStudents(list);
+        setSheetSaved(Boolean(sheet));
         setRecords(list.map((student) => saved.get(student._id) || {
           studentId: student._id,
-          status: "",
+          // A new sheet starts with everyone present: only absentees need a tap.
+          status: sheet ? "" : "present",
           note: "",
         }));
       })
@@ -109,6 +115,33 @@ export default function AttendancePage() {
 
     return () => { cancelled = true; };
   }, [classId, date]);
+
+  const loadClassHistory = useCallback(async (id: string) => {
+    if (!id) {
+      setClassHistory([]);
+      return;
+    }
+    const d = await fetch(`/api/attendance?classId=${encodeURIComponent(id)}`).then((r) => r.json()).catch(() => ({}));
+    setClassHistory(d.attendance || []);
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches the class's saved sheets
+    loadClassHistory(classId);
+  }, [classId, loadClassHistory]);
+
+  function shiftDay(days: number) {
+    const d = new Date(`${date}T00:00:00`);
+    d.setDate(d.getDate() + days);
+    setDate(toDateInput(d));
+  }
+
+  function openSheet(h: AttendanceItem) {
+    const id = typeof h.classId === "object" ? h.classId._id : h.classId;
+    setClassId(id);
+    setDate(toDateInput(new Date(h.date)));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -126,9 +159,11 @@ export default function AttendancePage() {
         setError(data.error || "Failed to save attendance");
         return;
       }
-      setMessage("Attendance saved for this date.");
+      setMessage(`Attendance sheet saved for ${prettyDate(date)}.`);
       setAbsentSaved(records.filter((r) => r.status === "absent").length);
+      setSheetSaved(true);
       loadMeta();
+      loadClassHistory(classId);
     } finally {
       setSaving(false);
     }
@@ -194,6 +229,13 @@ export default function AttendancePage() {
 
       <form onSubmit={onSubmit}>
         <Panel title="Daily Roll Call" meta={records.length ? `${presentCount}/${records.length} PRESENT${unmarkedCount ? ` · ${unmarkedCount} UNMARKED` : ""}` : undefined}>
+          {classId && records.length ? (
+            <div className={`att-sheet-state${sheetSaved ? " saved" : ""}`}>
+              {sheetSaved
+                ? "Saved sheet — you are editing the attendance already recorded for this day."
+                : "New sheet — everyone starts as Present. Tap A, L or E for the exceptions, then Save sheet."}
+            </div>
+          ) : null}
           {error ? <div className="alert err">{error}</div> : null}
           {message ? (
             <div className="alert ok">
@@ -226,13 +268,21 @@ export default function AttendancePage() {
               </select>
             </Field>
             <Field label="Date" required>
-              <input
-                type="date"
-                className={inputClass}
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
-              />
+              <div className="att-day-nav">
+                <button type="button" className="btn-ghost" onClick={() => shiftDay(-1)} title="Previous day" aria-label="Previous day">
+                  ‹
+                </button>
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  required
+                />
+                <button type="button" className="btn-ghost" onClick={() => shiftDay(1)} title="Next day" aria-label="Next day">
+                  ›
+                </button>
+              </div>
             </Field>
           </div>
 
@@ -294,7 +344,7 @@ export default function AttendancePage() {
 
           <div className="form-actions">
             <button type="submit" className="btn-dark" disabled={!classId || !records.length || unmarkedCount > 0 || saving}>
-              {saving ? "Saving…" : unmarkedCount ? `Mark all students first (${unmarkedCount} unmarked)` : "Save Attendance"}
+              {saving ? "Saving…" : unmarkedCount ? `Mark all students first (${unmarkedCount} unmarked)` : sheetSaved ? "Update sheet" : "Save sheet"}
             </button>
             <button type="button" className="btn-ghost" onClick={() => markAll("absent")}>
               Mark All Absent
@@ -303,37 +353,57 @@ export default function AttendancePage() {
         </Panel>
       </form>
 
-      <Panel title="Recent Sheets" meta="LAST 50">
-        {!history.length ? (
-          <EmptyState message="No attendance saved yet." />
+      <Panel
+        title={selectedClass ? `Attendance History — ${selectedClass.name}-${selectedClass.section}` : "Recent Sheets"}
+        meta={selectedClass ? `${classHistory.length} DAY${classHistory.length === 1 ? "" : "S"}` : "ALL CLASSES · LAST 50"}
+      >
+        {(selectedClass ? classHistory : history).length === 0 ? (
+          <EmptyState message={selectedClass ? "No sheets saved for this class yet." : "No attendance saved yet."} />
         ) : (
           <div className="table-scroll">
             <table className="reg">
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>Class</th>
-                  <th className="right">Marked</th>
+                  {selectedClass ? null : <th>Class</th>}
                   <th className="right">Present</th>
+                  <th className="right">Absent</th>
+                  <th className="right">Late</th>
+                  <th className="right">Leave</th>
                   <th className="right">Rate</th>
+                  {selectedClass ? <th>Absent students</th> : null}
+                  <th className="right">Sheet</th>
                 </tr>
               </thead>
               <tbody>
-                {history.map((h) => {
-                  const present = h.records.filter((r) => r.status === "present").length;
-                  const rate = h.records.length
-                    ? Math.round((present / h.records.length) * 100)
-                    : 0;
+                {(selectedClass ? classHistory : history).map((h) => {
+                  const count = (st: Status) => h.records.filter((r) => r.status === st).length;
+                  const present = count("present");
+                  const rate = h.records.length ? Math.round((present / h.records.length) * 100) : 0;
+                  const absentees = h.records
+                    .filter((r) => r.status === "absent")
+                    .map((r) => (typeof r.studentId === "object" ? fullName(r.studentId) : ""))
+                    .filter(Boolean);
+                  const isOpen = toDateInput(new Date(h.date)) === date && (typeof h.classId === "object" ? h.classId._id : h.classId) === classId;
                   return (
-                    <tr key={h._id}>
-                      <td>{prettyDate(h.date)}</td>
-                      <td>{labelOfClass(h.classId as never)}</td>
-                      <td className="num">{h.records.length}</td>
+                    <tr key={h._id} className={isOpen ? "att-row-open" : undefined}>
+                      <td>
+                        <b>{prettyDate(h.date)}</b>
+                        <div className="cell-sub">{new Date(h.date).toLocaleDateString("en-GB", { weekday: "long" })}</div>
+                      </td>
+                      {selectedClass ? null : <td>{labelOfClass(h.classId as never)}</td>}
                       <td className="num">{present}</td>
+                      <td className="num">{count("absent") || ""}</td>
+                      <td className="num">{count("late") || ""}</td>
+                      <td className="num">{count("excused") || ""}</td>
                       <td className="right">
-                        <span className={`badge ${rate >= 85 ? "present" : rate >= 70 ? "leave" : "absent"}`}>
-                          {rate}%
-                        </span>
+                        <span className={`badge ${rate >= 85 ? "present" : rate >= 70 ? "leave" : "absent"}`}>{rate}%</span>
+                      </td>
+                      {selectedClass ? <td className="att-absentees">{absentees.join(", ") || "—"}</td> : null}
+                      <td className="right">
+                        <button type="button" className="link-btn" onClick={() => openSheet(h)}>
+                          {isOpen ? "Open" : "View / edit"}
+                        </button>
                       </td>
                     </tr>
                   );

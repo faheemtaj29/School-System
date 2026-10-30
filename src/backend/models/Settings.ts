@@ -154,7 +154,7 @@ const BranchSchema = new Schema<IBranch>(
 
 const SettingsSchema = new Schema<ISettings>(
   {
-    schoolName: { type: String, required: true, default: "Sabaq Model School" },
+    schoolName: { type: String, required: true, default: "My School" },
     registrationNo: String,
     employerTaxNumber: String,
     salaryTax: { type: Schema.Types.Mixed },

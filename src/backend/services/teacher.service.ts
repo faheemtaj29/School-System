@@ -3,6 +3,7 @@
  */
 import { dbConnect } from "@/backend/config/database";
 import { Teacher } from "@/backend/models/Teacher";
+import { cascadeService } from "@/backend/services/cascade.service";
 import { parseOptionalDate } from "@/backend/lib/http";
 import { ServiceError } from "@/backend/types";
 import type { TeacherInput } from "@/backend/validators/teacher.validator";
@@ -73,10 +74,8 @@ export const teacherService = {
     return item;
   },
 
+  /** Removes the teacher and everything linked to them (see cascadeService). */
   async remove(id: string) {
-    await dbConnect();
-    const item = await Teacher.findByIdAndDelete(id);
-    if (!item) throw new ServiceError("NOT_FOUND", "Teacher not found", 404);
-    return { ok: true };
+    return cascadeService.removeTeacher(id);
   },
 };

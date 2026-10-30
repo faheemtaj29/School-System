@@ -66,9 +66,28 @@ export default function StudentsPage() {
     load();
   }, [load]);
 
+  /** Shows everything that goes with the student, asks, then deletes it all. */
   async function remove(id: string) {
-    if (!confirm("Delete this student record?")) return;
-    await fetch(`/api/students/${id}`, { method: "DELETE" });
+    const r = await fetch(`/api/students/${id}/impact`);
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      alert(d.error || "Could not check this student's records");
+      return;
+    }
+    const lines = [
+      `Delete ${d.name} permanently?`,
+      "",
+      "This also removes, everywhere in the system:",
+      `• ${d.fees} fee challan(s)${d.paidFees ? ` — ${d.paidFees} with payments, and their receipts and accounting entries` : ""}`,
+      `• attendance on ${d.attendanceDays} day(s)`,
+      `• ${d.examMarks} exam mark(s) and result cards`,
+      "• the student's and (if no other child) the parent's login",
+      "",
+      "This cannot be undone.",
+    ];
+    if (!confirm(lines.join("\n"))) return;
+    const res = await fetch(`/api/students/${id}`, { method: "DELETE" });
+    if (!res.ok) alert((await res.json().catch(() => ({}))).error || "Could not delete the student");
     load();
   }
 

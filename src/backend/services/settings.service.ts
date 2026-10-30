@@ -9,7 +9,7 @@ import type { settingsSchema } from "@/backend/validators/modules.validator";
 type SettingsInput = z.infer<typeof settingsSchema>;
 
 const defaults = {
-  schoolName: "Sabaq Model School",
+  schoolName: "My School",
   academicYear: "2026–27",
   feeDueDay: 25,
   currency: "PKR",

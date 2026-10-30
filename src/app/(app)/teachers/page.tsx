@@ -39,9 +39,28 @@ export default function TeachersPage() {
     load();
   }, [load]);
 
+  /** Shows everything that goes with the teacher, asks, then deletes it all. */
   async function remove(id: string) {
-    if (!confirm("Delete this teacher?")) return;
-    await fetch(`/api/teachers/${id}`, { method: "DELETE" });
+    const r = await fetch(`/api/teachers/${id}/impact`);
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      alert(d.error || "Could not check this teacher's records");
+      return;
+    }
+    const lines = [
+      `Delete ${d.name} permanently?`,
+      "",
+      "This also removes, everywhere in the system:",
+      `• ${d.payslips} payslip(s) and their salary entries in accounts`,
+      `• ${d.leaves} leave request(s) and ${d.timetablePeriods} timetable period(s)`,
+      "• the teacher's login",
+      ...(d.classTeacherOf ? [`• class teacher of ${d.classTeacherOf} class(es) — those classes will have none`] : []),
+      "",
+      "This cannot be undone.",
+    ];
+    if (!confirm(lines.join("\n"))) return;
+    const res = await fetch(`/api/teachers/${id}`, { method: "DELETE" });
+    if (!res.ok) alert((await res.json().catch(() => ({}))).error || "Could not delete the teacher");
     load();
   }
 

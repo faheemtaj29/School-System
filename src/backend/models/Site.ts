@@ -44,7 +44,7 @@ const BlockSchema = new Schema<ISiteBlock>(
 
 const SiteContentSchema = new Schema<ISiteContent>(
   {
-    brandName: { type: String, default: "Sabaq Model School" },
+    brandName: { type: String, default: "" },
     tagline: { type: String, default: "Learning without limits" },
     heroTitle: { type: String, default: "Admissions are open for the new session" },
     heroSubtitle: {

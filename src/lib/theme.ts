@@ -20,7 +20,7 @@ export type ThemePreset = {
 };
 
 export const THEME_PRESETS: ThemePreset[] = [
-  { key: "jade", name: "Sabaq Jade", primary: "#157a5c", accent: "#e8992e", sidebar: "#0e211a", surface: "#f5f7f6" },
+  { key: "jade", name: "Jade", primary: "#157a5c", accent: "#e8992e", sidebar: "#0e211a", surface: "#f5f7f6" },
   { key: "indigo", name: "Indigo Night", primary: "#4c5fd5", accent: "#f0a500", sidebar: "#161a3d", surface: "#f5f6fa" },
   { key: "royal", name: "Royal Blue", primary: "#1d4ed8", accent: "#0ea5e9", sidebar: "#0f1c3f", surface: "#f4f6fa" },
   { key: "maroon", name: "Maroon Classic", primary: "#9b2c2c", accent: "#d69e2e", sidebar: "#2b1414", surface: "#f8f6f5" },

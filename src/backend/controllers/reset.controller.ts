@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { firstZodError, fromServiceError, jsonError, jsonOk, requireAuth } from "@/backend/lib/http";
 import { RESET_GROUPS, resetService } from "@/backend/services/reset.service";
+import { sampleDataService } from "@/backend/services/sampleData.service";
 
 const runSchema = z.object({
   groups: z.array(z.enum(RESET_GROUPS.map((g) => g.key) as [string, ...string[]])).min(1, "Tick at least one thing to clear"),
@@ -29,6 +30,41 @@ export const resetController = {
       const parsed = runSchema.safeParse(await req.json().catch(() => ({})));
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
       return jsonOk(await resetService.run(parsed.data.groups as never, session!));
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  /** GET — whether sample data is loaded. */
+  async sampleStatus() {
+    const { error } = await requireAuth(["admin"]);
+    if (error) return error;
+    try {
+      return jsonOk(await sampleDataService.status());
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  /** POST — load the sample school (students, teachers, exams, fees, attendance, payslips). */
+  async sampleLoad() {
+    const { session, error } = await requireAuth(["admin"]);
+    if (error) return error;
+    try {
+      return jsonOk(await sampleDataService.load(session!), 201);
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  /** DELETE { confirm: "DELETE" } — remove the sample records and everything linked to them. */
+  async sampleRemove(req: Request) {
+    const { error } = await requireAuth(["admin"]);
+    if (error) return error;
+    try {
+      const body = await req.json().catch(() => ({}));
+      if (body?.confirm !== "DELETE") return jsonError("Type DELETE to confirm");
+      return jsonOk(await sampleDataService.remove());
     } catch (e) {
       return fromServiceError(e);
     }

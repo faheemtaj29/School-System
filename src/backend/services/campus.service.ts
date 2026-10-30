@@ -106,7 +106,7 @@ function stubAi(kind: string, prompt: string) {
   const short = prompt.slice(0, 120);
   const templates: Record<string, string> = {
     admission_assistant: `Admission checklist for: "${short}". Verify documents, fee challan, and seat availability before approval.`,
-    chatbot: `Reply draft: Thanks for contacting Sabaq. Regarding "${short}" — please check the parent portal or visit the office during school hours.`,
+    chatbot: `Reply draft: Thanks for contacting us. Regarding "${short}" — please check the parent portal or visit the office during school hours.`,
     performance: `Performance note: Review attendance and recent exam averages for "${short}". Flag learners below pass threshold.`,
     weak_students: `Weak-student scan: Prioritize learners with attendance <75% or exam average <40% related to "${short}".`,
     report: `Report outline for "${short}": 1) Summary 2) KPIs 3) Risks 4) Recommended actions.`,

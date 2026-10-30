@@ -8,6 +8,7 @@ import { Settings } from "@/backend/models/Settings";
 import { parseOptionalDate } from "@/backend/lib/http";
 import { ServiceError } from "@/backend/types";
 import type { IssueTcInput, PromoteAllInput, PromoteInput, StudentInput } from "@/backend/validators/student.validator";
+import { cascadeService } from "@/backend/services/cascade.service";
 import { reportsService } from "@/backend/services/reports.service";
 import { numberingService } from "@/backend/services/numbering.service";
 
@@ -101,11 +102,9 @@ export const studentService = {
     return item;
   },
 
+  /** Removes the student and everything linked to them (see cascadeService). */
   async remove(id: string) {
-    await dbConnect();
-    const item = await Student.findByIdAndDelete(id);
-    if (!item) throw new ServiceError("NOT_FOUND", "Student not found", 404);
-    return { ok: true };
+    return cascadeService.removeStudent(id);
   },
 
   /**

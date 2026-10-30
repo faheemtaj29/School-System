@@ -1,5 +1,6 @@
 "use client";
 
+import { SampleData } from "@/components/settings/SampleData";
 import { StartFresh } from "@/components/settings/StartFresh";
 import { CampusLogo } from "@/components/settings/CampusLogo";
 import { DEFAULT_CHALLAN_TERMS } from "@/lib/challanTerms";
@@ -118,7 +119,7 @@ function suggestNextYear(current: string) {
 }
 
 const empty: Settings = {
-  schoolName: "Sabaq Model School",
+  schoolName: "",
   academicYear: "2026–27",
   feeDueDay: 25,
   currency: "PKR",
@@ -1436,6 +1437,7 @@ export default function SettingsPage() {
                   </tbody>
                 </table>
               </div>
+              <SampleData />
               <StartFresh />
             </>
           ) : null}
