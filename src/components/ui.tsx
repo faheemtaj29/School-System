@@ -1,8 +1,10 @@
 "use client";
 
 import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { PlusIcon } from "@/components/Icons";
 import { TableExport } from "@/components/TableExport";
+import { LoginAccess } from "@/components/LoginAccess";
 
 export const inputClass = "inp";
 
@@ -272,6 +274,10 @@ export function StatusBadge({ status }: { status: string }) {
 }
 
 /** Creates or resets the portal login for a teacher/student record. */
+/**
+ * "Portal Login" on a person's row: one window to manage their login — create it (by sending a
+ * set-your-password link, or setting one now) and send password reset links, Facebook style.
+ */
 export function PortalAccessButton({
   kind,
   id,
@@ -285,42 +291,124 @@ export function PortalAccessButton({
   name: string;
   onDone?: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" className="link-btn" onClick={() => setOpen(true)}>
+        {kind === "parent" ? "Parent Login" : "Portal Login"}
+      </button>
+      {open
+        ? createPortal(
+            <PortalAccessDialog kind={kind} id={id} email={email} name={name} onClose={() => setOpen(false)} onDone={onDone} />,
+            document.body
+          )
+        : null}
+    </>
+  );
+}
+
+function PortalAccessDialog({
+  kind,
+  id,
+  email,
+  name,
+  onClose,
+  onDone,
+}: {
+  kind: "teacher" | "student" | "staff" | "parent";
+  id: string;
+  email?: string;
+  name: string;
+  onClose: () => void;
+  onDone?: () => void;
+}) {
   const who = kind === "parent" ? `the parent of ${name}` : name;
-  async function grant() {
+  const role = kind === "parent" ? "parent" : kind;
+  const [mode, setMode] = useState<"link" | "password">("link");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [version, setVersion] = useState(0);
+  const [created, setCreated] = useState("");
+
+  async function create() {
+    setError("");
     if (!email) {
-      alert(kind === "parent" ? `Add the parent's email to ${name} before creating a parent login.` : `Add an email address to ${name} before creating a login.`);
+      setError(kind === "parent" ? `Add the parent's email to ${name} first.` : `Add an email address to ${name} first.`);
       return;
     }
-    const password = prompt(
-      `Set a portal password for ${who} (${email}).\nMinimum 6 characters.`
-    );
-    if (!password) return;
-    if (password.length < 6) {
-      alert("Password must be at least 6 characters.");
+    if (mode === "password" && (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password))) {
+      setError("Use at least 8 characters with letters and numbers.");
       return;
     }
-    const res = await fetch("/api/access", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind, recordId: id, email, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      alert(data.error || "Could not create the login");
-      return;
+    setBusy(true);
+    try {
+      // With a link, the login starts with a random password nobody knows; the person sets their own.
+      const pw = mode === "password" ? password : `${crypto.randomUUID()}Aa1`;
+      const res = await fetch("/api/access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, recordId: id, email, password: pw }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not create the login");
+      setCreated(mode === "link" ? data.email || email : "");
+      setVersion((v) => v + 1);
+      onDone?.();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
     }
-    alert(
-      kind === "parent"
-        ? `Parent login ready.\nEmail: ${data.email}\nChildren linked: ${data.children}`
-        : `Portal login ready.\nEmail: ${data.email}\nRole: ${data.role}`
-    );
-    onDone?.();
   }
 
   return (
-    <button type="button" className="link-btn" onClick={grant}>
-      {kind === "parent" ? "Parent Login" : "Portal Login"}
-    </button>
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal" role="dialog" aria-label={`Login for ${who}`}>
+        <div className="modal-head">
+          <div>
+            <h2>Login &amp; password</h2>
+            <div className="sub">{who}{email ? ` · ${email}` : ""}</div>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
+        <div className="modal-body">
+          <LoginAccess
+            key={version}
+            kind={kind === "parent" ? "student" : kind}
+            id={id}
+            roles={[role]}
+            autoSendTo={created}
+            empty={
+              <div className="stack">
+                <div className="auth-help" style={{ margin: 0 }}>
+                  No {role} login yet. Create one with {email || "an email address"}:
+                </div>
+                <label className="check-row">
+                  <input type="radio" checked={mode === "link"} onChange={() => setMode("link")} />
+                  Send a link so they set their own password (recommended)
+                </label>
+                <label className="check-row">
+                  <input type="radio" checked={mode === "password"} onChange={() => setMode("password")} />
+                  Set a password now and tell them
+                </label>
+                {mode === "password" ? (
+                  <input className={inputClass} type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters, letters and numbers" />
+                ) : null}
+                {error ? <div className="alert err">{error}</div> : null}
+                <div>
+                  <button type="button" className="btn-dark" disabled={busy} onClick={create}>
+                    {busy ? "Creating…" : mode === "link" ? "Create login & send link" : "Create login"}
+                  </button>
+                </div>
+              </div>
+            }
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -401,11 +489,10 @@ export function RowMenu({ children }: { children: ReactNode }) {
       >
         More ▾
       </button>
-      {pos ? (
-        <div className="row-menu-pop" style={{ top: pos.top, right: pos.right }}>
-          {children}
-        </div>
-      ) : null}
+      {/* Kept mounted while closed, so a dialog opened from the menu stays open. */}
+      <div className="row-menu-pop" style={pos ? { top: pos.top, right: pos.right } : { display: "none" }}>
+        {children}
+      </div>
     </div>
   );
 }

@@ -373,10 +373,10 @@ export function AppShell({
 
         <div className="sidebar-foot">
           <div className="avatar">{initials(user.name)}</div>
-          <div style={{ minWidth: 0 }}>
+          <Link href="/account" className="who-link" title="My account · change password">
             <div className="who">{user.name}</div>
-            <div className="role">{user.role}</div>
-          </div>
+            <div className="role">{user.role} · my account</div>
+          </Link>
           <button type="button" className="logout-btn" onClick={logout} title="Sign out">
             <LogoutIcon />
           </button>

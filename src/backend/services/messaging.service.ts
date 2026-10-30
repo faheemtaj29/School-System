@@ -341,6 +341,23 @@ export const messagingService = {
     };
   },
 
+  /**
+   * One message to one number (e.g. a password reset link): sent through the gateway when one
+   * is set up; always returns a WhatsApp link so it can also be handed over by hand.
+   */
+  async sendOne(rawPhone: string | undefined | null, text: string) {
+    const { cfg } = await loadConfig();
+    const phone = normalizePhone(rawPhone, cfg.countryCode);
+    const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : null;
+    if (!phone || cfg.provider === "none") return { sent: false, waLink };
+    try {
+      await deliver(cfg, phone, text);
+      return { sent: true, waLink };
+    } catch {
+      return { sent: false, waLink };
+    }
+  },
+
   async log(limit = 200) {
     await dbConnect();
     return MessageLog.find()

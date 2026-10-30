@@ -171,6 +171,11 @@ function LoginInner() {
                 required
               />
             </Field>
+            {!registering ? (
+              <Link href="/forgot-password" className="login-forgot">
+                Forgot password?
+              </Link>
+            ) : null}
             {registering ? (
               <Field label="Confirm password" required>
                 <input

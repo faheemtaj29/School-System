@@ -7,6 +7,9 @@ const publicPaths = [
   "/",
   "/login",
   "/setup",
+  // Password reset from a "Forgot password?" request or a link the office sent.
+  "/forgot-password",
+  "/reset-password",
   "/courses",
   "/admissions",
   "/about",
