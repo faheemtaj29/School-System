@@ -2760,14 +2760,30 @@ tr.rc-fail td { color: #b3261e; }
 td.rs-fail { color: #b3261e; font-weight: 700; }
 
 @media print {
-  .print-root { background: #fff; padding: 0; }
+  .print-root { background: #fff; padding: 0; min-height: 0; }
   .print-toolbar, .print-msg { display: none !important; }
   .print-pages { padding: 0; gap: 0; display: block; }
   .doc-page { box-shadow: none; width: auto; min-height: 0; height: auto; padding: 0; page-break-after: always; break-after: page; }
   .doc-page:last-child { page-break-after: auto; break-after: auto; }
-  .print-pages .doc-page { min-height: 277mm; }
-  .print-pages.landscape .doc-page { min-height: 190mm; }
+  /* Just under the printable height (A4 less 10mm margins), so a full page never spills a blank one. */
+  .print-pages .doc-page { min-height: 272mm; }
+  .print-pages.landscape .doc-page { min-height: 185mm; }
   table.doc-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* Two or three slips share an A4 page: tighter rows so they never spill onto the next. */
+  .doc-page[class*="slips-"] { gap: 5mm; }
+  .slip { padding: 4mm; font-size: 10.5px; }
+  .slip table.doc-table th, .slip table.doc-table td { padding: 2px 5px; }
+  .slip .doc-head { margin-bottom: 6px; padding-bottom: 5px; }
+  .slip .doc-head img { width: 38px; height: 38px; }
+  .slip-info { margin-bottom: 5px; }
+  .slip-foot .signs { padding-top: 14px; }
+  /* Account documents (certificates, vouchers, ledgers): a long table stays on one page where it can. */
+  .doc-page.qbp { padding: 0 2mm; }
+  .qbp table.qbp-lines td { padding-top: 5px; padding-bottom: 5px; }
+  .slips-3 .slip { padding: 3mm; font-size: 9.5px; }
+  .slips-3 table.doc-table th, .slips-3 table.doc-table td { padding: 1px 4px; font-size: 9.5px; }
+  .slips-3 .doc-head img { width: 30px; height: 30px; }
+  .slips-3 .slip-foot p { display: none; }
 }
 .ec-note { font-size: 11px; background: var(--saffron-light); color: #96650f; border-radius: 6px; padding: 2px 8px; }
 .doc-page > .rc-info, .doc-page > dl { flex: none; }
@@ -3291,6 +3307,18 @@ table.qbp-je { width: 100%; border-collapse: collapse; margin-top: 22px; font-si
 .ch-notes ul { margin: 0; padding: 0; list-style: none; }
 .ch-bank { display: block; padding-left: 10px; }
 .print-pages .ch-sheet { min-height: 0; }
+/* On paper the three copies must fit one landscape A4 (190mm printable): tighter rows, no sheet padding. */
+@media print {
+  .ch-sheet { padding: 0; }
+  .ch-head { padding: 4px 6px; }
+  .ch-head img { width: 30px; height: 30px; }
+  .ch-head h1 { font-size: 15px; }
+  .ch-line, .ch-line.split span, .ch-line.split u { padding-top: 2px; padding-bottom: 2px; }
+  .ch-table th, .ch-table td { padding: 2px 5px; }
+  .ch-table tr.gap td { height: 6px; }
+  .ch-notes { font-size: 7.8px; line-height: 1.3; padding: 4px 6px 5px; }
+  .ch-words, .ch-copy { padding-top: 2px; padding-bottom: 2px; }
+}
 @media screen and (max-width: 900px) {
   .print-toolbar { padding: 10px 12px; }
   .print-toolbar span { display: none; }

@@ -67,11 +67,19 @@ function PaperTable({ papers }: { papers: Paper[] }) {
 export function RollSlipsPrint({ termId, classIds, perPage }: { termId: string; classIds: string; perPage: number }) {
   const { data, error } = usePrintData<SlipData>(slipsUrl(termId, classIds));
   const slips = data?.batches.flatMap((b) => b.students.map((s) => ({ ...s, batch: b }))) || [];
-  const per = [1, 2, 3].includes(perPage) ? perPage : 2;
+  const asked = [1, 2, 3].includes(perPage) ? perPage : 2;
+  // Three slips fit an A4 page only with a short date sheet; a long one goes two to a page.
+  const mostPapers = Math.max(0, ...(data?.batches.map((b) => b.papers.length) || []));
+  const per = asked === 3 && mostPapers > 6 ? 2 : asked;
   return (
     <PrintShell
       title="Roll Number Slips"
-      info={data ? `${slips.length} slips · ${data.term.name} ${data.term.academicYear}` : undefined}
+      info={
+        data
+          ? `${slips.length} slips · ${data.term.name} ${data.term.academicYear}` +
+            (per !== asked ? ` · ${mostPapers} papers, so 2 slips per page` : "")
+          : undefined
+      }
       error={error}
       loading={!data}
     >
