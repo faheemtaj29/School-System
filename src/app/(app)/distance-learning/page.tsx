@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useSchoolProfile } from "@/lib/useSchoolProfile";
+import { MaterialsPanel, embedUrl } from "@/components/elearning/Materials";
 import {
   EmptyState,
   Field,
@@ -86,7 +87,7 @@ type Diploma = {
   status: string;
 };
 
-type Tab = "courses" | "lectures" | "enrollments" | "diplomas" | "quizzes";
+type Tab = "courses" | "lectures" | "materials" | "enrollments" | "diplomas" | "quizzes";
 
 const courseBlank = {
   code: "",
@@ -493,8 +494,8 @@ export default function DistanceLearningPage() {
               ? "Your courses — schedule live sessions and upload recorded lectures"
               : "Online classes, live & recorded lectures, enrollments and diplomas"
         }
-        actionLabel={canManage ? actionLabel : undefined}
-        onAction={canManage ? openCreate : undefined}
+        actionLabel={canManage && tab !== "materials" ? actionLabel : undefined}
+        onAction={canManage && tab !== "materials" ? openCreate : undefined}
       />
 
       <div className="pay-stat-row">
@@ -525,6 +526,7 @@ export default function DistanceLearningPage() {
           [
             ["courses", "Courses"],
             ["lectures", "Live & Recorded"],
+            ["materials", "Study Materials"],
             ["enrollments", "Enrollments"],
             ["diplomas", "Diplomas"],
             ["quizzes", "Quizzes"],
@@ -636,6 +638,14 @@ export default function DistanceLearningPage() {
         </Panel>
       ) : null}
 
+      {tab === "materials" ? (
+        <MaterialsPanel
+          canManage={canManage}
+          courses={courses.map((c) => ({ _id: c._id, code: c.code, title: c.title }))}
+          lectures={lectures}
+        />
+      ) : null}
+
       {tab === "lectures" ? (
         <Panel title="Live Classes & Recorded Lectures" meta={`${lectures.length} SESSIONS`}>
           {isStudent && watching?.recordingUrl ? (
@@ -651,6 +661,14 @@ export default function DistanceLearningPage() {
                   controls
                   preload="metadata"
                   onEnded={() => markLecture(watching, true)}
+                />
+              ) : embedUrl(watching.recordingUrl) ? (
+                <iframe
+                  className="lecture-embed"
+                  src={embedUrl(watching.recordingUrl)!}
+                  title={watching.title}
+                  allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                  allowFullScreen
                 />
               ) : (
                 <a

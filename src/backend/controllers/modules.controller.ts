@@ -26,6 +26,7 @@ import {
   noticeSchema,
   courseSchema,
   lectureSchema,
+  materialSchema,
   enrollmentSchema,
   diplomaSchema,
   quizSchema,
@@ -764,12 +765,13 @@ export const reportsController = {
   },
 };
 
-type EKind = "course" | "lecture" | "enrollment" | "diploma" | "quiz" | "quiz-attempt";
+type EKind = "course" | "lecture" | "material" | "enrollment" | "diploma" | "quiz" | "quiz-attempt";
 
 function eKind(req: Request): EKind {
   const k = new URL(req.url).searchParams.get("kind") || "course";
   if (
     k === "lecture" ||
+    k === "material" ||
     k === "enrollment" ||
     k === "diploma" ||
     k === "quiz" ||
@@ -826,6 +828,14 @@ export const elearningController = {
           stats,
           portal,
           lectures: await elearningService.listLectures(courseId, scope),
+        });
+      }
+      if (kind === "material") {
+        return jsonOk({
+          kind,
+          stats,
+          portal,
+          materials: await elearningService.listMaterials(courseId, scope),
         });
       }
       if (kind === "enrollment") {
@@ -897,6 +907,12 @@ export const elearningController = {
           data.teacherId = data.teacherId || portal.teacherId;
         }
         return jsonOk({ lecture: await elearningService.createLecture(data) }, 201);
+      }
+      if (kind === "material") {
+        const parsed = materialSchema.safeParse(body);
+        if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+        const scope = portal.role === "teacher" && portal.teacherId ? { teacherId: portal.teacherId } : undefined;
+        return jsonOk({ material: await elearningService.createMaterial(parsed.data, session!.id, scope) }, 201);
       }
       if (kind === "enrollment") {
         if (session!.role === "teacher") {
@@ -996,10 +1012,15 @@ export const elearningController = {
     try {
       const { id } = await ctx.params;
       const kind = eKind(req);
-      if (session!.role === "teacher" && kind !== "lecture") {
-        return jsonError("Teachers can only delete their own lectures", 403);
+      if (session!.role === "teacher" && kind !== "lecture" && kind !== "material") {
+        return jsonError("Teachers can only delete their own lectures and materials", 403);
       }
       if (kind === "lecture") return jsonOk(await elearningService.removeLecture(id));
+      if (kind === "material") {
+        const portal = await elearningService.scopeFor(session!);
+        const scope = portal.role === "teacher" ? { teacherId: portal.teacherId || "none" } : undefined;
+        return jsonOk(await elearningService.removeMaterial(id, scope));
+      }
       if (kind === "enrollment") return jsonOk(await elearningService.removeEnrollment(id));
       if (kind === "diploma") return jsonOk(await elearningService.removeDiploma(id));
       if (kind === "quiz") return jsonOk(await elearningService.removeQuiz(id));

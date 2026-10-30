@@ -396,6 +396,22 @@ export const lectureSchema = z.object({
   order: z.coerce.number().min(1).default(1),
 });
 
+/** A course material: an uploaded file (/uploads/materials/…) or an http(s) link. */
+export const materialSchema = z.object({
+  courseId: z.string().min(1, "Choose a course"),
+  lectureId: z.string().optional().nullable(),
+  title: z.string().trim().min(1, "Give the material a title").max(200),
+  description: z.string().trim().max(1000).optional(),
+  source: z.enum(["file", "link"]),
+  url: z
+    .string()
+    .trim()
+    .refine((u) => /^https?:\/\/[^\s]+$/i.test(u) || /^\/uploads\/materials\/[\w.-]+$/.test(u), "Enter a web link starting with https://"),
+  fileName: z.string().max(260).optional(),
+  fileType: z.string().max(30).default("other"),
+  size: z.coerce.number().min(0).optional(),
+});
+
 export const enrollmentSchema = z.object({
   courseId: z.string().min(1),
   studentId: z.string().min(1),

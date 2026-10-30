@@ -2,7 +2,9 @@
  * Distance learning business logic (courses, lectures, enrollments, diplomas).
  */
 import { dbConnect } from "@/backend/config/database";
-import { Course, Lecture, Enrollment, Diploma, Quiz, QuizAttempt } from "@/backend/models/ELearning";
+import { Course, Lecture, Enrollment, Diploma, Quiz, QuizAttempt, Material } from "@/backend/models/ELearning";
+import { unlink } from "fs/promises";
+import path from "path";
 import { Fee } from "@/backend/models/Fee";
 import { parseOptionalDate } from "@/backend/lib/http";
 import { ServiceError, type SessionUser } from "@/backend/types";
@@ -13,6 +15,7 @@ import { Types } from "mongoose";
 import type {
   courseSchema,
   lectureSchema,
+  materialSchema,
   enrollmentSchema,
   diplomaSchema,
   quizSchema,
@@ -21,6 +24,13 @@ import type {
 
 type CourseInput = z.infer<typeof courseSchema>;
 type LectureInput = z.infer<typeof lectureSchema>;
+type MaterialInput = z.infer<typeof materialSchema>;
+
+/** Deletes an uploaded material file; links and files elsewhere are left alone. */
+async function removeMaterialFile(url: string) {
+  if (!/^\/uploads\/materials\/[\w.-]+$/.test(url)) return;
+  await unlink(path.join(process.cwd(), "public", url)).catch(() => undefined);
+}
 type EnrollmentInput = z.infer<typeof enrollmentSchema>;
 type DiplomaInput = z.infer<typeof diplomaSchema>;
 type QuizInput = z.infer<typeof quizSchema>;
@@ -248,6 +258,55 @@ export const elearningService = {
     if (!item) throw new ServiceError("NOT_FOUND", "Course not found", 404);
     await Lecture.deleteMany({ courseId: id });
     await Enrollment.deleteMany({ courseId: id });
+    const materials = await Material.find({ courseId: id }).select("url").lean();
+    for (const m of materials) await removeMaterialFile(m.url);
+    await Material.deleteMany({ courseId: id });
+    return { ok: true };
+  },
+
+  // —— Study materials ——
+  /** A teacher sees materials of the courses they teach; a student those of their enrolled courses. */
+  async listMaterials(courseId?: string | null, scope?: { teacherId?: string; studentId?: string }) {
+    await dbConnect();
+    const filter: Record<string, unknown> = {};
+    if (courseId) filter.courseId = courseId;
+    if (scope?.teacherId) {
+      const mine = (await Course.find({ teacherId: scope.teacherId }).select("_id").lean()).map((c) => c._id);
+      filter.courseId = courseId ? { $in: mine.filter((c) => String(c) === courseId) } : { $in: mine };
+    }
+    if (scope?.studentId) {
+      const enrolled = (
+        await Enrollment.find({ studentId: scope.studentId, status: { $ne: "dropped" } }).select("courseId").lean()
+      ).map((e) => e.courseId);
+      filter.courseId = courseId ? { $in: enrolled.filter((c) => String(c) === courseId) } : { $in: enrolled };
+    }
+    return Material.find(filter)
+      .populate("courseId", "code title")
+      .populate("lectureId", "title")
+      .sort({ createdAt: -1 })
+      .lean();
+  },
+
+  async createMaterial(data: MaterialInput, userId?: string, scope?: { teacherId?: string }) {
+    await dbConnect();
+    const course = await Course.findById(data.courseId).select("teacherId").lean();
+    if (!course) throw new ServiceError("NOT_FOUND", "Course not found", 404);
+    if (scope?.teacherId && String(course.teacherId) !== scope.teacherId) {
+      throw new ServiceError("FORBIDDEN", "You can add materials only to your own courses", 403);
+    }
+    return Material.create({ ...data, lectureId: data.lectureId || undefined, createdBy: userId || undefined });
+  },
+
+  async removeMaterial(id: string, scope?: { teacherId?: string }) {
+    await dbConnect();
+    const item = await Material.findById(id).populate("courseId", "teacherId").lean();
+    if (!item) throw new ServiceError("NOT_FOUND", "Material not found", 404);
+    const owner = (item.courseId as unknown as { teacherId?: unknown } | null)?.teacherId;
+    if (scope?.teacherId && String(owner) !== scope.teacherId) {
+      throw new ServiceError("FORBIDDEN", "You can remove materials only from your own courses", 403);
+    }
+    await Material.deleteOne({ _id: id });
+    await removeMaterialFile(item.url);
     return { ok: true };
   },
 

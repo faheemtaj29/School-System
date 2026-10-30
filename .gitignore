@@ -43,3 +43,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Database backups (npm run db:backup) hold personal data — never commit them
+/backups/

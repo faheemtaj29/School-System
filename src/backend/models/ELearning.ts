@@ -117,6 +117,45 @@ const LectureSchema = new Schema<ILecture>(
 
 export const Lecture = models.Lecture || model<ILecture>("Lecture", LectureSchema);
 
+/**
+ * Study material for a course: an uploaded file (PDF, Word, Excel, PowerPoint, image, video…)
+ * or a link (YouTube, Google Drive / Docs, any website). Students of the course view or download it.
+ */
+export interface IMaterial {
+  courseId: Types.ObjectId;
+  /** Optional: the lecture it goes with. */
+  lectureId?: Types.ObjectId;
+  title: string;
+  description?: string;
+  source: "file" | "link";
+  url: string;
+  fileName?: string;
+  /** pdf, word, excel, powerpoint, image, video, audio, youtube, link, other … */
+  fileType: string;
+  size?: number;
+  createdBy?: Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const MaterialSchema = new Schema<IMaterial>(
+  {
+    courseId: { type: Schema.Types.ObjectId, ref: "Course", required: true, index: true },
+    lectureId: { type: Schema.Types.ObjectId, ref: "Lecture" },
+    title: { type: String, required: true, trim: true },
+    description: { type: String, trim: true },
+    source: { type: String, enum: ["file", "link"], required: true },
+    url: { type: String, required: true, trim: true },
+    fileName: String,
+    fileType: { type: String, default: "other" },
+    size: Number,
+    createdBy: { type: Schema.Types.ObjectId, ref: "User" },
+  },
+  { timestamps: true }
+);
+
+export const Material = models.Material || model<IMaterial>("Material", MaterialSchema);
+
 export interface IEnrollment {
   courseId: Types.ObjectId;
   studentId: Types.ObjectId;
