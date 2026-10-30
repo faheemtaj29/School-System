@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, ReactNode, useEffect, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { PlusIcon } from "@/components/Icons";
+import { TableExport } from "@/components/TableExport";
 
 export const inputClass = "inp";
 
@@ -162,23 +163,30 @@ export function Hero({
   );
 }
 
+/** A titled card. When it holds a table, its header gets Export (Excel, CSV, Print / PDF). */
 export function Panel({
   title,
   meta,
   children,
   style,
+  exportable = true,
 }: {
   title?: string;
   meta?: string;
   children: ReactNode;
   style?: React.CSSProperties;
+  exportable?: boolean;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
   return (
-    <div className="panel" style={style}>
+    <div className="panel" style={style} ref={ref}>
       {title ? (
         <div className="panel-head">
           <h2>{title}</h2>
-          {meta ? <div className="meta">{meta}</div> : null}
+          <div className="panel-head-side">
+            {meta ? <div className="meta">{meta}</div> : null}
+            {exportable ? <TableExport root={ref} title={title} /> : null}
+          </div>
         </div>
       ) : null}
       {children}
