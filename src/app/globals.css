@@ -1047,7 +1047,8 @@ a.link-btn {
 .form-grid.three {
   grid-template-columns: repeat(3, 1fr);
 }
-.field label {
+/* Only the field's own caption — checkboxes and chips inside a field keep their own layout. */
+.field > label {
   display: block;
   font-size: 13px;
   font-weight: 500;
@@ -2100,18 +2101,25 @@ textarea.inp {
 .cc-subjects { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0 4px; }
 
 .pick-list {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px;
-  max-height: 240px; overflow-y: auto; padding: 4px; border: 1px solid var(--line);
-  border-radius: var(--radius); background: var(--paper);
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 8px;
+  max-height: 320px; overflow-y: auto; padding: 8px; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--fill);
 }
 .pick {
-  display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-radius: 9px;
-  font-size: 12px; cursor: pointer; background: var(--card); border: 1px solid transparent;
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; min-width: 0;
+  font-size: 14px; font-weight: 500; color: var(--text); cursor: pointer; background: var(--card);
+  border: 1px solid var(--line); transition: border-color .15s, background .15s;
 }
-.pick.on { border-color: var(--jade); background: var(--jade-light); }
+.pick:hover { border-color: var(--line-strong); }
+.pick input { width: 16px; height: 16px; flex-shrink: 0; accent-color: var(--jade); margin: 0; }
+.pick b { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick.on { border-color: color-mix(in srgb, var(--jade) 45%, white); background: var(--jade-light); }
 .pick span {
-  margin-left: auto; font-family: var(--font-mono), monospace; font-size: 9.5px; color: var(--text-dim);
+  margin-left: auto; flex-shrink: 0; font-size: 11px; font-weight: 600; color: var(--text-dim);
+  background: var(--fill); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px;
 }
+.pick-tools { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+.pick-tools .inp { max-width: 260px; min-height: 36px; }
 
 /* ================= ROLE DASHBOARDS ================= */
 .progress {
@@ -3619,3 +3627,7 @@ tr.def-hot td { background: #fff6f5; }
 .att-day-nav .btn-ghost { padding: 0; font-size: 18px; line-height: 1; }
 .att-absentees { color: var(--red); font-size: 12.5px; max-width: 320px; }
 table.reg tr.att-row-open td { background: var(--jade-light); }
+
+/* A checkbox with its text on one line (filters, options) */
+.check-row { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-2); cursor: pointer; }
+.check-row input { width: 16px; height: 16px; margin: 0; accent-color: var(--jade); }

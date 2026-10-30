@@ -45,6 +45,8 @@ export function ClassForm({
     subjects: [] as string[],
   };
   const [form, setForm] = useState(empty);
+  const [subjectSearch, setSubjectSearch] = useState("");
+  const [onlyPicked, setOnlyPicked] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -101,6 +103,7 @@ export function ClassForm({
       title={initial ? "Edit Class / Section" : "Add New Class / Section"}
       subtitle="Assign a room, capacity and class teacher"
       submitLabel={initial ? "Save Changes" : "Create Class"}
+      wide
     >
       {error ? <div className="alert err">{error}</div> : null}
       <div className="form-grid">
@@ -147,18 +150,35 @@ export function ClassForm({
       {subjects.length ? (
         <div style={{ marginTop: 16 }}>
           <Field label={`Subjects (${form.subjects.length} selected)`}>
+            <div className="pick-tools">
+              <input
+                className={inputClass}
+                placeholder="Search subjects…"
+                value={subjectSearch}
+                onChange={(e) => setSubjectSearch(e.target.value)}
+              />
+              <label className="check-row">
+                <input type="checkbox" checked={onlyPicked} onChange={(e) => setOnlyPicked(e.target.checked)} />
+                Show selected only
+              </label>
+            </div>
             <div className="pick-list">
-              {subjects.map((s) => (
-                <label key={s._id} className={`pick${form.subjects.includes(s._id) ? " on" : ""}`}>
-                  <input
-                    type="checkbox"
-                    checked={form.subjects.includes(s._id)}
-                    onChange={() => toggleSubject(s._id)}
-                  />
-                  {s.name}
-                  <span>{s.code}</span>
-                </label>
-              ))}
+              {subjects
+                .filter((s) => !onlyPicked || form.subjects.includes(s._id))
+                .filter((s) => !subjectSearch || `${s.name} ${s.code}`.toLowerCase().includes(subjectSearch.toLowerCase()))
+                // Ticked subjects first, so the class's own list is visible without scrolling.
+                .sort((a, b) => Number(form.subjects.includes(b._id)) - Number(form.subjects.includes(a._id)) || a.name.localeCompare(b.name))
+                .map((s) => (
+                  <label key={s._id} className={`pick${form.subjects.includes(s._id) ? " on" : ""}`} title={`${s.name} (${s.code})`}>
+                    <input
+                      type="checkbox"
+                      checked={form.subjects.includes(s._id)}
+                      onChange={() => toggleSubject(s._id)}
+                    />
+                    <b>{s.name}</b>
+                    <span>{s.code}</span>
+                  </label>
+                ))}
             </div>
           </Field>
         </div>

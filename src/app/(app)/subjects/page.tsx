@@ -90,6 +90,32 @@ export default function SubjectsPage() {
     twins.find((list) => list.some((x) => x._id === sub._id))?.filter((x) => x._id !== sub._id) ?? [];
   const unassigned = subjects.filter((sub) => !teachersFor(sub._id).length).length;
 
+  async function mergeAllTwins() {
+    const names = twins.map((list) => `• ${list[0].name}: ${list.map((x) => x.code).join(", ")}`).join("\n");
+    const ask = [
+      "Merge every duplicate into one subject per name?",
+      "",
+      names,
+      "",
+      "Classes, teachers, timetable, date sheets and marks all move to the one that is kept, which gets a single code (e.g. ISL). This cannot be undone.",
+    ].join("\n");
+    if (!confirm(ask)) return;
+    const res = await fetch("/api/subjects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "merge-duplicates" }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) setNotice({ ok: false, text: d.error || "Could not merge" });
+    else {
+      const done = (d.merged || []).map((m: { name: string; code: string }) => `${m.name} → ${m.code}`).join(", ");
+      const left = (d.skipped || []).map((m: { name: string; reason: string }) => `${m.name}: ${m.reason}`).join(" ");
+      setNotice({ ok: !left, text: `Merged ${(d.merged || []).length} subject name(s): ${done}. ${d.subjects} subjects now.${left ? ` Not merged — ${left}` : ""}` });
+    }
+    load();
+  }
+
+
   /** How many classes teach each subject. */
   const usage = useMemo(() => {
     const map = new Map<string, number>();
@@ -129,6 +155,18 @@ export default function SubjectsPage() {
           setOpen(true);
         }}
       />
+
+      {twins.length ? (
+        <div className="alert warn" style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+          <span>
+            <b>{twins.length} subject name{twins.length === 1 ? " is" : "s are"} repeated</b> (e.g. {twins[0][0].name}:{" "}
+            {twins[0].map((x) => x.code).join(", ")}). Each should be one subject with one code.
+          </span>
+          <button type="button" className="btn-dark" onClick={mergeAllTwins}>
+            Merge all duplicates
+          </button>
+        </div>
+      ) : null}
 
       <div className="accounting-toolbar">
         <input

@@ -29,6 +29,8 @@ export const subjectController = {
     if (error) return error;
     try {
       const body = await req.json();
+      // { action: "merge-duplicates" } — one subject per name across all classes.
+      if (body?.action === "merge-duplicates") return jsonOk(await subjectService.mergeAllDuplicates());
       const parsed = subjectSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
       return jsonOk({ subject: await subjectService.create(parsed.data) }, 201);

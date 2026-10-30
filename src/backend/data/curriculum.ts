@@ -494,3 +494,43 @@ export function curriculumSummary() {
     };
   });
 }
+
+/** "Islamiat", "ISLAMIAT " and "Islamiat." are the same subject. */
+export const subjectKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/** A level-free code: PRI-ENG → ENG, GEN-PST101 → PST. */
+export const plainCode = (code: string) =>
+  code.toUpperCase().replace(/^(PRE|PRI|MID|SEC|INT|GEN|CS|BA|MB|MS|EN)-/, "").replace(/\d+$/, "") || code.toUpperCase();
+
+/**
+ * One subject per name: English is taught from primary to intermediate but is one subject
+ * with one code. Each name gets its level-free code (ENG, ISL…) unless another name already
+ * has it, in which case it keeps its own first code. `codeFor` maps every curriculum code
+ * to the code of its single subject.
+ */
+export function canonicalSubjects() {
+  const groups = new Map<string, CurriculumSubject[]>();
+  for (const s of CURRICULUM_SUBJECTS) {
+    const key = subjectKey(s.name);
+    groups.set(key, [...(groups.get(key) || []), s]);
+  }
+  // Subjects taught at the most levels claim the plain code first (Mathematics gets MTH,
+  // not the pre-primary "Numbers & Counting").
+  const order = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
+  const taken = new Set<string>();
+  const chosen = new Map<string, string>();
+  for (const [key, list] of order) {
+    const plain = plainCode(list[0].code);
+    const code = taken.has(plain) ? list[0].code : plain;
+    taken.add(code);
+    chosen.set(key, code);
+  }
+  const codeFor = new Map<string, string>();
+  const subjects: CurriculumSubject[] = [];
+  for (const [key, list] of groups) {
+    const code = chosen.get(key)!;
+    subjects.push({ ...list[0], code });
+    for (const s of list) codeFor.set(s.code, code);
+  }
+  return { subjects, codeFor };
+}

@@ -28,6 +28,14 @@ import { Subject } from "@/backend/models/Subject";
 import { Teacher } from "@/backend/models/Teacher";
 import { ServiceError } from "@/backend/types";
 import type { SubjectInput } from "@/backend/validators/subject.validator";
+import { canonicalSubjects, plainCode, subjectKey } from "@/backend/data/curriculum";
+
+/** Another subject already using this name (any spelling of case, spaces or dots)? */
+async function nameTaken(name: string, exceptId?: string) {
+  const key = subjectKey(name);
+  const all = await Subject.find(exceptId ? { _id: { $ne: exceptId } } : {}).select("name code").lean();
+  return all.find((x) => subjectKey(x.name) === key);
+}
 
 export const subjectService = {
   async list() {
@@ -42,11 +50,19 @@ export const subjectService = {
 
   async create(data: SubjectInput) {
     await dbConnect();
+    const twin = await nameTaken(data.name);
+    if (twin) {
+      throw new ServiceError("CONFLICT", `${twin.name} already exists (code ${twin.code}). Use that subject for every class.`, 409);
+    }
     return Subject.create(data);
   },
 
   async update(id: string, data: SubjectInput) {
     await dbConnect();
+    const twin = await nameTaken(data.name, id);
+    if (twin) {
+      throw new ServiceError("CONFLICT", `${twin.name} already exists (code ${twin.code}). Merge the two instead of renaming.`, 409);
+    }
     const item = await Subject.findByIdAndUpdate(id, data, { new: true });
     if (!item) throw new ServiceError("NOT_FOUND", "Subject not found", 404);
     return item;
@@ -91,14 +107,25 @@ export const subjectService = {
     await dbConnect();
     if (fromId === intoId) throw new ServiceError("VALIDATION", "Pick a different subject to merge into", 400);
     const [from, into] = await Promise.all([mustFind(fromId), mustFind(intoId)]);
-    const use = await examUse(fromId);
-    if (use.total) {
+    // A date sheet listing both subjects would end up with the same paper twice.
+    const both = await ExamSchedule.exists({ "rows.subjectId": { $all: [from._id, into._id] } });
+    if (both) {
       throw new ServiceError(
         "CONFLICT",
-        `${from.name} (${from.code}) already has exam records, so it can't be merged automatically. Rename it instead.`,
+        `A date sheet has both ${from.code} and ${into.code} as separate papers. Remove one paper from it, then merge.`,
         409
       );
     }
+    // Exam records move across too, so no marks or date sheets are lost.
+    await Promise.all([
+      ExamMark.updateMany({ subjectId: from._id }, { $set: { subjectId: into._id } }),
+      Exam.updateMany({ subjectId: from._id }, { $set: { subjectId: into._id } }),
+      ExamSchedule.updateMany(
+        { "rows.subjectId": from._id },
+        { $set: { "rows.$[r].subjectId": into._id } },
+        { arrayFilters: [{ "r.subjectId": from._id }] }
+      ),
+    ]);
     // $addToSet first, then $pull, so a class that had both ends up with one entry.
     const classes = await ClassModel.updateMany({ subjects: fromId }, { $addToSet: { subjects: intoId } });
     await ClassModel.updateMany({ subjects: fromId }, { $pull: { subjects: fromId } });
@@ -107,5 +134,47 @@ export const subjectService = {
     await TimetableSlot.updateMany({ subjectId: fromId }, { $set: { subjectId: intoId } });
     await Subject.deleteOne({ _id: fromId });
     return { ok: true, into: { _id: String(into._id), name: into.name, code: into.code }, classes: classes.modifiedCount, teachers: teachers.modifiedCount };
+  },
+
+  /**
+   * One subject per name: every duplicate (English PRI-ENG, MID-ENG, SEC-ENG…) is merged into
+   * one, which takes a level-free code (ENG) — classes, teachers, timetable, date sheets and
+   * marks all move to it.
+   */
+  async mergeAllDuplicates() {
+    await dbConnect();
+    const all = await Subject.find().lean();
+    const groups = new Map<string, typeof all>();
+    for (const x of all) groups.set(subjectKey(x.name), [...(groups.get(subjectKey(x.name)) || []), x]);
+    const { subjects: canonical } = canonicalSubjects();
+    const wanted = new Map(canonical.map((c) => [subjectKey(c.name), c.code]));
+    const merged: { name: string; code: string; removed: string[] }[] = [];
+    const skipped: { name: string; reason: string }[] = [];
+
+    for (const [key, list] of groups) {
+      if (list.length < 2) continue;
+      // Keep the one most classes already use.
+      const uses = await Promise.all(list.map((x) => ClassModel.countDocuments({ subjects: x._id })));
+      const keepIdx = uses.indexOf(Math.max(...uses));
+      const keep = list[keepIdx];
+      const removed: string[] = [];
+      try {
+        for (const [i, x] of list.entries()) {
+          if (i === keepIdx) continue;
+          await this.merge(String(x._id), String(keep._id));
+          removed.push(x.code);
+        }
+      } catch (e) {
+        skipped.push({ name: keep.name, reason: (e as Error).message });
+      }
+      // A level-free code, unless another subject already uses it.
+      const code = (wanted.get(key) || plainCode(keep.code)).toUpperCase();
+      if (code !== keep.code && !(await Subject.exists({ code, _id: { $ne: keep._id } }))) {
+        await Subject.updateOne({ _id: keep._id }, { $set: { code } });
+      }
+      const after = await Subject.findById(keep._id).select("code").lean();
+      if (removed.length) merged.push({ name: keep.name, code: after?.code || keep.code, removed });
+    }
+    return { merged, skipped, subjects: await Subject.countDocuments() };
   },
 };

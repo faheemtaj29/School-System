@@ -5,7 +5,7 @@ import { dbConnect } from "@/backend/config/database";
 import { ClassModel } from "@/backend/models/Class";
 import { Student } from "@/backend/models/Student";
 import { Subject } from "@/backend/models/Subject";
-import { CURRICULUM, CURRICULUM_SUBJECTS, curriculumSummary } from "@/backend/data/curriculum";
+import { CURRICULUM, canonicalSubjects, curriculumSummary } from "@/backend/data/curriculum";
 import { ServiceError } from "@/backend/types";
 import type { ClassInput, CurriculumImportInput } from "@/backend/validators/class.validator";
 
@@ -101,7 +101,7 @@ export const classService = {
       stages: curriculumSummary(),
       totals: {
         classes: CURRICULUM.reduce((sum, s) => sum + s.classes.length, 0),
-        subjects: CURRICULUM_SUBJECTS.length,
+        subjects: canonicalSubjects().subjects.length,
       },
     };
   },
@@ -116,9 +116,11 @@ export const classService = {
     const stages = CURRICULUM.filter((stage) => input.stages.includes(stage.key));
     if (!stages.length) throw new ServiceError("VALIDATION", "Unknown stage selection", 400);
 
-    const neededCodes = new Set(stages.flatMap((s) => s.classes.flatMap((c) => c.subjects)));
-    const subjects = CURRICULUM_SUBJECTS.filter((s) => neededCodes.has(s.code));
-    const missing = [...neededCodes].filter((code) => !subjects.some((s) => s.code === code));
+    // One subject per name across all levels (English is ENG from primary to intermediate).
+    const { subjects: canonical, codeFor } = canonicalSubjects();
+    const missing = stages.flatMap((s) => s.classes.flatMap((c) => c.subjects)).filter((code) => !codeFor.has(code));
+    const neededCodes = new Set(stages.flatMap((s) => s.classes.flatMap((c) => c.subjects.map((code) => codeFor.get(code) || code))));
+    const subjects = canonical.filter((s) => neededCodes.has(s.code));
     if (missing.length) {
       throw new ServiceError("INTERNAL", `Curriculum references unknown subject: ${missing[0]}`, 500);
     }
@@ -152,7 +154,7 @@ export const classService = {
             level: cls.level,
             capacity: cls.capacity,
             branchCode,
-            subjects: cls.subjects.map((code) => idByCode.get(code)).filter(Boolean),
+            subjects: [...new Set(cls.subjects.map((code) => codeFor.get(code) || code))].map((code) => idByCode.get(code)).filter(Boolean),
           },
         }))
       )
