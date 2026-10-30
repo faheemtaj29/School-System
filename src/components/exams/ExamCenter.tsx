@@ -64,7 +64,36 @@ type OverviewClass = {
   subjects: OverviewSubject[];
 };
 
-type Overview = { term: TermOption; classes: OverviewClass[] };
+/** `limited`: a teacher, shown only the papers they may mark. */
+type Overview = { term: TermOption; classes: OverviewClass[]; limited?: boolean };
+
+/** One correction of a mark: old → new total, who, when and why. */
+type MarkChange = { at: string; by: string; reason: string; from: string; to: string };
+
+function changeText(h: MarkChange) {
+  const when = new Date(h.at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  return `${h.from} → ${h.to} · ${h.by || "—"} · ${when}${h.reason ? ` · ${h.reason}` : ""}`;
+}
+
+/** "Corrected 2×" next to a mark, with the full history on hover / tap. */
+function Corrected({ history }: { history?: MarkChange[] }) {
+  if (!history?.length) return null;
+  return (
+    <span className="ec-fixed" title={history.map(changeText).join("\n")}>
+      corrected {history.length}×
+    </span>
+  );
+}
+
+/** Once results are final, every change to marks needs a reason (kept in the history). */
+function ReasonBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="alert warn ec-final">
+      <b>Results are final.</b> You can still correct a mistake — say why, and the change is kept in the correction history.
+      <input className={inputClass} value={value} onChange={(e) => onChange(e.target.value)} placeholder="Reason for correction, e.g. totalling error in Q3" />
+    </div>
+  );
+}
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -762,9 +791,11 @@ type SheetStudent = {
   absent: boolean;
   remarks: string;
   saved: boolean;
+  history?: MarkChange[];
 };
 
 type MarksSheet = {
+  final?: boolean;
   classLabel: string;
   subject: { _id: string; name: string; code: string };
   totalMarks: number;
@@ -795,6 +826,12 @@ function MarksStep({ termId, overview, reload }: { termId: string; overview: Ove
           By student — all papers of one student
         </button>
       </div>
+      {overview?.limited ? (
+        <div className="alert">
+          You see the papers you teach. As class teacher you see every paper of your class, so you can prepare the whole
+          class result; all marks compile into the same result cards.
+        </div>
+      ) : null}
       {by === "subject" ? (
         <SubjectMarks termId={termId} overview={overview} reload={reload} />
       ) : (
@@ -814,9 +851,11 @@ type StudentPaper = {
   absent: boolean;
   remarks: string;
   saved: boolean;
+  history?: MarkChange[];
 };
 
 type StudentSheet = {
+  final?: boolean;
   classLabel: string;
   papers: number;
   students: { _id: string; name: string; admissionNo: string; rollNo: string; done: number }[];
@@ -832,6 +871,7 @@ function StudentMarks({ termId, overview, reload }: { termId: string; overview: 
   const classes = overview?.classes || [];
   const [classId, setClassId] = useState("");
   const [studentId, setStudentId] = useState("");
+  const [reason, setReason] = useState("");
   const [sheet, setSheet] = useState<StudentSheet | null>(null);
   const [papers, setPapers] = useState<StudentPaper[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -917,8 +957,10 @@ function StudentMarks({ termId, overview, reload }: { termId: string; overview: 
           classId,
           studentId: student._id,
           subjects: filled.map((p) => ({ subjectId: p.subject._id, marks: p.marks, absent: p.absent, remarks: p.remarks || undefined })),
+          reason: reason.trim() || undefined,
         }),
       });
+      setReason("");
       setMsg(`Saved ${student.name}: ${filled.length} of ${papers.length} papers.`);
       setDirty(false);
       reload();
@@ -1010,7 +1052,7 @@ function StudentMarks({ termId, overview, reload }: { termId: string; overview: 
                         <b>{p.subject.name}</b>
                         <div style={hint}>
                           {p.subject.code} · max {p.totalMarks} · pass {p.passingMarks}
-                          {p.saved ? " · saved" : ""}
+                          {p.saved ? " · saved" : ""} <Corrected history={p.history} />
                         </div>
                       </td>
                       <td>
@@ -1071,6 +1113,7 @@ function StudentMarks({ termId, overview, reload }: { termId: string; overview: 
               </tfoot>
             </table>
           </div>
+          {sheet.final ? <ReasonBox value={reason} onChange={setReason} /> : null}
           <div className="form-actions ec-sticky">
             <button type="button" className="btn-dark" disabled={busy} onClick={() => save("next")}>
               {busy ? "Saving…" : index < students.length - 1 ? "Save & next student" : "Save marks"}
@@ -1093,6 +1136,7 @@ function StudentMarks({ termId, overview, reload }: { termId: string; overview: 
 
 function SubjectMarks({ termId, overview, reload }: { termId: string; overview: Overview | null; reload: () => void }) {
   const classes = overview?.classes || [];
+  const [reason, setReason] = useState("");
   const [classId, setClassId] = useState("");
   const [subjectId, setSubjectId] = useState("");
   const [sheet, setSheet] = useState<MarksSheet | null>(null);
@@ -1187,8 +1231,10 @@ function SubjectMarks({ termId, overview, reload }: { termId: string; overview: 
             absent: r.absent,
             remarks: r.remarks || undefined,
           })),
+          reason: reason.trim() || undefined,
         }),
       });
+      setReason("");
       const left = rows.length - filled.length;
       setMsg(
         `Marks saved for ${filled.length} student(s) — ${sheet.subject.name}, ${sheet.classLabel}.` +
@@ -1300,7 +1346,9 @@ function SubjectMarks({ termId, overview, reload }: { termId: string; overview: 
                       <td className="mono">{r.rollNo || "—"}</td>
                       <td>
                         <b>{r.name}</b>
-                        <div style={hint}>{r.admissionNo}</div>
+                        <div style={hint}>
+                          {r.admissionNo} <Corrected history={r.history} />
+                        </div>
                       </td>
                       {sheet.components.map((c, ci) => {
                         const v = r.marks[c.key];
@@ -1357,6 +1405,7 @@ function SubjectMarks({ termId, overview, reload }: { termId: string; overview: 
               </tbody>
             </table>
           </div>
+          {sheet.final ? <ReasonBox value={reason} onChange={setReason} /> : null}
           <div className="form-actions ec-sticky">
             <button type="button" className="btn-dark" disabled={busy} onClick={save}>
               {busy ? "Saving…" : "Save marks"}
@@ -1379,7 +1428,94 @@ type ResultBatch = {
   cards: { student: { name: string; rollNo: string }; percent: number; obtained: number; totalMarks: number; position: number; grade: string; result: string }[];
 };
 
-function ResultsStep({ termId, overview }: { termId: string; overview: Overview | null }) {
+type Correction = MarkChange & { student: string; admissionNo: string; classLabel: string; subject: string };
+
+/** Finalise the term's results, or reopen them; and the list of every correction made. */
+function FinalPanel({ termId, status, isAdmin, onChanged }: { termId: string; status: string; isAdmin: boolean; onChanged: () => void }) {
+  const [list, setList] = useState<Correction[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const final = status === "closed";
+
+  const load = useCallback(async () => {
+    const d = await call<{ corrections: Correction[] }>(`/api/exams/center/corrections?termId=${termId}`).catch(() => ({ corrections: [] }));
+    setList(d.corrections);
+  }, [termId]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches data, state is set when it arrives
+    load();
+  }, [load]);
+
+  async function toggle() {
+    const ask = final
+      ? "Reopen results? Marks can then be changed without a reason (changes are still kept in the history)."
+      : "Finalise results? After this, every change to marks needs a reason and is kept in the correction history.";
+    if (!confirm(ask)) return;
+    setBusy(true);
+    setErr("");
+    try {
+      await call("/api/exams/center/corrections", { method: "PUT", body: JSON.stringify({ termId, final: !final }) });
+      onChanged();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Panel title="Final results & corrections" meta={final ? "FINAL" : "OPEN FOR ENTRY"}>
+      {err ? <div className="alert err">{err}</div> : null}
+      <div className="form-actions" style={{ marginTop: 0, alignItems: "center" }}>
+        {isAdmin ? (
+          <button type="button" className={final ? "btn-ghost" : "btn-dark"} disabled={busy} onClick={toggle}>
+            {final ? "Reopen results" : "Finalise results"}
+          </button>
+        ) : null}
+        <span style={{ ...hint, marginTop: 0 }}>
+          {final
+            ? "Results are final: teachers can still correct mistakes, with a reason."
+            : "Finalise once all marks are checked — later changes then need a reason."}
+        </span>
+      </div>
+      {!list ? null : !list.length ? (
+        <p style={hint}>No corrections yet. Every change to marks already entered is listed here.</p>
+      ) : (
+        <div className="table-scroll">
+          <table className="ec-table">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Student</th>
+                <th>Class · Paper</th>
+                <th>Marks</th>
+                <th>By</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((c, i) => (
+                <tr key={i}>
+                  <td className="mono">{new Date(c.at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
+                  <td>
+                    <b>{c.student}</b>
+                    <div style={hint}>{c.admissionNo}</div>
+                  </td>
+                  <td>{c.classLabel} · {c.subject}</td>
+                  <td className="mono">{c.from} → {c.to}</td>
+                  <td>{c.by || "—"}</td>
+                  <td>{c.reason || <span style={hint}>—</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function ResultsStep({ termId, overview, isAdmin, reload }: { termId: string; overview: Overview | null; isAdmin: boolean; reload: () => void }) {
   const classes = overview?.classes || [];
   const [selected, setSelected] = useState<string[]>([]);
   const [batches, setBatches] = useState<ResultBatch[] | null>(null);
@@ -1404,6 +1540,7 @@ function ResultsStep({ termId, overview }: { termId: string; overview: Overview 
   return (
     <div className="stack-lg">
       {err ? <div className="alert err">{err}</div> : null}
+      {overview ? <FinalPanel termId={termId} status={overview.term.status} isAdmin={isAdmin} onChanged={reload} /> : null}
       <Panel title="Classes" meta="RESULT CARDS">
         <ClassChecklist
           classes={classes.map((c) => ({
@@ -1558,7 +1695,7 @@ export function ExamCenter({ step, onStep, role }: { step: ExamStep; onStep: (s:
       ) : null}
       {step === "slips" ? <SlipsStep termId={termId} overview={overview} isAdmin={isAdmin} reload={loadOverview} /> : null}
       {step === "marks" ? <MarksStep termId={termId} overview={overview} reload={loadOverview} /> : null}
-      {step === "results" ? <ResultsStep termId={termId} overview={overview} /> : null}
+      {step === "results" ? <ResultsStep termId={termId} overview={overview} isAdmin={isAdmin} reload={loadOverview} /> : null}
     </div>
   );
 }

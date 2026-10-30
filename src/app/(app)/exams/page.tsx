@@ -19,10 +19,10 @@ import {
 } from "@/lib/types";
 
 /* ─── local types ─────────────────────────────────────────────── */
-type WorkflowTab = "center" | "results" | "marksheet" | "schedules" | "types" | "terms";
+type WorkflowTab = "center" | "results" | "types" | "terms";
 
 const CENTER_STEPS: ExamStep[] = ["datesheet", "slips", "marks", "results"];
-const OTHER_TABS: WorkflowTab[] = ["results", "marksheet", "schedules", "types", "terms"];
+const OTHER_TABS: WorkflowTab[] = ["results", "types", "terms"];
 
 type MarkComponents = {
   theory: number;
@@ -30,33 +30,6 @@ type MarkComponents = {
   assignment: number;
   attendance: number;
   project: number;
-};
-
-const COMP_KEYS: (keyof MarkComponents)[] = ["theory", "viva", "assignment", "attendance", "project"];
-const COMP_LABEL: Record<keyof MarkComponents, string> = {
-  theory: "Theory",
-  viva: "Viva",
-  assignment: "Asn",
-  attendance: "Att",
-  project: "Proj",
-};
-
-const DEFAULT_COMP: MarkComponents = { theory: 60, viva: 10, assignment: 10, attendance: 10, project: 10 };
-
-type SheetSubject = {
-  subjectId: string;
-  name: string;
-  code?: string;
-  maxMarks: number;
-  markComponents: MarkComponents;
-};
-
-type SheetRow = {
-  studentId: string;
-  name: string;
-  rollNumber: string;
-  admissionNo: string;
-  marks: Record<string, MarkComponents>; // subjectId → components
 };
 
 type ExamTypeItem = {
@@ -81,50 +54,11 @@ type ExamTermItem = {
   remarks?: string;
 };
 
-type RefSubject = { _id: string; name: string; code?: string };
-
-type ExamScheduleRowItem = {
-  subjectId: RefSubject | string;
-  examDate?: string;
-  startTime?: string;
-  endTime?: string;
-  totalMarks: number;
-  passingMarks: number;
-  room?: string;
-  invigilatorId?: TeacherItem | string;
-  instructions?: string;
-  status: "draft" | "published";
-};
-
-type ExamScheduleItem = {
-  _id: string;
-  academicYear: string;
-  termId: ExamTermItem | string;
-  examTypeId?: ExamTypeItem | string | null;
-  classId: ClassItem | string;
-  status: "draft" | "published";
-  rows: ExamScheduleRowItem[];
-};
-
 /* ─── helpers ────────────────────────────────────────────────── */
 function gradeTone(percent: number) {
   if (percent >= 80) return "present";
   if (percent >= 50) return "leave";
   return "absent";
-}
-
-function sumComp(c: MarkComponents) {
-  return c.theory + c.viva + c.assignment + c.attendance + c.project;
-}
-
-function grade(pct: number) {
-  if (pct >= 90) return "A+";
-  if (pct >= 80) return "A";
-  if (pct >= 70) return "B+";
-  if (pct >= 60) return "B";
-  if (pct >= 50) return "C";
-  if (pct >= 40) return "D";
-  return "F";
 }
 
 /* ─── empty forms ─────────────────────────────────────────────── */
@@ -142,7 +76,7 @@ export default function ExamsPage() {
   const [tab, setTab] = useState<WorkflowTab>("center");
   const [step, setStep] = useState<ExamStep>("datesheet");
   const [role, setRole] = useState("");
-  // ?tab=marks (an Exam Center step) or ?tab=marksheet (another tab) opens that view directly.
+  // ?tab=marks (an Exam Center step) or ?tab=results (another tab) opens that view directly.
   useEffect(() => {
     const wanted = new URLSearchParams(window.location.search).get("tab") || "";
     fetch("/api/auth/me")
@@ -170,37 +104,17 @@ export default function ExamsPage() {
   // workflow
   const [types, setTypes] = useState<ExamTypeItem[]>([]);
   const [terms, setTerms] = useState<ExamTermItem[]>([]);
-  const [schedules, setSchedules] = useState<ExamScheduleItem[]>([]);
   const [typeForm, setTypeForm] = useState({ ...emptyTypeForm });
   const [termForm, setTermForm] = useState({ ...emptyTermForm });
   const [editingTypeId, setEditingTypeId] = useState("");
   const [editingTermId, setEditingTermId] = useState("");
-  const [editingScheduleId, setEditingScheduleId] = useState("");
   const [workflowMsg, setWorkflowMsg] = useState("");
   const [workflowErr, setWorkflowErr] = useState("");
-
-  // mark sheet state
-  const [sheetClassId, setSheetClassId] = useState("");
-  const [sheetExamType, setSheetExamType] = useState<"quiz" | "midterm" | "final" | "assignment">("final");
-  const [sheetDate, setSheetDate] = useState("");
-  const [sheetTermLabel, setSheetTermLabel] = useState("");
-  const [sheetSubjects, setSheetSubjects] = useState<SheetSubject[]>([]);
-  const [sheetRows, setSheetRows] = useState<SheetRow[]>([]);
-  const [sheetLoaded, setSheetLoaded] = useState(false);
-  const [sheetLoading, setSheetLoading] = useState(false);
-  const [sheetSaving, setSheetSaving] = useState(false);
-  const [sheetMsg, setSheetMsg] = useState("");
 
   const currentAcademicYear = useMemo(() => {
     const now = new Date().getFullYear();
     return `${now}-${String(now + 1).slice(-2)}`;
   }, []);
-
-  const [scheduleForm, setScheduleForm] = useState<{
-    academicYear: string; termId: string; examTypeId: string; classId: string;
-    status: "draft" | "published";
-    rows: { subjectId: string; examDate: string; startTime: string; endTime: string; totalMarks: number; passingMarks: number; room: string; invigilatorId: string; instructions: string; status: "draft" | "published" }[];
-  }>({ academicYear: currentAcademicYear, termId: "", examTypeId: "", classId: "", status: "draft", rows: [] });
 
   const load = useCallback(async () => {
     const [e, c, s, t, st] = await Promise.all([
@@ -218,14 +132,12 @@ export default function ExamsPage() {
   }, []);
 
   const loadWorkflow = useCallback(async () => {
-    const [ty, tm, sc] = await Promise.all([
+    const [ty, tm] = await Promise.all([
       fetch("/api/exams/types").then((r) => r.json()),
       fetch("/api/exams/terms").then((r) => r.json()),
-      fetch("/api/exams/schedules").then((r) => r.json()),
     ]);
     setTypes(ty.types || []);
     setTerms(tm.terms || []);
-    setSchedules(sc.schedules || []);
   }, []);
 
   useEffect(() => {
@@ -240,130 +152,6 @@ export default function ExamsPage() {
   }
 
   const selected = useMemo(() => exams.find((e) => e._id === selectedId) ?? exams[0] ?? null, [exams, selectedId]);
-
-  /* ─── marksheet ─────────────────────────────────────────────── */
-  const sheetClass = useMemo(() => classes.find((c) => c._id === sheetClassId) ?? null, [classes, sheetClassId]);
-
-  // sections of the same class name
-  const sheetSections = useMemo(() => {
-    if (!sheetClass) return [];
-    return classes.filter((c) => c.name === sheetClass.name);
-  }, [classes, sheetClass]);
-
-  async function loadSheet() {
-    if (!sheetClassId) return;
-    setSheetLoading(true);
-    setSheetMsg("");
-    const res = await fetch(`/api/exams/marksheet?classId=${sheetClassId}`);
-    const data = await res.json();
-    setSheetLoading(false);
-    if (!res.ok) { setSheetMsg(data.error || "Failed to load sheet"); return; }
-
-    const classSubjects: SubjectItem[] = (data.cls?.subjects || []);
-    const classSubs: SheetSubject[] = classSubjects.map((s) => ({
-      subjectId: s._id,
-      name: s.name,
-      code: s.code,
-      maxMarks: 100,
-      markComponents: { ...DEFAULT_COMP },
-    }));
-
-    const classStudents: { _id: string; firstName: string; lastName: string; rollNumber?: string; admissionNo: string }[] = data.students || [];
-
-    // pre-fill existing marks from exams
-    const existingExams: { subjectId: { _id: string } | string; maxMarks: number; markComponents?: Partial<MarkComponents>; results: { studentId: { _id: string } | string; marks: number; components?: Partial<MarkComponents> }[] }[] = data.exams || [];
-    const examBySubject = new Map<string, typeof existingExams[0]>();
-    for (const ex of existingExams) {
-      const sid = typeof ex.subjectId === "object" ? ex.subjectId._id : ex.subjectId;
-      examBySubject.set(sid, ex);
-    }
-
-    // update max marks from existing exams
-    for (const sub of classSubs) {
-      const ex = examBySubject.get(sub.subjectId);
-      if (ex) {
-        sub.maxMarks = ex.maxMarks || 100;
-        if (ex.markComponents) {
-          sub.markComponents = { ...DEFAULT_COMP, ...ex.markComponents };
-        }
-      }
-    }
-
-    const rows: SheetRow[] = classStudents.map((stu) => {
-      const rowMarks: Record<string, MarkComponents> = {};
-      for (const sub of classSubs) {
-        const ex = examBySubject.get(sub.subjectId);
-        const result = ex?.results.find((r) => {
-          const rid = typeof r.studentId === "object" ? r.studentId._id : r.studentId;
-          return rid === stu._id;
-        });
-        rowMarks[sub.subjectId] = result?.components
-          ? { ...DEFAULT_COMP, ...result.components }
-          : { theory: 0, viva: 0, assignment: 0, attendance: 0, project: 0 };
-      }
-      return {
-        studentId: stu._id,
-        name: `${stu.firstName} ${stu.lastName}`,
-        rollNumber: stu.rollNumber || "",
-        admissionNo: stu.admissionNo,
-        marks: rowMarks,
-      };
-    });
-
-    setSheetSubjects(classSubs);
-    setSheetRows(rows);
-    setSheetLoaded(true);
-    if (!sheetDate) setSheetDate(new Date().toISOString().slice(0, 10));
-  }
-
-  function updateCompMax(subjectId: string, key: keyof MarkComponents, val: number) {
-    setSheetSubjects((prev) =>
-      prev.map((s) => s.subjectId === subjectId ? { ...s, markComponents: { ...s.markComponents, [key]: val }, maxMarks: Object.values({ ...s.markComponents, [key]: val }).reduce((a, b) => a + b, 0) } : s)
-    );
-  }
-
-  function updateStudentComp(studentId: string, subjectId: string, key: keyof MarkComponents, val: number) {
-    setSheetRows((prev) =>
-      prev.map((r) =>
-        r.studentId === studentId
-          ? { ...r, marks: { ...r.marks, [subjectId]: { ...r.marks[subjectId], [key]: val } } }
-          : r
-      )
-    );
-  }
-
-  async function saveSheet() {
-    if (!sheetClassId || !sheetDate || !sheetSubjects.length) return;
-    setSheetSaving(true);
-    setSheetMsg("");
-    const sheetClassObj = classes.find((c) => c._id === sheetClassId);
-    const payload = {
-      classId: sheetClassId,
-      academicYear: sheetClassObj?.academicYear || currentAcademicYear,
-      termLabel: sheetTermLabel || undefined,
-      examType: sheetExamType,
-      date: sheetDate,
-      subjects: sheetSubjects.map((sub) => ({
-        subjectId: sub.subjectId,
-        maxMarks: sub.maxMarks,
-        markComponents: sub.markComponents,
-        students: sheetRows.map((row) => ({
-          studentId: row.studentId,
-          components: row.marks[sub.subjectId] || { theory: 0, viva: 0, assignment: 0, attendance: 0, project: 0 },
-        })),
-      })),
-    };
-    const res = await fetch("/api/exams/marksheet", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    setSheetSaving(false);
-    if (!res.ok) { setSheetMsg(data.error || "Save failed"); return; }
-    setSheetMsg(`Saved ${data.saved} subject(s). Marks recorded.`);
-    load();
-  }
 
   /* ─── workflow helpers ───────────────────────────────────────── */
   function clearWorkflowAlerts() { setWorkflowErr(""); setWorkflowMsg(""); }
@@ -426,77 +214,18 @@ export default function ExamsPage() {
     await loadWorkflow();
   }
 
-  async function loadClassSubjects(classId: string, examTypeId: string) {
-    clearWorkflowAlerts();
-    if (!classId) return;
-    const subRes = await fetch(`/api/exams/schedules?view=subjects&classId=${classId}`);
-    const subData = await subRes.json();
-    if (!subRes.ok) { setWorkflowErr(subData.error || "Could not load class subjects"); return; }
-    const selectedType = types.find((t) => t._id === examTypeId);
-    const rows = (subData.subjects || []).map((s: SubjectItem) => ({ subjectId: s._id, examDate: "", startTime: "", endTime: "", totalMarks: selectedType?.defaultMaxMarks || 100, passingMarks: selectedType?.defaultPassingMarks || 40, room: "", invigilatorId: "", instructions: "", status: "draft" as const }));
-    setScheduleForm((prev) => ({ ...prev, rows }));
-    setWorkflowMsg(`Loaded ${rows.length} subjects.`);
-  }
-
-  function resetScheduleForm() {
-    setEditingScheduleId("");
-    setScheduleForm({ academicYear: currentAcademicYear, termId: "", examTypeId: "", classId: "", status: "draft", rows: [] });
-  }
-
-  function editSchedule(item: ExamScheduleItem) {
-    clearWorkflowAlerts();
-    setEditingScheduleId(item._id);
-    setScheduleForm({ academicYear: item.academicYear, termId: idOf(item.termId as never), examTypeId: idOf(item.examTypeId as never), classId: idOf(item.classId as never), status: item.status, rows: (item.rows || []).map((r) => ({ subjectId: idOf(r.subjectId as never), examDate: (r.examDate || "").slice(0, 10), startTime: r.startTime || "", endTime: r.endTime || "", totalMarks: r.totalMarks, passingMarks: r.passingMarks, room: r.room || "", invigilatorId: idOf(r.invigilatorId as never), instructions: r.instructions || "", status: r.status })) });
-  }
-
-  async function saveSchedule() {
-    clearWorkflowAlerts();
-    const method = editingScheduleId ? "PUT" : "POST";
-    const url = editingScheduleId ? `/api/exams/schedules/${editingScheduleId}` : "/api/exams/schedules";
-    const payload = { ...scheduleForm, examTypeId: scheduleForm.examTypeId || null, rows: scheduleForm.rows.map((r) => ({ ...r, examDate: r.examDate || null, startTime: r.startTime || null, endTime: r.endTime || null, invigilatorId: r.invigilatorId || null })) };
-    const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    const data = await res.json();
-    if (!res.ok) { setWorkflowErr(data.error || "Failed to save schedule"); return; }
-    setWorkflowMsg(editingScheduleId ? "Schedule updated." : "Schedule created.");
-    resetScheduleForm();
-    await loadWorkflow();
-  }
-
-  async function removeSchedule(id: string) {
-    if (!confirm("Delete this schedule?")) return;
-    clearWorkflowAlerts();
-    const res = await fetch(`/api/exams/schedules/${id}`, { method: "DELETE" });
-    const data = await res.json();
-    if (!res.ok) { setWorkflowErr(data.error || "Failed to delete schedule"); return; }
-    setWorkflowMsg("Schedule deleted.");
-    await loadWorkflow();
-  }
-
-  /* ─── derived ────────────────────────────────────────────────── */
-  // Group classes by name to show sections count
-  const classByName = useMemo(() => {
-    const map = new Map<string, ClassItem[]>();
-    for (const c of classes) {
-      const key = `${c.name}||${c.academicYear}`;
-      map.set(key, [...(map.get(key) ?? []), c]);
-    }
-    return map;
-  }, [classes]);
-
   /* ─── render ─────────────────────────────────────────────────── */
   return (
     <>
       <Hero
         title="Exams & Results"
-        subtitle="Exam Center: date sheet → roll number slips → marks → result cards for many classes at once · Mark sheet · Results register"
+        subtitle="Exam Center: date sheet → roll number slips → marks → result cards — each teacher enters their own papers, all compiled into one result"
         actionLabel={tab === "results" ? "Quick Exam" : undefined}
         onAction={tab === "results" ? () => { setEditing(null); setOpen(true); } : undefined}
       />
 
       <div className="tabs">
         <button type="button" className={`tab${tab === "center" ? " active" : ""}`} onClick={() => setTab("center")}>Exam Center</button>
-        <button type="button" className={`tab${tab === "marksheet" ? " active" : ""}`} onClick={() => setTab("marksheet")}>Mark Sheet</button>
-        <button type="button" className={`tab${tab === "schedules" ? " active" : ""}`} onClick={() => setTab("schedules")}>Exam Schedule</button>
         <button type="button" className={`tab${tab === "results" ? " active" : ""}`} onClick={() => setTab("results")}>Results Register</button>
         <button type="button" className={`tab${tab === "types" ? " active" : ""}`} onClick={() => setTab("types")}>Exam Types</button>
         <button type="button" className={`tab${tab === "terms" ? " active" : ""}`} onClick={() => setTab("terms")}>Terms</button>
@@ -508,381 +237,9 @@ export default function ExamsPage() {
       {tab === "center" && role ? <ExamCenter step={step} onStep={setStep} role={role} /> : null}
 
       {/* ── MARK SHEET TAB ─────────────────────────────────────── */}
-      {tab === "marksheet" ? (
-        <>
-          <Panel title="Mark Sheet Setup">
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
-              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
-                Class
-                <select
-                  className={inputClass}
-                  style={{ minWidth: 200 }}
-                  value={sheetClassId}
-                  onChange={(e) => { setSheetClassId(e.target.value); setSheetLoaded(false); setSheetMsg(""); }}
-                >
-                  <option value="">— select class —</option>
-                  {classes.map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {c.name} – {c.section} · {c.academicYear}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {sheetClass && (
-                <div style={{ fontSize: 12, color: "var(--text-dim)", alignSelf: "flex-end", paddingBottom: 6 }}>
-                  Sections of {sheetClass.name} ({sheetClass.academicYear}):{" "}
-                  <b>{sheetSections.map((s) => s.section).join(", ")}</b>
-                </div>
-              )}
-
-              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
-                Exam Type
-                <select className={inputClass} value={sheetExamType} onChange={(e) => setSheetExamType(e.target.value as typeof sheetExamType)}>
-                  <option value="final">Final</option>
-                  <option value="midterm">Midterm</option>
-                  <option value="quiz">Quiz</option>
-                  <option value="assignment">Assignment</option>
-                </select>
-              </label>
-
-              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
-                Term / Label
-                <input className={inputClass} placeholder="e.g. Annual 2025" value={sheetTermLabel} onChange={(e) => setSheetTermLabel(e.target.value)} />
-              </label>
-
-              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
-                Exam Date
-                <input type="date" className={inputClass} value={sheetDate} onChange={(e) => setSheetDate(e.target.value)} />
-              </label>
-
-              <button
-                type="button"
-                className="btn-primary"
-                disabled={!sheetClassId || sheetLoading}
-                onClick={loadSheet}
-                style={{ alignSelf: "flex-end" }}
-              >
-                {sheetLoading ? "Loading…" : "Load Sheet"}
-              </button>
-            </div>
-          </Panel>
-
-          {sheetLoaded && sheetSubjects.length > 0 && (
-            <>
-              {/* Max marks config per subject */}
-              <Panel title="Marks Distribution (Max per subject)">
-                <div className="table-scroll">
-                  <table className="reg">
-                    <thead>
-                      <tr>
-                        <th>Subject</th>
-                        {COMP_KEYS.map((k) => <th key={k} className="right">{COMP_LABEL[k]}</th>)}
-                        <th className="right">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sheetSubjects.map((sub) => (
-                        <tr key={sub.subjectId}>
-                          <td style={{ fontWeight: 600 }}>{sub.name} {sub.code ? <span style={{ color: "var(--text-dim)", fontWeight: 400 }}>({sub.code})</span> : null}</td>
-                          {COMP_KEYS.map((k) => (
-                            <td key={k} className="right">
-                              <input
-                                type="number"
-                                style={{ width: 55, padding: "4px 6px", textAlign: "right", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12 }}
-                                value={sub.markComponents[k]}
-                                min={0}
-                                onChange={(e) => updateCompMax(sub.subjectId, k, Number(e.target.value))}
-                              />
-                            </td>
-                          ))}
-                          <td className="right" style={{ fontWeight: 700 }}>{sub.maxMarks}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Panel>
-
-              {/* Marks entry grid */}
-              <Panel
-                title={`Marks Entry — ${sheetClass?.name}-${sheetClass?.section}`}
-                meta={`${sheetRows.length} STUDENTS · ${sheetSubjects.length} SUBJECTS`}
-              >
-                {sheetMsg && (
-                  <div className={`alert ${sheetMsg.startsWith("Save") ? "ok" : sheetMsg.startsWith("Saved") ? "ok" : ""}`} style={{ marginBottom: 12 }}>{sheetMsg}</div>
-                )}
-                <div className="table-scroll">
-                  <table className="reg" style={{ fontSize: 11.5, minWidth: 900 }}>
-                    <thead>
-                      <tr>
-                        <th rowSpan={2} style={{ verticalAlign: "bottom" }}>Roll #</th>
-                        <th rowSpan={2} style={{ verticalAlign: "bottom" }}>Student</th>
-                        {sheetSubjects.map((sub) => (
-                          <th key={sub.subjectId} colSpan={COMP_KEYS.length + 1} style={{ textAlign: "center", borderLeft: "2px solid var(--border)", background: "var(--bg-soft, #f5f5f5)" }}>
-                            {sub.name}
-                            <span style={{ display: "block", fontWeight: 400, color: "var(--text-dim)", fontSize: 10 }}>/{sub.maxMarks}</span>
-                          </th>
-                        ))}
-                        <th rowSpan={2} style={{ textAlign: "right", verticalAlign: "bottom", borderLeft: "2px solid var(--border)" }}>Grand<br />Total</th>
-                        <th rowSpan={2} style={{ textAlign: "right", verticalAlign: "bottom" }}>%</th>
-                        <th rowSpan={2} style={{ textAlign: "right", verticalAlign: "bottom" }}>Result</th>
-                      </tr>
-                      <tr>
-                        {sheetSubjects.map((sub) => (
-                          <Fragment key={sub.subjectId}>
-                            {COMP_KEYS.map((k) => (
-                              <th key={`${sub.subjectId}-${k}`} style={{ textAlign: "right", fontWeight: 500, color: "var(--text-dim)", borderLeft: k === "theory" ? "2px solid var(--border)" : undefined }}>
-                                {COMP_LABEL[k]}<br /><span style={{ fontSize: 9 }}>/{sub.markComponents[k]}</span>
-                              </th>
-                            ))}
-                            <th style={{ textAlign: "right", fontWeight: 700 }}>Tot</th>
-                          </Fragment>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sheetRows.map((row) => {
-                        const grandTotal = sheetSubjects.reduce((sum, sub) => sum + sumComp(row.marks[sub.subjectId] || { theory: 0, viva: 0, assignment: 0, attendance: 0, project: 0 }), 0);
-                        const grandMax = sheetSubjects.reduce((sum, sub) => sum + sub.maxMarks, 0);
-                        const pct = grandMax > 0 ? Math.round((grandTotal / grandMax) * 100) : 0;
-                        return (
-                          <tr key={row.studentId}>
-                            <td className="num">{row.rollNumber || "—"}</td>
-                            <td>
-                              <div style={{ fontWeight: 600, fontSize: 12 }}>{row.name}</div>
-                              <div style={{ fontSize: 10, color: "var(--text-dim)" }}>{row.admissionNo}</div>
-                            </td>
-                            {sheetSubjects.map((sub) => {
-                              const comp = row.marks[sub.subjectId] || { theory: 0, viva: 0, assignment: 0, attendance: 0, project: 0 };
-                              const subTotal = sumComp(comp);
-                              return (
-                                <Fragment key={sub.subjectId}>
-                                  {COMP_KEYS.map((k) => (
-                                    <td key={`${row.studentId}-${sub.subjectId}-${k}`} style={{ borderLeft: k === "theory" ? "2px solid var(--border)" : undefined, padding: "2px 3px" }}>
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        max={sub.markComponents[k]}
-                                        style={{ width: 44, padding: "3px 4px", textAlign: "right", border: "1px solid var(--border)", borderRadius: 4, fontSize: 11 }}
-                                        value={comp[k]}
-                                        onChange={(e) => updateStudentComp(row.studentId, sub.subjectId, k, Number(e.target.value))}
-                                      />
-                                    </td>
-                                  ))}
-                                  <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{subTotal}</td>
-                                </Fragment>
-                              );
-                            })}
-                            <td style={{ textAlign: "right", fontWeight: 700, borderLeft: "2px solid var(--border)" }}>{grandTotal}/{grandMax}</td>
-                            <td style={{ textAlign: "right" }}>{pct}%</td>
-                            <td style={{ textAlign: "right" }}>
-                              <span className={`badge ${gradeTone(pct)}`}>{grade(pct)}</span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {!sheetRows.length && (
-                        <tr><td colSpan={99} style={{ color: "var(--text-dim)", padding: "20px 0", textAlign: "center" }}>No students in this class.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
-                  <button type="button" className="btn-primary" disabled={sheetSaving || !sheetDate} onClick={saveSheet}>
-                    {sheetSaving ? "Saving…" : "Save Mark Sheet"}
-                  </button>
-                  <button type="button" className="btn-ghost" onClick={() => { setSheetLoaded(false); setSheetSubjects([]); setSheetRows([]); setSheetMsg(""); }}>
-                    Reset
-                  </button>
-                </div>
-              </Panel>
-            </>
-          )}
-
-          {sheetLoaded && !sheetSubjects.length && (
-            <EmptyState message="This class has no subjects mapped. Go to Classes & Sections and assign subjects." />
-          )}
-        </>
-      ) : null}
-
-      {/* ── EXAM SCHEDULE TAB ──────────────────────────────────── */}
-      {tab === "schedules" ? (
-        <>
-          <Panel title={editingScheduleId ? "Edit Schedule" : "New Exam Schedule"}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end", marginBottom: 14 }}>
-              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
-                Class *
-                <select
-                  className={inputClass}
-                  style={{ minWidth: 200 }}
-                  value={scheduleForm.classId}
-                  onChange={(e) => setScheduleForm({ ...scheduleForm, classId: e.target.value })}
-                >
-                  <option value="">Select class</option>
-                  {classes.map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {c.name} – {c.section} · {c.academicYear}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {scheduleForm.classId && (() => {
-                const sel = classes.find((c) => c._id === scheduleForm.classId);
-                const secs = sel ? classes.filter((c) => c.name === sel.name && c.academicYear === sel.academicYear) : [];
-                return secs.length > 1 ? (
-                  <div style={{ fontSize: 12, color: "var(--text-dim)", alignSelf: "flex-end", paddingBottom: 6 }}>
-                    Other sections: <b>{secs.filter((s) => s._id !== scheduleForm.classId).map((s) => s.section).join(", ")}</b>
-                  </div>
-                ) : null;
-              })()}
-
-              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
-                Term
-                <select className={inputClass} style={{ minWidth: 180 }} value={scheduleForm.termId} onChange={(e) => setScheduleForm({ ...scheduleForm, termId: e.target.value })}>
-                  <option value="">Select term</option>
-                  {terms.map((t) => <option key={t._id} value={t._id}>{t.name} – {t.academicYear}</option>)}
-                </select>
-              </label>
-
-              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
-                Exam Type
-                <select className={inputClass} value={scheduleForm.examTypeId} onChange={(e) => setScheduleForm({ ...scheduleForm, examTypeId: e.target.value })}>
-                  <option value="">Auto from term</option>
-                  {types.map((t) => <option key={t._id} value={t._id}>{t.key} – {t.name}</option>)}
-                </select>
-              </label>
-
-              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
-                Academic Year
-                <input className={inputClass} style={{ width: 110 }} value={scheduleForm.academicYear} onChange={(e) => setScheduleForm({ ...scheduleForm, academicYear: e.target.value })} />
-              </label>
-
-              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
-                Status
-                <select className={inputClass} value={scheduleForm.status} onChange={(e) => setScheduleForm({ ...scheduleForm, status: e.target.value as "draft" | "published" })}>
-                  <option value="draft">Draft</option>
-                  <option value="published">Published</option>
-                </select>
-              </label>
-            </div>
-
-            <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-              <button type="button" className="btn-ghost" onClick={() => loadClassSubjects(scheduleForm.classId, scheduleForm.examTypeId)} disabled={!scheduleForm.classId}>
-                Auto-load Subjects
-              </button>
-              <button type="button" className="btn-dark" onClick={saveSchedule}>
-                {editingScheduleId ? "Update Schedule" : "Create Schedule"}
-              </button>
-              {editingScheduleId && <button type="button" className="btn-ghost" onClick={resetScheduleForm}>Cancel</button>}
-            </div>
-
-            {scheduleForm.rows.length ? (
-              <div className="table-scroll">
-                <table className="reg">
-                  <thead>
-                    <tr>
-                      <th>Subject</th>
-                      <th>Exam Date</th>
-                      <th>Start Time</th>
-                      <th>End Time</th>
-                      <th className="right">Total Marks</th>
-                      <th className="right">Pass Marks</th>
-                      <th>Room</th>
-                      <th>Invigilator</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {scheduleForm.rows.map((r, idx) => (
-                      <tr key={`${r.subjectId}-${idx}`}>
-                        <td>
-                          <div style={{ fontWeight: 600 }}>{subjects.find((s) => s._id === r.subjectId)?.name || r.subjectId}</div>
-                          <div style={{ fontSize: 10, color: "var(--text-dim)" }}>{subjects.find((s) => s._id === r.subjectId)?.code || ""}</div>
-                        </td>
-                        <td>
-                          <input type="date" className={inputClass} style={{ padding: "5px 8px" }} value={r.examDate} onChange={(e) => { const rows = [...scheduleForm.rows]; rows[idx] = { ...r, examDate: e.target.value }; setScheduleForm({ ...scheduleForm, rows }); }} />
-                        </td>
-                        <td>
-                          <input type="time" className={inputClass} style={{ padding: "5px 8px" }} value={r.startTime} onChange={(e) => { const rows = [...scheduleForm.rows]; rows[idx] = { ...r, startTime: e.target.value }; setScheduleForm({ ...scheduleForm, rows }); }} />
-                        </td>
-                        <td>
-                          <input type="time" className={inputClass} style={{ padding: "5px 8px" }} value={r.endTime} onChange={(e) => { const rows = [...scheduleForm.rows]; rows[idx] = { ...r, endTime: e.target.value }; setScheduleForm({ ...scheduleForm, rows }); }} />
-                        </td>
-                        <td>
-                          <input type="number" className={inputClass} style={{ padding: "5px 8px", width: 70 }} value={r.totalMarks} onChange={(e) => { const rows = [...scheduleForm.rows]; rows[idx] = { ...r, totalMarks: Number(e.target.value) }; setScheduleForm({ ...scheduleForm, rows }); }} />
-                        </td>
-                        <td>
-                          <input type="number" className={inputClass} style={{ padding: "5px 8px", width: 70 }} value={r.passingMarks} onChange={(e) => { const rows = [...scheduleForm.rows]; rows[idx] = { ...r, passingMarks: Number(e.target.value) }; setScheduleForm({ ...scheduleForm, rows }); }} />
-                        </td>
-                        <td>
-                          <input className={inputClass} style={{ padding: "5px 8px", width: 80 }} value={r.room} onChange={(e) => { const rows = [...scheduleForm.rows]; rows[idx] = { ...r, room: e.target.value }; setScheduleForm({ ...scheduleForm, rows }); }} />
-                        </td>
-                        <td>
-                          <select className={inputClass} style={{ padding: "5px 8px" }} value={r.invigilatorId} onChange={(e) => { const rows = [...scheduleForm.rows]; rows[idx] = { ...r, invigilatorId: e.target.value }; setScheduleForm({ ...scheduleForm, rows }); }}>
-                            <option value="">None</option>
-                            {teachers.map((t) => <option key={t._id} value={t._id}>{t.firstName} {t.lastName}</option>)}
-                          </select>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <EmptyState message="Select a class and click Auto-load Subjects to build the exam timetable." />
-            )}
-          </Panel>
-
-          <Panel title="Schedule Register" meta={`${schedules.length} SCHEDULES`}>
-            {!schedules.length ? (
-              <EmptyState message="No schedules created yet." />
-            ) : (
-              <div className="table-scroll">
-                <table className="reg">
-                  <thead>
-                    <tr>
-                      <th>Class</th>
-                      <th>Term</th>
-                      <th>Academic Year</th>
-                      <th className="right">Subjects</th>
-                      <th className="right">Status</th>
-                      <th className="right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {schedules.map((s) => {
-                      const cls = typeof s.classId === "object" ? s.classId : null;
-                      const trm = typeof s.termId === "object" ? s.termId : null;
-                      return (
-                        <tr key={s._id}>
-                          <td style={{ fontWeight: 600 }}>{cls ? `${cls.name}-${cls.section}` : String(s.classId)}</td>
-                          <td>{trm ? trm.name : String(s.termId)}</td>
-                          <td className="num">{s.academicYear}</td>
-                          <td className="num">{s.rows?.length || 0}</td>
-                          <td className="right"><StatusBadge status={s.status} /></td>
-                          <td>
-                            <div className="row-actions">
-                              <button type="button" className="link-btn" onClick={() => editSchedule(s)}>Edit</button>
-                              <button type="button" className="link-btn danger" onClick={() => removeSchedule(s._id)}>Delete</button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Panel>
-        </>
-      ) : null}
-
-      {/* ── RESULTS REGISTER TAB ───────────────────────────────── */}
       {tab === "results" ? (
         <>
-          {!exams.length ? <EmptyState message="No exams yet. Use the Mark Sheet tab or Quick Exam button." /> : null}
+          {!exams.length ? <EmptyState message="No results yet. Enter marks in Exam Center → Marks Entry, or add a class test with Quick Exam." /> : null}
           <div className="grid-2">
             <Panel title="Exam List" meta={`${exams.length} TOTAL`}>
               {exams.map((exam) => {
@@ -959,7 +316,7 @@ export default function ExamsPage() {
                     );
                   })}
                   {!selected?.results?.length ? (
-                    <tr><td colSpan={10} style={{ color: "var(--text-dim)", padding: "22px 0" }}>No results for this exam. Use the Mark Sheet tab to enter marks.</td></tr>
+                    <tr><td colSpan={10} style={{ color: "var(--text-dim)", padding: "22px 0" }}>No results for this exam. Enter marks in Exam Center → Marks Entry.</td></tr>
                   ) : null}
                 </tbody>
               </table>

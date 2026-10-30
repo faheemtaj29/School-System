@@ -185,9 +185,29 @@ export interface IExamMark {
   absent: boolean;
   remarks?: string;
   enteredBy?: Types.ObjectId;
+  /** Every change to marks already entered: what they were, what they became, who, when and why. */
+  history?: IMarkChange[];
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface IMarkChange {
+  at: Date;
+  by?: Types.ObjectId;
+  byName?: string;
+  before: { total: number; absent: boolean; marks: { key: string; obtained: number }[] };
+  after: { total: number; absent: boolean; marks: { key: string; obtained: number }[] };
+  reason?: string;
+}
+
+const MarkSnapSchema = new Schema(
+  {
+    total: Number,
+    absent: Boolean,
+    marks: { type: [new Schema({ key: String, obtained: Number }, { _id: false })], default: [] },
+  },
+  { _id: false }
+);
 
 const ExamMarkSchema = new Schema<IExamMark>(
   {
@@ -210,6 +230,22 @@ const ExamMarkSchema = new Schema<IExamMark>(
     },
     total: { type: Number, default: 0, min: 0 },
     absent: { type: Boolean, default: false },
+    history: {
+      type: [
+        new Schema(
+          {
+            at: { type: Date, default: Date.now },
+            by: { type: Schema.Types.ObjectId, ref: "User" },
+            byName: String,
+            before: MarkSnapSchema,
+            after: MarkSnapSchema,
+            reason: String,
+          },
+          { _id: false }
+        ),
+      ],
+      default: undefined,
+    },
     remarks: String,
     enteredBy: { type: Schema.Types.ObjectId, ref: "User" },
   },

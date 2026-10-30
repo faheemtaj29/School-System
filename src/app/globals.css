@@ -3043,6 +3043,10 @@ table.fee-lines td { padding: 4px 6px; }
   .mv-modal { height: 100vh; width: 100vw; border-radius: 0; }
   .mv-actions .btn-ghost { display: none; }
 }
+/* Exam results: corrections */
+.ec-fixed { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 10px; background: #fdf1d8; color: #8a5a00; font-size: 11px; font-weight: 600; cursor: help; }
+.ec-final { display: flex; flex-direction: column; gap: 8px; }
+.ec-final .inp { max-width: 520px; }
 /* Exam marks by student */
 .ec-student-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; flex-wrap: wrap; font-size: 13px; color: var(--text-dim); }
 .ec-parts { display: flex; flex-wrap: wrap; gap: 8px 12px; }

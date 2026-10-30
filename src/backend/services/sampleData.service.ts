@@ -207,7 +207,7 @@ export const sampleDataService = {
                 return { studentId, absent, marks: absent ? {} : { theory: Math.min(100, Math.max(18, Math.round(base + (rand() - 0.5) * 30))) } };
               }),
             }),
-            actor.id
+            { id: actor.id, name: actor.name }
           );
         }
       }

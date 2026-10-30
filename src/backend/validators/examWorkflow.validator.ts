@@ -113,6 +113,8 @@ export const marksSaveSchema = z.object({
       })
     )
     .min(1),
+  /** Why marks were changed — required once the term's results are final. */
+  reason: z.string().trim().max(300).optional(),
 });
 
 /** One student's marks in every paper of the term (result preparation by student). */
@@ -130,6 +132,8 @@ export const studentMarksSaveSchema = z.object({
       })
     )
     .min(1),
+  /** Why marks were changed — required once the term's results are final. */
+  reason: z.string().trim().max(300).optional(),
 });
 
 export type DateSheetPlanInput = z.infer<typeof dateSheetPlanSchema>;

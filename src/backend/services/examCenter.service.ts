@@ -20,7 +20,8 @@ import {
 import { Settings } from "@/backend/models/Settings";
 import { Student } from "@/backend/models/Student";
 import { gpaPoints, gradeOf, remarkOf } from "@/backend/lib/grading";
-import { ServiceError } from "@/backend/types";
+import { ServiceError, type SessionUser } from "@/backend/types";
+import { resolveTeacher } from "@/backend/lib/portal";
 import { validateRows } from "@/backend/services/examWorkflow.service";
 import type {
   DateSheetPlanInput,
@@ -72,9 +73,57 @@ type MarkLean = {
   total: number;
   absent: boolean;
   remarks?: string;
+  history?: { at: Date; byName?: string; before: Snap; after: Snap; reason?: string }[];
 };
 
+/**
+ * Which papers a person may enter marks for. Admin: all. A class teacher: every paper of their
+ * class (so one teacher can prepare the whole class result). A subject teacher: their subjects in
+ * their classes. null means no limit.
+ */
+export type MarkScope = { classTeacherOf: Set<string>; subjects: Set<string>; classes: Set<string> } | null;
+
+export async function markScopeFor(session: SessionUser): Promise<MarkScope> {
+  if (session.role !== "teacher") return null;
+  await dbConnect();
+  const teacher = await resolveTeacher(session);
+  if (!teacher) return { classTeacherOf: new Set(), subjects: new Set(), classes: new Set() };
+  const own = await ClassModel.find({ classTeacher: teacher._id }).select("_id").lean();
+  return {
+    classTeacherOf: new Set(own.map((c) => String(c._id))),
+    subjects: new Set((teacher.subjects || []).map(String)),
+    classes: new Set((teacher.classes || []).map(String)),
+  };
+}
+
+export function canMark(scope: MarkScope, classId: string, subjectId: string) {
+  if (!scope) return true;
+  if (scope.classTeacherOf.has(classId)) return true;
+  return scope.subjects.has(subjectId) && (!scope.classes.size || scope.classes.has(classId));
+}
+
+type Snap = { total: number; absent: boolean; marks: { key: string; obtained: number }[] };
+const sameMarks = (a: Snap, b: Snap) =>
+  a.absent === b.absent &&
+  a.total === b.total &&
+  JSON.stringify([...a.marks].sort((x, y) => x.key.localeCompare(y.key))) === JSON.stringify([...b.marks].sort((x, y) => x.key.localeCompare(y.key)));
+
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+type Actor = { id?: string; name?: string };
+
+/** The corrections of one mark, newest first, for showing next to it. */
+function historyOf(m?: { history?: { at: Date; byName?: string; before: Snap; after: Snap; reason?: string }[] } | null) {
+  return (m?.history || [])
+    .map((h) => ({
+      at: h.at,
+      by: h.byName || "",
+      reason: h.reason || "",
+      from: h.before.absent ? "Absent" : String(h.before.total),
+      to: h.after.absent ? "Absent" : String(h.after.total),
+    }))
+    .reverse();
+}
 
 function classLabel(cls: { name: string; section?: string }) {
   return cls.section ? `${cls.name} - ${cls.section}` : cls.name;
@@ -303,7 +352,7 @@ export const examCenterService = {
   },
 
   /** Classes that have a date sheet for this term, with paper and marks progress. */
-  async termOverview(termId: string) {
+  async termOverview(termId: string, scope: MarkScope = null) {
     await dbConnect();
     const term = await loadTerm(termId);
     const schedules = await loadSchedules(termId);
@@ -341,7 +390,7 @@ export const examCenterService = {
           marksEntered: marksBy.get(String(cls._id)) || 0,
           marksExpected: papers * students,
           firstPaper: (s.rows as unknown as ScheduleRowLean[]).map((r) => r.examDate).filter(Boolean).sort()[0] || null,
-          subjects: (s.rows as unknown as ScheduleRowLean[]).map((r) => ({
+          subjects: (s.rows as unknown as ScheduleRowLean[]).filter((r) => canMark(scope, String(cls._id), subjectOf(r)._id)).map((r) => ({
             ...subjectOf(r),
             examDate: r.examDate,
             startTime: r.startTime,
@@ -362,7 +411,9 @@ export const examCenterService = {
         endDate: term.endDate,
         status: term.status,
       },
-      classes,
+      // A teacher sees only the classes where they have papers to mark.
+      classes: scope ? classes.filter((c) => c.subjects.length) : classes,
+      limited: Boolean(scope),
     };
   },
 
@@ -501,8 +552,10 @@ export const examCenterService = {
           absent: m?.absent || false,
           remarks: m?.remarks || "",
           saved: Boolean(m),
+          history: historyOf(m),
         };
       }),
+      final: (await loadTerm(termId)).status === "closed",
     };
   },
 
@@ -510,11 +563,12 @@ export const examCenterService = {
    * Result preparation by student: one student's papers in the term, each with its marks split
    * (written / theory / practical / viva …), plus the class list to move between students.
    */
-  async studentSheet(termId: string, classId: string, studentId?: string) {
+  async studentSheet(termId: string, classId: string, studentId?: string, scope: MarkScope = null) {
     await dbConnect();
     const schedule = (await loadSchedules(termId, [classId]))[0];
     if (!schedule) throw new ServiceError("NOT_FOUND", "No date sheet for this class in the term", 404);
-    const rows = schedule.rows as unknown as ScheduleRowLean[];
+    const rows = (schedule.rows as unknown as ScheduleRowLean[]).filter((r) => canMark(scope, classId, subjectOf(r)._id));
+    if (!rows.length) throw new ServiceError("FORBIDDEN", "You have no papers to mark in this class", 403);
     const rollBy = new Map(((schedule.rollNumbers || []) as RollLean[]).map((r) => [String(r.studentId), r.rollNo]));
     const students = sortStudents(
       (await Student.find({ classId, status: "active" })
@@ -552,14 +606,18 @@ export const examCenterService = {
               absent: m?.absent || false,
               remarks: m?.remarks || "",
               saved: Boolean(m),
+              history: historyOf(m),
             };
           })
         : [],
+      final: (await loadTerm(termId)).status === "closed",
     };
   },
 
   /** Saves one student's marks in several papers; each paper is saved exactly as from its class sheet. */
-  async saveStudentMarks(data: StudentMarksSaveInput, userId?: string) {
+  async saveStudentMarks(data: StudentMarksSaveInput, actor?: Actor, scope: MarkScope = null) {
+    const blocked = data.subjects.find((s) => !canMark(scope, data.classId, s.subjectId));
+    if (blocked) throw new ServiceError("FORBIDDEN", "You can enter marks only for your own subjects", 403);
     for (const s of data.subjects) {
       await this.saveMarks(
         {
@@ -567,16 +625,57 @@ export const examCenterService = {
           classId: data.classId,
           subjectId: s.subjectId,
           entries: [{ studentId: data.studentId, marks: s.marks, absent: s.absent, remarks: s.remarks }],
+          reason: data.reason,
         },
-        userId
+        actor
       );
     }
     return { saved: data.subjects.length };
   },
 
-  /** Save marks for one paper (all students at once) and mirror totals to the legacy exam list. */
-  async saveMarks(data: MarksSaveInput, userId?: string) {
+  /** Finalise a term's results (changes then need a reason) or reopen it. */
+  async finalise(termId: string, final: boolean) {
     await dbConnect();
+    const term = await loadTerm(termId);
+    await ExamTerm.updateOne({ _id: term._id }, { $set: { status: final ? "closed" : "active" } });
+    return { status: final ? "closed" : "active" };
+  },
+
+  /** Every correction made to marks in the term, newest first. */
+  async corrections(termId: string, scope: MarkScope = null) {
+    await dbConnect();
+    const marks = (await ExamMark.find({ termId, "history.0": { $exists: true } })
+      .populate("studentId", "firstName lastName admissionNo")
+      .populate("subjectId", "name code")
+      .populate("classId", "name section")
+      .lean()) as unknown as {
+      classId: ClassLean;
+      subjectId: { _id: Types.ObjectId; name: string; code: string };
+      studentId: { firstName: string; lastName: string; admissionNo: string } | null;
+      history: { at: Date; byName?: string; before: Snap; after: Snap; reason?: string }[];
+    }[];
+    return marks
+      .filter((m) => m.classId && m.subjectId && canMark(scope, String(m.classId._id), String(m.subjectId._id)))
+      .flatMap((m) =>
+        m.history.map((h) => ({
+          at: h.at,
+          by: h.byName || "",
+          reason: h.reason || "",
+          student: m.studentId ? fullName(m.studentId) : "—",
+          admissionNo: m.studentId?.admissionNo || "",
+          classLabel: classLabel(m.classId),
+          subject: m.subjectId.name,
+          from: h.before.absent ? "Absent" : String(h.before.total),
+          to: h.after.absent ? "Absent" : String(h.after.total),
+        }))
+      )
+      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  },
+
+  /** Save marks for one paper (all students at once) and mirror totals to the legacy exam list. */
+  async saveMarks(data: MarksSaveInput, actor?: Actor) {
+    await dbConnect();
+    const userId = actor?.id;
     const term = await loadTerm(data.termId);
     const schedule = (await loadSchedules(data.termId, [data.classId]))[0];
     if (!schedule) throw new ServiceError("NOT_FOUND", "No date sheet for this class in the term", 404);
@@ -589,6 +688,16 @@ export const examCenterService = {
       (await Student.find({ classId: data.classId }).select("_id").lean()).map((s) => String(s._id))
     );
 
+    // Marks already entered: any change is kept in the history; once results are final it needs a reason.
+    const existing = (await ExamMark.find({
+      scheduleId: schedule._id,
+      subjectId: data.subjectId,
+      studentId: { $in: data.entries.map((e) => e.studentId) },
+    })
+      .select("studentId marks total absent")
+      .lean()) as unknown as (Snap & { studentId: Types.ObjectId })[];
+    const before = new Map(existing.map((m) => [String(m.studentId), m]));
+    const final = term.status === "closed";
     const ops = data.entries.map((entry) => {
       if (!enrolled.has(entry.studentId)) {
         throw new ServiceError("VALIDATION", "A student in this sheet is not in the class", 400);
@@ -607,10 +716,30 @@ export const examCenterService = {
             return { key: c.key, obtained };
           });
       const total = marks.reduce((sum, m) => sum + m.obtained, 0);
+      const old = before.get(entry.studentId);
+      const after: Snap = { total, absent: entry.absent, marks };
+      const changed = old && !sameMarks({ total: old.total, absent: old.absent, marks: old.marks || [] }, after);
+      if (changed && final && !data.reason) {
+        throw new ServiceError("VALIDATION", "Results are final — give a reason for the correction", 400);
+      }
       return {
         updateOne: {
           filter: { scheduleId: schedule._id, subjectId: data.subjectId, studentId: entry.studentId },
           update: {
+            ...(changed
+              ? {
+                  $push: {
+                    history: {
+                      at: new Date(),
+                      by: userId || undefined,
+                      byName: actor?.name,
+                      before: { total: old.total, absent: old.absent, marks: old.marks || [] },
+                      after,
+                      reason: data.reason || undefined,
+                    },
+                  },
+                }
+              : {}),
             $set: {
               termId: term._id,
               classId: data.classId,
@@ -625,7 +754,7 @@ export const examCenterService = {
         },
       };
     });
-    await ExamMark.bulkWrite(ops);
+    await ExamMark.bulkWrite(ops as never);
 
     // Keep dashboard, transcripts and the old results list in step with term marks.
     const all = await ExamMark.find({ scheduleId: schedule._id, subjectId: data.subjectId, absent: false })

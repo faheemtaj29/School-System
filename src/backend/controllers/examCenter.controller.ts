@@ -10,7 +10,7 @@ import {
   requireAuth,
 } from "@/backend/lib/http";
 import { canSeeStudent } from "@/backend/lib/portal";
-import { examCenterService } from "@/backend/services/examCenter.service";
+import { canMark, examCenterService, markScopeFor } from "@/backend/services/examCenter.service";
 import {
   dateSheetPlanSchema,
   dateSheetSaveSchema,
@@ -51,12 +51,14 @@ export const examCenterController = {
   },
 
   async overview(req: Request) {
-    const { error } = await requireAuth(["admin", "teacher", "staff"]);
+    const { error, session } = await requireAuth(["admin", "teacher", "staff"]);
     if (error) return error;
     const { termId } = query(req);
     if (!needIds(termId)) return jsonError("Select an exam term");
     try {
-      return jsonOk(await examCenterService.termOverview(termId));
+      // Teachers see the papers they may mark; ?all=1 (date sheets, slips, results) shows every paper.
+      const all = new URL(req.url).searchParams.get("all") === "1";
+      return jsonOk(await examCenterService.termOverview(termId, all ? null : await markScopeFor(session!)));
     } catch (e) {
       return fromServiceError(e);
     }
@@ -111,11 +113,14 @@ export const examCenterController = {
   },
 
   async marksSheet(req: Request) {
-    const { error } = await requireAuth(["admin", "teacher"]);
+    const { error, session } = await requireAuth(["admin", "teacher"]);
     if (error) return error;
     const { termId, classId, subjectId } = query(req);
     if (!needIds(termId, classId, subjectId)) return jsonError("Select term, class and subject");
     try {
+      if (!canMark(await markScopeFor(session!), classId, subjectId)) {
+        return jsonError("This paper belongs to another teacher", 403);
+      }
       return jsonOk(await examCenterService.marksSheet(termId, classId, subjectId));
     } catch (e) {
       return fromServiceError(e);
@@ -128,7 +133,10 @@ export const examCenterController = {
     try {
       const parsed = marksSaveSchema.safeParse(await req.json());
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
-      return jsonOk(await examCenterService.saveMarks(parsed.data, session?.id));
+      if (!canMark(await markScopeFor(session!), parsed.data.classId, parsed.data.subjectId)) {
+        return jsonError("This paper belongs to another teacher", 403);
+      }
+      return jsonOk(await examCenterService.saveMarks(parsed.data, { id: session?.id, name: session?.name }));
     } catch (e) {
       return fromServiceError(e);
     }
@@ -136,13 +144,15 @@ export const examCenterController = {
 
   /** One student's papers in the term, for entering their marks subject by subject. */
   async studentSheet(req: Request) {
-    const { error } = await requireAuth(["admin", "teacher"]);
+    const { error, session } = await requireAuth(["admin", "teacher"]);
     if (error) return error;
     const { termId, classId } = query(req);
     const studentId = new URL(req.url).searchParams.get("studentId") || undefined;
     if (!needIds(termId, classId)) return jsonError("Select term and class");
     try {
-      return jsonOk(await examCenterService.studentSheet(termId, classId, studentId && ID.test(studentId) ? studentId : undefined));
+      return jsonOk(
+        await examCenterService.studentSheet(termId, classId, studentId && ID.test(studentId) ? studentId : undefined, await markScopeFor(session!))
+      );
     } catch (e) {
       return fromServiceError(e);
     }
@@ -154,7 +164,35 @@ export const examCenterController = {
     try {
       const parsed = studentMarksSaveSchema.safeParse(await req.json());
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
-      return jsonOk(await examCenterService.saveStudentMarks(parsed.data, session?.id));
+      return jsonOk(
+        await examCenterService.saveStudentMarks(parsed.data, { id: session?.id, name: session?.name }, await markScopeFor(session!))
+      );
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  /** PUT { termId, final } — finalise the term's results (admin) or reopen them for corrections. */
+  async finalise(req: Request) {
+    const { error } = await requireAuth(["admin"]);
+    if (error) return error;
+    try {
+      const body = await req.json();
+      if (!needIds(String(body.termId || ""))) return jsonError("Select an exam term");
+      return jsonOk(await examCenterService.finalise(body.termId, Boolean(body.final)));
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  /** GET ?termId — every correction of marks in the term. */
+  async corrections(req: Request) {
+    const { error, session } = await requireAuth(["admin", "teacher"]);
+    if (error) return error;
+    const { termId } = query(req);
+    if (!needIds(termId)) return jsonError("Select an exam term");
+    try {
+      return jsonOk({ corrections: await examCenterService.corrections(termId, await markScopeFor(session!)) });
     } catch (e) {
       return fromServiceError(e);
     }
