@@ -37,6 +37,8 @@ type Data = {
     employmentType: string;
   } | null;
   ytd: { taxYear: string; gross: number; tax: number; net: number };
+  /** The salary journal (PAY-… voucher) posted when it was paid. */
+  voucher?: { number: string; id: string } | null;
   school: { name: string; campus?: string; address?: string; phone?: string; email?: string; currency: string; logoUrl: string | null };
 };
 
@@ -118,6 +120,7 @@ export function PayslipPrintPage({ id }: { id: string }) {
                   </td>
                 </tr>
                 <tr><td>Status</td><td>{p.status === "paid" ? `Paid${p.paidOn ? ` on ${fmtDate(p.paidOn)}` : ""}` : "Not paid yet"}</td></tr>
+                {data.voucher ? <tr><td>Voucher no.</td><td>{data.voucher.number}</td></tr> : null}
               </tbody>
             </table>
           </div>

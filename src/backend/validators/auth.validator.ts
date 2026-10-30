@@ -52,6 +52,16 @@ export const staffSchema = z.object({
   department: z.string().min(1),
   designation: z.string().min(1),
   joinDate: z.string().optional(),
+  basicSalary: z.coerce.number().min(0).optional(),
+  salaryHeads: z
+    .array(z.object({ head: z.string().trim().min(1), kind: z.enum(["earning", "deduction"]), amount: z.coerce.number().min(0) }))
+    .max(30)
+    .optional(),
+  employmentType: z.enum(["permanent", "contract", "probation", "visiting"]).optional(),
+  paymentMethod: z.enum(["bank", "cash"]).optional(),
+  bankName: z.string().optional(),
+  bankAccount: z.string().optional(),
+  taxNumber: z.string().optional(),
   status: z.enum(["active", "inactive"]).default("active"),
   branchCode: z.string().optional(),
 });

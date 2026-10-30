@@ -782,7 +782,316 @@ function gradeOf(percent: number) {
   return "F";
 }
 
+/** Marks entry two ways: a whole class in one paper, or one student in every paper. */
 function MarksStep({ termId, overview, reload }: { termId: string; overview: Overview | null; reload: () => void }) {
+  const [by, setBy] = useState<"subject" | "student">("subject");
+  return (
+    <div className="stack-lg">
+      <div className="chips">
+        <button type="button" className={`filter-chip${by === "subject" ? " active" : ""}`} onClick={() => setBy("subject")}>
+          By subject — whole class in one paper
+        </button>
+        <button type="button" className={`filter-chip${by === "student" ? " active" : ""}`} onClick={() => setBy("student")}>
+          By student — all papers of one student
+        </button>
+      </div>
+      {by === "subject" ? (
+        <SubjectMarks termId={termId} overview={overview} reload={reload} />
+      ) : (
+        <StudentMarks termId={termId} overview={overview} reload={reload} />
+      )}
+    </div>
+  );
+}
+
+type StudentPaper = {
+  subject: { _id: string; name: string; code: string };
+  examDate: string | null;
+  totalMarks: number;
+  passingMarks: number;
+  components: Component[];
+  marks: Record<string, number>;
+  absent: boolean;
+  remarks: string;
+  saved: boolean;
+};
+
+type StudentSheet = {
+  classLabel: string;
+  papers: number;
+  students: { _id: string; name: string; admissionNo: string; rollNo: string; done: number }[];
+  studentId: string | null;
+  subjects: StudentPaper[];
+};
+
+/**
+ * Result preparation by student: pick a student and fill every paper — written, theory,
+ * practical, viva or whatever parts each paper has — then save and move to the next student.
+ */
+function StudentMarks({ termId, overview, reload }: { termId: string; overview: Overview | null; reload: () => void }) {
+  const classes = overview?.classes || [];
+  const [classId, setClassId] = useState("");
+  const [studentId, setStudentId] = useState("");
+  const [sheet, setSheet] = useState<StudentSheet | null>(null);
+  const [papers, setPapers] = useState<StudentPaper[]>([]);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+
+  const load = useCallback(async () => {
+    if (!termId || !classId) return;
+    setErr("");
+    try {
+      const qs = new URLSearchParams({ termId, classId, ...(studentId ? { studentId } : {}) });
+      const data = await call<StudentSheet>(`/api/exams/center/marks/student?${qs}`);
+      setSheet(data);
+      setPapers(data.subjects);
+      setDirty(false);
+      if (data.studentId && data.studentId !== studentId) setStudentId(data.studentId);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }, [termId, classId, studentId]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches data, state is set when it arrives
+    load();
+  }, [load]);
+
+  function go(nextClass: string, nextStudent: string) {
+    if (dirty && !confirm("You have unsaved marks. Discard them?")) return;
+    setMsg("");
+    if (nextClass !== classId) setSheet(null);
+    setClassId(nextClass);
+    setStudentId(nextStudent);
+  }
+
+  function update(i: number, patch: Partial<StudentPaper>) {
+    setDirty(true);
+    setPapers((list) => list.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+  }
+
+  function setMark(i: number, key: string, value: string) {
+    const marks = { ...papers[i].marks };
+    if (value === "") delete marks[key];
+    else marks[key] = Number(value);
+    update(i, { marks });
+  }
+
+  /** Enter / Tab-like: the next mark box down the sheet. */
+  function onKey(e: KeyboardEvent<HTMLInputElement>, cell: number) {
+    const move = e.key === "Enter" || e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+    if (!move) return;
+    e.preventDefault();
+    const next = document.querySelector<HTMLInputElement>(`[data-scell="${cell + move}"]`);
+    next?.focus();
+    next?.select();
+  }
+
+  const students = sheet?.students || [];
+  const index = students.findIndex((s) => s._id === studentId);
+  const student = students[index];
+
+  async function save(then?: "next") {
+    if (!sheet || !student) return;
+    setErr("");
+    setMsg("");
+    const over = papers.find((p) => p.components.some((c) => (p.marks[c.key] ?? 0) > c.maxMarks));
+    if (over) {
+      setErr(`${over.subject.name}: marks are more than the maximum.`);
+      return;
+    }
+    // Papers left blank are skipped, so a half-finished sheet never saves zeros.
+    const filled = papers.filter((p) => p.absent || Object.keys(p.marks).length);
+    if (!filled.length) {
+      setErr("Enter marks in at least one paper.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await call("/api/exams/center/marks/student", {
+        method: "PUT",
+        body: JSON.stringify({
+          termId,
+          classId,
+          studentId: student._id,
+          subjects: filled.map((p) => ({ subjectId: p.subject._id, marks: p.marks, absent: p.absent, remarks: p.remarks || undefined })),
+        }),
+      });
+      setMsg(`Saved ${student.name}: ${filled.length} of ${papers.length} papers.`);
+      setDirty(false);
+      reload();
+      const next = students[index + 1];
+      if (then === "next" && next) setStudentId(next._id);
+      else await load();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!termId) return <EmptyState message="Select an exam term above." />;
+  if (!classes.length) return <EmptyState message="No date sheet in this term yet — create it in step ① first." />;
+
+  const grand = papers.reduce(
+    (t, p) => {
+      const got = p.absent ? 0 : p.components.reduce((s, c) => s + (p.marks[c.key] ?? 0), 0);
+      return { got: t.got + got, max: t.max + p.totalMarks };
+    },
+    { got: 0, max: 0 }
+  );
+  let cell = 0;
+
+  return (
+    <div className="stack-lg">
+      {err ? <div className="alert err">{err}</div> : null}
+      {msg ? <div className="alert ok">{msg}</div> : null}
+      <Panel title="Pick class & student">
+        <div className="form-grid">
+          <Field label="Class">
+            <select className={inputClass} value={classId} onChange={(e) => go(e.target.value, "")}>
+              <option value="">Select class…</option>
+              {classes.map((c) => (
+                <option key={c.classId} value={c.classId}>{c.classLabel}</option>
+              ))}
+            </select>
+          </Field>
+          {sheet ? (
+            <Field label="Student">
+              <select className={inputClass} value={studentId} onChange={(e) => go(classId, e.target.value)}>
+                {students.map((s) => (
+                  <option key={s._id} value={s._id}>
+                    {s.rollNo ? `${s.rollNo} · ` : ""}{s.name} — {s.done}/{sheet.papers} papers{s.done >= sheet.papers ? " ✓" : ""}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : null}
+        </div>
+        {sheet && students.length ? (
+          <div className="ec-student-nav">
+            <button type="button" className="btn-ghost" disabled={index <= 0} onClick={() => go(classId, students[index - 1]._id)}>
+              ‹ Previous
+            </button>
+            <span>
+              Student {index + 1} of {students.length} · {students.filter((s) => s.done >= sheet.papers).length} complete
+            </span>
+            <button type="button" className="btn-ghost" disabled={index >= students.length - 1} onClick={() => go(classId, students[index + 1]._id)}>
+              Next ›
+            </button>
+          </div>
+        ) : null}
+      </Panel>
+
+      {sheet && student ? (
+        <Panel title={`${student.name} — ${sheet.classLabel}`} meta={`${student.rollNo ? `ROLL ${student.rollNo} · ` : ""}${student.admissionNo}`}>
+          <div className="table-scroll">
+            <table className="ec-table ec-marks">
+              <thead>
+                <tr>
+                  <th>Paper</th>
+                  <th>Marks — each part</th>
+                  <th>Total</th>
+                  <th>Grade</th>
+                  <th>Absent</th>
+                  <th>Remarks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {papers.map((p, i) => {
+                  const total = p.absent ? 0 : p.components.reduce((s, c) => s + (p.marks[c.key] ?? 0), 0);
+                  const empty = !p.absent && !Object.keys(p.marks).length;
+                  const pct = p.totalMarks ? (total / p.totalMarks) * 100 : 0;
+                  return (
+                    <tr key={p.subject._id} className={p.absent ? "ec-absent" : ""}>
+                      <td>
+                        <b>{p.subject.name}</b>
+                        <div style={hint}>
+                          {p.subject.code} · max {p.totalMarks} · pass {p.passingMarks}
+                          {p.saved ? " · saved" : ""}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="ec-parts">
+                          {p.components.map((c) => {
+                            const v = p.marks[c.key];
+                            const at = cell++;
+                            return (
+                              <label key={c.key}>
+                                <span>
+                                  {c.label} <small>/{c.maxMarks}</small>
+                                </span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={c.maxMarks}
+                                  step="0.5"
+                                  disabled={p.absent}
+                                  data-scell={at}
+                                  className={`${inputClass} ec-num${v != null && v > c.maxMarks ? " ec-bad" : ""}`}
+                                  value={v ?? ""}
+                                  onChange={(e) => setMark(i, c.key, e.target.value)}
+                                  onKeyDown={(e) => onKey(e, at)}
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      <td className="mono">{empty ? "—" : `${total}/${p.totalMarks}`}</td>
+                      <td>
+                        {p.absent ? (
+                          <span className="ec-grade f">ABS</span>
+                        ) : empty ? (
+                          "—"
+                        ) : (
+                          <span className={`ec-grade${total < p.passingMarks ? " f" : ""}`}>{gradeOf(pct)}</span>
+                        )}
+                      </td>
+                      <td>
+                        <input type="checkbox" checked={p.absent} onChange={(e) => update(i, { absent: e.target.checked })} />
+                      </td>
+                      <td>
+                        <input className={inputClass} value={p.remarks} onChange={(e) => update(i, { remarks: e.target.value })} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td><b>Grand total</b></td>
+                  <td />
+                  <td className="mono"><b>{grand.got}/{grand.max}</b></td>
+                  <td>{grand.max ? <span className="ec-grade">{gradeOf((grand.got / grand.max) * 100)}</span> : null}</td>
+                  <td colSpan={2} style={hint}>{grand.max ? `${Math.round((grand.got / grand.max) * 1000) / 10}%` : ""}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <div className="form-actions ec-sticky">
+            <button type="button" className="btn-dark" disabled={busy} onClick={() => save("next")}>
+              {busy ? "Saving…" : index < students.length - 1 ? "Save & next student" : "Save marks"}
+            </button>
+            {index < students.length - 1 ? (
+              <button type="button" className="btn-ghost" disabled={busy} onClick={() => save()}>
+                Save
+              </button>
+            ) : null}
+            {dirty ? <span style={{ ...hint, marginTop: 0 }}>Unsaved changes</span> : null}
+            <span style={{ ...hint, marginTop: 0 }}>Tip: press Enter to jump to the next mark box.</span>
+          </div>
+        </Panel>
+      ) : sheet && !students.length ? (
+        <EmptyState message="No active students in this class." />
+      ) : null}
+    </div>
+  );
+}
+
+function SubjectMarks({ termId, overview, reload }: { termId: string; overview: Overview | null; reload: () => void }) {
   const classes = overview?.classes || [];
   const [classId, setClassId] = useState("");
   const [subjectId, setSubjectId] = useState("");

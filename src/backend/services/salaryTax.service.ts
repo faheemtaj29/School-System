@@ -7,6 +7,7 @@ import { dbConnect } from "@/backend/config/database";
 import { Payslip } from "@/backend/models/HR";
 import { Settings, type SalaryTaxConfig } from "@/backend/models/Settings";
 import { Teacher } from "@/backend/models/Teacher";
+import { Staff } from "@/backend/models/Staff";
 import { ServiceError } from "@/backend/types";
 
 function round(n: number) {
@@ -197,7 +198,21 @@ export const salaryTaxService = {
     const [teacher, slips, s] = await Promise.all([
       Teacher.findById(teacherId)
         .select("firstName lastName employeeId cnic taxNumber designation address city joinDate photoUpdatedAt")
-        .lean(),
+        .lean()
+        .then(
+          async (t: unknown) =>
+            (t || (await Staff.findById(teacherId).select("firstName lastName employeeId cnic taxNumber designation address joinDate").lean())) as {
+              firstName: string;
+              lastName: string;
+              employeeId: string;
+              cnic?: string;
+              taxNumber?: string;
+              designation?: string;
+              address?: string;
+              city?: string;
+              branchCode?: string;
+            } | null
+        ),
       Payslip.find({ teacherId, month: { $in: months } }).sort({ month: 1 }).lean(),
       Settings.findOne()
         .select("schoolName address phone email currency logoUpdatedAt registrationNo employerTaxNumber")

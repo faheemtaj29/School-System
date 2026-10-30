@@ -530,7 +530,7 @@ async function groupResolver() {
 }
 
 /** Series that belong to each voucher type; anything else falls back to the type's prefix. */
-const SERIES_TYPE: Record<string, string> = { CPV: "payment", BPV: "payment", EXP: "payment", CRV: "receipt", BRV: "receipt" };
+const SERIES_TYPE: Record<string, string> = { CPV: "payment", BPV: "payment", EXP: "payment", CRV: "receipt", BRV: "receipt", PAY: "journal" };
 
 function prefixOf(type: string, series?: string | null) {
   return series && SERIES_TYPE[series] === type ? series : PREFIX[type] || "JV";
@@ -1055,6 +1055,8 @@ export const accountingService = {
     partyName?: string;
     lines: { accountCode: string; debit: number; credit: number; narration?: string }[];
     actorId?: string;
+    /** Own running number, e.g. "PAY" for salary journals. */
+    series?: string;
   }) {
     await dbConnect();
     const lines = post.lines.filter((l) => round(l.debit) > 0 || round(l.credit) > 0);
@@ -1082,6 +1084,7 @@ export const accountingService = {
       lines: checked.lines,
       sourceType: post.sourceType,
       sourceId: post.sourceId,
+      series: post.series,
       postedBy: post.actorId || undefined,
       postedAt: new Date(),
       voidedAt: undefined,
@@ -1094,7 +1097,7 @@ export const accountingService = {
     }
     const created = await Voucher.create({
       ...payload,
-      number: await nextVoucherNumber("journal", branchCode, post.date),
+      number: await nextVoucherNumber("journal", branchCode, post.date, post.series),
       createdBy: post.actorId || undefined,
     });
     return created._id;

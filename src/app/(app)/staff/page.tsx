@@ -15,7 +15,8 @@ import {
 } from "@/components/ui";
 import { PersonPhoto, savePickedPhoto } from "@/components/PersonPhoto";
 import { formatCnic } from "@/components/forms/PeopleForms";
-import { fullName, photoSrc } from "@/lib/types";
+import { DEDUCTION_HEADS, EARNING_HEADS, SalaryLines, cleanLines, lineTotal, type PayLine } from "@/components/hr/SalaryLines";
+import { formatNumber, fullName, photoSrc } from "@/lib/types";
 
 type StaffItem = {
   _id: string;
@@ -32,6 +33,13 @@ type StaffItem = {
   status: string;
   branchCode?: string;
   user?: string;
+  basicSalary?: number;
+  salaryHeads?: { head: string; kind: "earning" | "deduction"; amount: number }[];
+  employmentType?: string;
+  paymentMethod?: string;
+  bankName?: string;
+  bankAccount?: string;
+  taxNumber?: string;
 };
 
 const blank = {
@@ -47,6 +55,14 @@ const blank = {
   designation: "Clerk",
   status: "active",
   branchCode: "",
+  basicSalary: "",
+  employmentType: "",
+  paymentMethod: "",
+  bankName: "",
+  bankAccount: "",
+  taxNumber: "",
+  earningHeads: [] as PayLine[],
+  deductionHeads: [] as PayLine[],
 };
 
 export default function StaffPage() {
@@ -90,6 +106,14 @@ export default function StaffPage() {
         designation: editing.designation,
         status: editing.status,
         branchCode: editing.branchCode || "",
+        basicSalary: editing.basicSalary != null ? String(editing.basicSalary) : "",
+        employmentType: editing.employmentType || "",
+        paymentMethod: editing.paymentMethod || "",
+        bankName: editing.bankName || "",
+        bankAccount: editing.bankAccount || "",
+        taxNumber: editing.taxNumber || "",
+        earningHeads: (editing.salaryHeads || []).filter((h) => h.kind === "earning").map(({ head, amount }) => ({ head, amount })),
+        deductionHeads: (editing.salaryHeads || []).filter((h) => h.kind === "deduction").map(({ head, amount }) => ({ head, amount })),
       });
     } else {
       setForm(blank);
@@ -109,9 +133,15 @@ export default function StaffPage() {
 
   async function save(e: FormEvent) {
     e.preventDefault();
-    const { idMode, ...rest } = form;
+    const { idMode, earningHeads, deductionHeads, ...rest } = form;
+    // Empty optional fields are left out so they don't fail number / choice checks.
+    const cleaned = Object.fromEntries(Object.entries(rest).filter(([, v]) => !(typeof v === "string" && v.trim() === "")));
     const payload = {
-      ...rest,
+      ...cleaned,
+      salaryHeads: [
+        ...cleanLines(earningHeads).map((l) => ({ ...l, kind: "earning" as const })),
+        ...cleanLines(deductionHeads).map((l) => ({ ...l, kind: "deduction" as const })),
+      ],
       employeeId: idMode === "auto" && !editing ? "" : form.employeeId,
     };
     const res = await fetch(editing ? `/api/staff/${editing._id}` : "/api/staff", {
@@ -235,6 +265,7 @@ export default function StaffPage() {
         title={editing ? "Edit Staff" : "Add Staff Member"}
         subtitle="Then use Portal Login to create their Staff sign-in"
         submitLabel={editing ? "Save" : "Create"}
+        wide
       >
         {error ? <div className="alert err">{error}</div> : null}
         <div className="form-photo-row">
@@ -367,6 +398,49 @@ export default function StaffPage() {
               <option value="inactive">Inactive</option>
             </select>
           </Field>
+        </div>
+
+        <div className="form-section-title">Salary, Bank &amp; Tax</div>
+        <div className="form-grid">
+          <Field label="Basic Salary (monthly)">
+            <input type="number" min={0} className={inputClass} value={form.basicSalary} onChange={(e) => setForm({ ...form, basicSalary: e.target.value })} />
+          </Field>
+          <Field label="Employment Type">
+            <select className={inputClass} value={form.employmentType} onChange={(e) => setForm({ ...form, employmentType: e.target.value })}>
+              <option value="">—</option>
+              <option value="permanent">Permanent</option>
+              <option value="contract">Contract</option>
+              <option value="probation">Probation</option>
+              <option value="visiting">Visiting</option>
+            </select>
+          </Field>
+          <Field label="Salary Paid By">
+            <select className={inputClass} value={form.paymentMethod} onChange={(e) => setForm({ ...form, paymentMethod: e.target.value })}>
+              <option value="">Bank if an account is given, else cash</option>
+              <option value="bank">Bank transfer</option>
+              <option value="cash">Cash</option>
+            </select>
+          </Field>
+          <Field label="Bank Name">
+            <input className={inputClass} value={form.bankName} onChange={(e) => setForm({ ...form, bankName: e.target.value })} />
+          </Field>
+          <Field label="Bank Account / IBAN">
+            <input className={inputClass} value={form.bankAccount} onChange={(e) => setForm({ ...form, bankAccount: e.target.value })} />
+          </Field>
+          <Field label="NTN (tax number)">
+            <input className={inputClass} value={form.taxNumber} onChange={(e) => setForm({ ...form, taxNumber: e.target.value })} />
+          </Field>
+        </div>
+        <div className="pay-lines-grid">
+          <SalaryLines title="Monthly allowances" lines={form.earningHeads} onChange={(earningHeads) => setForm({ ...form, earningHeads })} suggestions={EARNING_HEADS} />
+          <SalaryLines title="Fixed monthly deductions" lines={form.deductionHeads} onChange={(deductionHeads) => setForm({ ...form, deductionHeads })} suggestions={DEDUCTION_HEADS} />
+        </div>
+        <div className="pay-preview">
+          <span>Basic <b>{formatNumber(Number(form.basicSalary) || 0)}</b></span>
+          <span>+ Allowances <b>{formatNumber(lineTotal(form.earningHeads))}</b></span>
+          <span>= Gross <b>{formatNumber((Number(form.basicSalary) || 0) + lineTotal(form.earningHeads))}</b></span>
+          <span>− Fixed deductions <b>{formatNumber(lineTotal(form.deductionHeads))}</b></span>
+          <span style={{ color: "var(--text-dim)" }}>Payslips are made from this each month in HR &amp; Payroll; income tax comes from the slabs.</span>
         </div>
       </ModalForm>
     </>

@@ -27,6 +27,7 @@ import type {
   DateSheetSaveInput,
   MarksSaveInput,
   RollNumberInput,
+  StudentMarksSaveInput,
 } from "@/backend/validators/examWorkflow.validator";
 
 type ClassLean = {
@@ -503,6 +504,74 @@ export const examCenterService = {
         };
       }),
     };
+  },
+
+  /**
+   * Result preparation by student: one student's papers in the term, each with its marks split
+   * (written / theory / practical / viva …), plus the class list to move between students.
+   */
+  async studentSheet(termId: string, classId: string, studentId?: string) {
+    await dbConnect();
+    const schedule = (await loadSchedules(termId, [classId]))[0];
+    if (!schedule) throw new ServiceError("NOT_FOUND", "No date sheet for this class in the term", 404);
+    const rows = schedule.rows as unknown as ScheduleRowLean[];
+    const rollBy = new Map(((schedule.rollNumbers || []) as RollLean[]).map((r) => [String(r.studentId), r.rollNo]));
+    const students = sortStudents(
+      (await Student.find({ classId, status: "active" })
+        .select("firstName lastName admissionNo rollNumber classId")
+        .lean()) as unknown as StudentLean[],
+      (s) => rollBy.get(String(s._id))
+    );
+    const marks = (await ExamMark.find({ scheduleId: schedule._id }).lean()) as unknown as MarkLean[];
+    const papersDone = new Map<string, number>();
+    for (const m of marks) papersDone.set(String(m.studentId), (papersDone.get(String(m.studentId)) || 0) + 1);
+    const current = students.find((s) => String(s._id) === studentId) || students[0];
+    const mine = current ? marks.filter((m) => String(m.studentId) === String(current._id)) : [];
+    return {
+      classLabel: classLabel(schedule.classId as unknown as ClassLean),
+      papers: rows.length,
+      students: students.map((s) => ({
+        _id: String(s._id),
+        name: fullName(s),
+        admissionNo: s.admissionNo,
+        rollNo: rollBy.get(String(s._id)) || s.rollNumber || "",
+        done: papersDone.get(String(s._id)) || 0,
+      })),
+      studentId: current ? String(current._id) : null,
+      subjects: current
+        ? rows.map((r) => {
+            const subject = subjectOf(r);
+            const m = mine.find((x) => String(x.subjectId) === subject._id);
+            return {
+              subject,
+              examDate: r.examDate || null,
+              totalMarks: r.totalMarks,
+              passingMarks: r.passingMarks,
+              components: componentsOf(r),
+              marks: Object.fromEntries((m?.marks || []).map((x) => [x.key, x.obtained])),
+              absent: m?.absent || false,
+              remarks: m?.remarks || "",
+              saved: Boolean(m),
+            };
+          })
+        : [],
+    };
+  },
+
+  /** Saves one student's marks in several papers; each paper is saved exactly as from its class sheet. */
+  async saveStudentMarks(data: StudentMarksSaveInput, userId?: string) {
+    for (const s of data.subjects) {
+      await this.saveMarks(
+        {
+          termId: data.termId,
+          classId: data.classId,
+          subjectId: s.subjectId,
+          entries: [{ studentId: data.studentId, marks: s.marks, absent: s.absent, remarks: s.remarks }],
+        },
+        userId
+      );
+    }
+    return { saved: data.subjects.length };
   },
 
   /** Save marks for one paper (all students at once) and mirror totals to the legacy exam list. */

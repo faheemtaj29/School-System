@@ -297,7 +297,9 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export const payslipSchema = z
   .object({
+    /** The employee's id; employeeModel says whether it is a teacher or a campus staff member. */
     teacherId: z.string().min(1),
+    employeeModel: z.enum(["Teacher", "Staff"]).default("Teacher"),
     month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Month must use YYYY-MM format."),
     basic: z.coerce.number().finite().min(0),
     allowances: z.coerce.number().finite().min(0).default(0),

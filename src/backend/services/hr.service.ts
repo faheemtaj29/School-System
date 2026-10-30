@@ -10,9 +10,23 @@ import { platformService } from "@/backend/services/platform.service";
 import { salaryTaxService, taxYearLabel, taxYearMonths, taxYearOf } from "@/backend/services/salaryTax.service";
 import { letterhead } from "@/backend/lib/letterhead";
 import { Teacher } from "@/backend/models/Teacher";
+import { Staff } from "@/backend/models/Staff";
+import { Voucher } from "@/backend/models/Accounting";
 
 type LeaveInput = z.infer<typeof leaveSchema>;
 type PayslipInput = z.infer<typeof payslipSchema>;
+
+/** The person a payslip is for — a teacher, or a campus staff member (payslip.teacherId holds either). */
+async function employeeOf(slip: { teacherId: unknown; employeeModel?: string }, select = "firstName lastName") {
+  const M = slip.employeeModel === "Staff" ? Staff : Teacher;
+  return M.findById(slip.teacherId).select(select).lean();
+}
+
+/** The salary journal (PAY-… voucher) of each payslip that has been paid. */
+async function voucherNumbers(ids: string[]) {
+  const vs = await Voucher.find({ sourceType: "payslip", sourceId: { $in: ids }, status: "posted" }).select("number sourceId").lean();
+  return new Map(vs.map((v: { sourceId: string; number: string; _id: unknown }) => [String(v.sourceId), { number: v.number, id: String(v._id) }]));
+}
 
 /**
  * A paid payslip posts: Dr Salaries (gross), Cr Bank (net pay), Cr Salary tax withheld,
@@ -31,6 +45,7 @@ async function syncPayslipLedger(slip: {
   branchCode?: string;
   paymentMethod?: string;
   teacherId: unknown;
+  employeeModel?: string;
 }) {
   const id = String(slip._id);
   await accountingService.removeBySource("payslip", id);
@@ -45,9 +60,10 @@ async function syncPayslipLedger(slip: {
     accountingService.ensureAccount({ systemKey: "salaryTaxPayable", code: "21020102", name: "Income Tax Withheld on Salaries", type: "liability", level: 5, parentCode: "210201", isPosting: true }),
     accountingService.ensureAccount({ systemKey: "payrollDeductions", code: "21010102", name: "Payroll Deductions Payable", type: "liability", level: 5, parentCode: "210101", isPosting: true }),
   ]);
-  const teacher = await Teacher.findById(slip.teacherId).select("firstName lastName").lean();
-  const who = teacher ? `${teacher.firstName} ${teacher.lastName}` : "Staff";
+  const person = await employeeOf(slip);
+  const who = person ? `${person.firstName} ${person.lastName}` : "Staff";
   await accountingService.postLinkedJournal({
+    series: "PAY",
     sourceType: "payslip",
     sourceId: id,
     date: slip.paidOn || new Date(),
@@ -153,10 +169,12 @@ export const hrService = {
 
   async listPayslips() {
     await dbConnect();
-    return Payslip.find()
-      .populate("teacherId", "firstName lastName employeeId email branchCode photoUpdatedAt")
+    const slips = await Payslip.find()
+      .populate("teacherId", "firstName lastName employeeId email branchCode photoUpdatedAt designation")
       .sort({ month: -1 })
       .lean();
+    const numbers = await voucherNumbers(slips.map((s: { _id: unknown }) => String(s._id)));
+    return slips.map((s: { _id: unknown }) => ({ ...s, voucher: numbers.get(String(s._id)) || null }));
   },
 
   async listPayslipsForTeacher(teacherId: string) {
@@ -169,6 +187,7 @@ export const hrService = {
 
   async createPayslip(data: PayslipInput) {
     await dbConnect();
+    if (!(await employeeOf(data))) throw new ServiceError("NOT_FOUND", "Employee not found", 404);
     const figures = await payFigures(data);
     let slip;
     try {
@@ -187,7 +206,7 @@ export const hrService = {
       ) {
         throw new ServiceError(
           "CONFLICT",
-          "A payslip already exists for this teacher and month.",
+          "A payslip already exists for this person and month.",
           409
         );
       }
@@ -221,7 +240,7 @@ export const hrService = {
       ) {
         throw new ServiceError(
           "CONFLICT",
-          "A payslip already exists for this teacher and month.",
+          "A payslip already exists for this person and month.",
           409
         );
       }
@@ -253,8 +272,10 @@ export const hrService = {
     const daysInMonth = end.getDate();
     const filter: Record<string, unknown> = { status: "active", basicSalary: { $gt: 0 } };
     if (branchCode) filter.branchCode = branchCode.toUpperCase();
-    const [staff, existing, unpaidLeaves] = await Promise.all([
+    // Teachers and campus staff alike — everyone with a basic salary on their record.
+    const [teachers, campusStaff, existing, unpaidLeaves] = await Promise.all([
       Teacher.find(filter).lean(),
+      Staff.find(filter).lean(),
       Payslip.find({ month }).select("teacherId").lean(),
       LeaveRequest.find({ status: "approved", leaveType: "unpaid", fromDate: { $lte: end }, toDate: { $gte: start } }).lean(),
     ]);
@@ -271,11 +292,16 @@ export const hrService = {
 
     const created: string[] = [];
     const failed: { name: string; error: string }[] = [];
+    const staff = [
+      ...teachers.map((t: Record<string, unknown>) => ({ ...t, employeeModel: "Teacher" as const })),
+      ...campusStaff.map((t: Record<string, unknown>) => ({ ...t, employeeModel: "Staff" as const })),
+    ] as ((typeof teachers)[number] & { employeeModel: "Teacher" | "Staff" })[];
     for (const t of staff) {
       if (done.has(String(t._id))) continue;
       const heads: { head: string; kind: string; amount: number }[] = t.salaryHeads || [];
       const parsed = payslipSchema.safeParse({
         teacherId: String(t._id),
+        employeeModel: t.employeeModel,
         month,
         basic: t.basicSalary,
         allowances: heads.length ? 0 : t.allowances || 0,
@@ -307,9 +333,11 @@ export const hrService = {
     await dbConnect();
     const slip = await Payslip.findById(id).lean();
     if (!slip) throw new ServiceError("NOT_FOUND", "Payslip not found", 404);
-    const teacher = await Teacher.findById(slip.teacherId)
-      .select("firstName lastName employeeId designation department cnic taxNumber joinDate bankName bankAccount branchCode employmentType")
-      .lean();
+    const teacher = await employeeOf(
+      slip,
+      "firstName lastName employeeId designation department cnic taxNumber joinDate bankName bankAccount branchCode employmentType"
+    );
+    const posted = (await voucherNumbers([id])).get(id) || null;
     const cfg = await salaryTaxService.config();
     const year = taxYearOf(slip.month, cfg);
     const months = taxYearMonths(year, cfg).filter((m) => m <= slip.month);
@@ -320,6 +348,7 @@ export const hrService = {
     const sum = (f: (p: (typeof ytdSlips)[number]) => number) => Math.round(ytdSlips.reduce((t, p) => t + f(p), 0) * 100) / 100;
     return {
       payslip: slip,
+      voucher: posted,
       teacher: teacher
         ? {
             name: `${teacher.firstName} ${teacher.lastName}`,

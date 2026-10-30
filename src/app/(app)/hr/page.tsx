@@ -19,9 +19,20 @@ type Leave = {
   status: string;
 };
 
+/** Someone on the payroll: a teacher or a campus staff member. */
+type Employee = Pick<TeacherItem, "_id" | "firstName" | "lastName" | "basicSalary" | "allowances" | "salaryHeads" | "paymentMethod" | "bankAccount"> & {
+  employeeId?: string;
+  designation?: string;
+  photoUpdatedAt?: string;
+  model: "Teacher" | "Staff";
+};
+
 type Payslip = {
   _id: string;
-  teacherId: TeacherItem | string;
+  teacherId: (TeacherItem & { designation?: string }) | string;
+  employeeModel?: "Teacher" | "Staff";
+  /** The salary journal posted when the payslip was paid. */
+  voucher?: { number: string; id: string } | null;
   month: string;
   basic: number;
   allowances: number;
@@ -44,7 +55,7 @@ const daysIn = (month: string) => {
 };
 
 /** Salary lines from a staff member's structure; older records show their allowance total as one line. */
-function structureOf(t: TeacherItem | undefined) {
+function structureOf(t: Employee | undefined) {
   const heads = t?.salaryHeads || [];
   const pick = (kind: "earning" | "deduction") => heads.filter((h) => h.kind === kind).map(({ head, amount }) => ({ head, amount }));
   return {
@@ -57,6 +68,11 @@ export default function HrPage() {
   const { currency: cur } = useSchoolProfile();
   const [tab, setTab] = useState<"payroll" | "leave" | "tax">("payroll");
   const [teachers, setTeachers] = useState<TeacherItem[]>([]);
+  const [campusStaff, setCampusStaff] = useState<Employee[]>([]);
+  const employees: Employee[] = useMemo(
+    () => [...teachers.map((t) => ({ ...t, model: "Teacher" as const })), ...campusStaff],
+    [teachers, campusStaff]
+  );
   const [leaves, setLeaves] = useState<Leave[]>([]);
   const [payslips, setPayslips] = useState<Payslip[]>([]);
   const [payroll, setPayroll] = useState({ paid: 0, pending: 0, draft: 0, total: 0 });
@@ -74,6 +90,7 @@ export default function HrPage() {
   });
   const [payForm, setPayForm] = useState({
     teacherId: "",
+    employeeModel: "Teacher" as "Teacher" | "Staff",
     month: new Date().toISOString().slice(0, 7),
     basic: 50000,
     earnings: [] as PayLine[],
@@ -102,10 +119,14 @@ export default function HrPage() {
     setPayslips(hr.payslips || []);
     setPayroll(hr.payroll || { paid: 0, pending: 0, draft: 0, total: 0 });
     if (currentPortal === "admin") {
-      const teacherResponse = await fetch("/api/teachers");
-      const teacherData = await teacherResponse.json();
-      if (teacherResponse.ok) setTeachers(teacherData.teachers || []);
-      else setTeachers([]);
+      const [teacherResponse, staffResponse] = await Promise.all([fetch("/api/teachers"), fetch("/api/staff")]);
+      const [teacherData, staffData] = await Promise.all([teacherResponse.json(), staffResponse.json()]);
+      setTeachers(teacherResponse.ok ? teacherData.teachers || [] : []);
+      setCampusStaff(
+        staffResponse.ok
+          ? (staffData.staff || []).filter((s: { status?: string }) => s.status !== "inactive").map((s: Omit<Employee, "model">) => ({ ...s, model: "Staff" as const }))
+          : []
+      );
     } else {
       setTeachers([]);
     }
@@ -171,6 +192,7 @@ export default function HrPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         teacherId,
+        employeeModel: p.employeeModel || "Teacher",
         month: p.month,
         basic: p.basic,
         allowances: p.allowances,
@@ -285,7 +307,7 @@ export default function HrPage() {
             {genBusy ? "Generating…" : "Generate payslips for all staff"}
           </button>
           <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
-            Uses each teacher&apos;s salary structure; approved unpaid leave is deducted. Staff who already have a payslip are skipped.
+            Teachers and campus staff with a basic salary, from their salary structure; approved unpaid leave is deducted. Anyone who already has a payslip is skipped.
           </span>
         </div>
       ) : null}
@@ -305,6 +327,7 @@ export default function HrPage() {
                     <th className="right">Gross</th>
                     <th className="right">Income tax</th>
                     <th className="right">Net</th>
+                    <th>Voucher</th>
                     <th className="right">Status</th>
                     <th className="right">Actions</th>
                   </tr>
@@ -312,12 +335,13 @@ export default function HrPage() {
                 <tbody>
                   {payslips.map((p) => {
                     const t = typeof p.teacherId === "object" ? p.teacherId : null;
+                    const isStaff = p.employeeModel === "Staff";
                     return (
                       <tr key={p._id}>
                         <td>
                           {t ? (
-                            <Link href={portal === "teacher" ? "/teachers/me" : `/teachers/${t._id}`} className="name-link">
-                              <NameCell name={fullName(t)} photo={photoSrc("teacher", t)} />
+                            <Link href={portal === "teacher" ? "/teachers/me" : isStaff ? "/staff" : `/teachers/${t._id}`} className="name-link">
+                              <NameCell name={fullName(t)} sub={t.designation || (isStaff ? "Campus staff" : "Teacher")} photo={photoSrc(isStaff ? "staff" : "teacher", t)} />
                             </Link>
                           ) : "—"}
                         </td>
@@ -325,6 +349,15 @@ export default function HrPage() {
                         <td className="num">{formatNumber(p.basic + p.allowances)}</td>
                         <td className="num">{formatNumber(p.incomeTax || 0)}</td>
                         <td className="num">{formatNumber(p.net)}</td>
+                        <td>
+                          {p.voucher ? (
+                            <a className="link-btn mono" href={`/print/voucher?id=${p.voucher.id}`} target="_blank" rel="noreferrer" title="Salary journal in the chart of accounts">
+                              {p.voucher.number}
+                            </a>
+                          ) : (
+                            <span className="cell-sub">On payment</span>
+                          )}
+                        </td>
                         <td className="right"><StatusBadge status={p.status === "paid" ? "paid" : "pending"} /></td>
                         <td>
                           <div className="row-actions">
@@ -432,10 +465,11 @@ export default function HrPage() {
               className={inputClass}
               value={payForm.teacherId}
               onChange={(e) => {
-                const picked = teachers.find((t) => t._id === e.target.value);
+                const picked = employees.find((t) => t._id === e.target.value);
                 setPayForm({
                   ...payForm,
                   teacherId: e.target.value,
+                  employeeModel: picked?.model || "Teacher",
                   basic: picked?.basicSalary ?? payForm.basic,
                   ...structureOf(picked),
                   paymentMethod: picked?.paymentMethod === "cash" || (picked && !picked.paymentMethod && !picked.bankAccount) ? "cash" : "bank",
@@ -444,9 +478,18 @@ export default function HrPage() {
               required
             >
               <option value="">Select</option>
-              {teachers.map((t) => (
-                <option key={t._id} value={t._id}>{fullName(t)}</option>
-              ))}
+              <optgroup label="Teachers">
+                {teachers.map((t) => (
+                  <option key={t._id} value={t._id}>{fullName(t)}{t.employeeId ? ` · ${t.employeeId}` : ""}</option>
+                ))}
+              </optgroup>
+              {campusStaff.length ? (
+                <optgroup label="Campus staff">
+                  {campusStaff.map((t) => (
+                    <option key={t._id} value={t._id}>{fullName(t)} · {t.designation || "Staff"}</option>
+                  ))}
+                </optgroup>
+              ) : null}
             </select>
           </Field>
           <Field label="Month" required>

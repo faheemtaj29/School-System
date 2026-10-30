@@ -115,7 +115,25 @@ export const marksSaveSchema = z.object({
     .min(1),
 });
 
+/** One student's marks in every paper of the term (result preparation by student). */
+export const studentMarksSaveSchema = z.object({
+  termId: objectId,
+  classId: objectId,
+  studentId: objectId,
+  subjects: z
+    .array(
+      z.object({
+        subjectId: objectId,
+        marks: z.record(z.string(), z.coerce.number().min(0)).default({}),
+        absent: z.boolean().default(false),
+        remarks: z.string().max(200).optional(),
+      })
+    )
+    .min(1),
+});
+
 export type DateSheetPlanInput = z.infer<typeof dateSheetPlanSchema>;
+export type StudentMarksSaveInput = z.infer<typeof studentMarksSaveSchema>;
 export type DateSheetSaveInput = z.infer<typeof dateSheetSaveSchema>;
 export type RollNumberInput = z.infer<typeof rollNumberSchema>;
 export type MarksSaveInput = z.infer<typeof marksSaveSchema>;

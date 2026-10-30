@@ -16,6 +16,7 @@ import {
   dateSheetSaveSchema,
   marksSaveSchema,
   rollNumberSchema,
+  studentMarksSaveSchema,
 } from "@/backend/validators/examWorkflow.validator";
 
 const ID = /^[a-f0-9]{24}$/i;
@@ -128,6 +129,32 @@ export const examCenterController = {
       const parsed = marksSaveSchema.safeParse(await req.json());
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
       return jsonOk(await examCenterService.saveMarks(parsed.data, session?.id));
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  /** One student's papers in the term, for entering their marks subject by subject. */
+  async studentSheet(req: Request) {
+    const { error } = await requireAuth(["admin", "teacher"]);
+    if (error) return error;
+    const { termId, classId } = query(req);
+    const studentId = new URL(req.url).searchParams.get("studentId") || undefined;
+    if (!needIds(termId, classId)) return jsonError("Select term and class");
+    try {
+      return jsonOk(await examCenterService.studentSheet(termId, classId, studentId && ID.test(studentId) ? studentId : undefined));
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  async saveStudentMarks(req: Request) {
+    const { error, session } = await requireAuth(["admin", "teacher"]);
+    if (error) return error;
+    try {
+      const parsed = studentMarksSaveSchema.safeParse(await req.json());
+      if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
+      return jsonOk(await examCenterService.saveStudentMarks(parsed.data, session?.id));
     } catch (e) {
       return fromServiceError(e);
     }

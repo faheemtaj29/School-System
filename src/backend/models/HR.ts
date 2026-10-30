@@ -53,7 +53,9 @@ const PayLineSchema = new Schema<IPayLine>(
 );
 
 export interface IPayslip {
+  /** The employee: a teacher, or a campus staff member when employeeModel is "Staff". */
   teacherId: Types.ObjectId;
+  employeeModel?: "Teacher" | "Staff";
   month: string;
   basic: number;
   allowances: number;
@@ -82,7 +84,8 @@ export interface IPayslip {
 
 const PayslipSchema = new Schema<IPayslip>(
   {
-    teacherId: { type: Schema.Types.ObjectId, ref: "Teacher", required: true },
+    teacherId: { type: Schema.Types.ObjectId, refPath: "employeeModel", required: true },
+    employeeModel: { type: String, enum: ["Teacher", "Staff"], default: "Teacher" },
     month: { type: String, required: true },
     basic: { type: Number, required: true, min: 0 },
     allowances: { type: Number, default: 0 },

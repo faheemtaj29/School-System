@@ -7,6 +7,8 @@ import { ServiceError } from "@/backend/types";
 import { parseOptionalDate } from "@/backend/lib/http";
 import type { StaffInput } from "@/backend/validators/auth.validator";
 import { numberingService } from "@/backend/services/numbering.service";
+import { accountingService } from "@/backend/services/accounting.service";
+import { Payslip } from "@/backend/models/HR";
 
 export const staffService = {
   async list(branchCode?: string | null) {
@@ -59,6 +61,9 @@ export const staffService = {
     await dbConnect();
     const item = await Staff.findByIdAndDelete(id);
     if (!item) throw new ServiceError("NOT_FOUND", "Staff member not found", 404);
+    const slips = await Payslip.find({ teacherId: id, employeeModel: "Staff" }).select("_id").lean();
+    for (const s of slips) await accountingService.removeBySource("payslip", String(s._id));
+    await Payslip.deleteMany({ teacherId: id, employeeModel: "Staff" });
     return { ok: true };
   },
 };
