@@ -17,7 +17,7 @@ import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
 import { PartyLedger } from "@/components/accounting/PartyLedger";
 import { CoaSetup, type CoaAccount } from "@/components/accounting/CoaSetup";
 import { AdjustedTrialBalance, AgingReport, BudgetReport, EquityStatement, FullLedgerReport, ProfitDistribution, type Distribution } from "@/components/accounting/Reports";
-import { QbVoucher, type QbMode } from "@/components/accounting/QbVoucher";
+import { QbVoucher, VoucherViewer, canEditVoucher, type QbMode } from "@/components/accounting/QbVoucher";
 
 type Account = {
   _id: string;
@@ -228,6 +228,9 @@ export default function AccountingPage() {
   const [voucherOpen, setVoucherOpen] = useState(false);
   // QuickBooks-style entry screen for payments, receipts, journal and contra vouchers.
   const [qbMode, setQbMode] = useState<QbMode | null>(null);
+  // A saved voucher shown as it prints (View), and one open for changes in the entry screen (Edit).
+  const [viewing, setViewing] = useState<{ id: string; edit: boolean } | null>(null);
+  const [changing, setChanging] = useState<{ id: string; mode: QbMode; expense: boolean } | null>(null);
   const [voucherForm, setVoucherForm] = useState(voucherBlank);
   const [editingVoucherId, setEditingVoucherId] = useState<string | null>(null);
   const [voucherNumberPreview, setVoucherNumberPreview] = useState("");
@@ -855,6 +858,15 @@ export default function AccountingPage() {
     if (response.ok) setVoucherNumberPreview(data.number || "");
   }
 
+  /** Invoices keep their own form; payments, receipts, journals and contras open in the entry screen. */
+  function editVoucher(voucher: Voucher) {
+    if (voucher.voucherType === "sales_invoice" || voucher.voucherType === "purchase_invoice") {
+      openVoucherForEdit(voucher);
+      return;
+    }
+    setViewing({ id: voucher._id, edit: true });
+  }
+
   function openVoucherForEdit(voucher: Voucher) {
     if (voucher.status !== "draft") {
       alert("Only draft vouchers can be edited");
@@ -1164,6 +1176,30 @@ export default function AccountingPage() {
         />
       ) : null}
 
+      {viewing ? (
+        <VoucherViewer
+          key={viewing.id}
+          id={viewing.id}
+          editOnOpen={viewing.edit}
+          onEdit={(v, how) => {
+            setViewing(null);
+            setChanging({ id: v._id, ...how });
+          }}
+          onClose={() => setViewing(null)}
+        />
+      ) : null}
+      {changing ? (
+        <QbVoucher
+          key={changing.id}
+          mode={changing.mode}
+          expense={changing.expense}
+          voucherId={changing.id}
+          branch={branch || "MAIN"}
+          onClose={() => setChanging(null)}
+          onSaved={() => load()}
+        />
+      ) : null}
+
       <Breadcrumb items={["Accounting", breadcrumb.section, breadcrumb.leaf]} />
 
       {isDashboardNode ? (
@@ -1449,10 +1485,11 @@ export default function AccountingPage() {
                       </td>
                       <td>
                         <div className="row-actions">
-                          <button type="button" className="link-btn" onClick={() => setSelected(v)}>View</button>
-                          {v.status === "draft" ? (
-                            <button type="button" className="link-btn" onClick={() => openVoucherForEdit(v)}>Edit</button>
+                          <button type="button" className="link-btn" onClick={() => setViewing({ id: v._id, edit: false })}>View</button>
+                          {canEditVoucher(v) ? (
+                            <button type="button" className="link-btn" onClick={() => editVoucher(v)}>Edit</button>
                           ) : null}
+                          <button type="button" className="link-btn" onClick={() => setSelected(v)}>Details</button>
                           <button type="button" className="link-btn" onClick={() => printVoucher(v)}>Print</button>
                           <button type="button" className="link-btn" onClick={() => openVoucherPdf(v)}>PDF</button>
                           <button type="button" className="link-btn" onClick={() => exportVoucherExcel(v)}>Excel</button>
@@ -1820,12 +1857,12 @@ export default function AccountingPage() {
       {selected ? (
         <Panel title={`${selected.number} — ${voucherLabels[selected.voucherType]}`} meta={selected.status.toUpperCase()}>
           <div className="form-actions no-print" style={{ marginTop: 0, marginBottom: 12 }}>
-            <button type="button" className="btn-dark" onClick={() => setSelected(selected)}>
+            <button type="button" className="btn-dark" onClick={() => setViewing({ id: selected._id, edit: false })}>
               View
             </button>
-            {selected.status === "draft" ? (
-              <button type="button" className="btn-ghost" onClick={() => openVoucherForEdit(selected)}>
-                Update Draft
+            {canEditVoucher(selected) ? (
+              <button type="button" className="btn-ghost" onClick={() => editVoucher(selected)}>
+                Edit
               </button>
             ) : null}
             {selected.status === "draft" ? (

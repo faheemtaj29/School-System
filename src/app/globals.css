@@ -2995,6 +2995,33 @@ table.fee-lines td { padding: 4px 6px; }
 .qb-top h1 small { font-size: 13px; color: #6b6c72; font-weight: 400; }
 .qb-ic { width: 30px; height: 30px; border-radius: 50%; background: #e3f2ec; color: #157a5c; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
 .qb-x { border: none; background: none; font-size: 20px; color: #6b6c72; cursor: pointer; }
+.qb-top { gap: 16px; }
+.qb-top h1 { margin-right: auto; }
+.qb-no { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #6b6c72; }
+.qb-no .qb-in { width: 210px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.qb-auto-no { border: none; background: none; color: #157a5c; font-weight: 600; cursor: pointer; font-size: 12.5px; }
+.qb-tax { display: flex !important; align-items: center; gap: 10px; }
+.qb-tax .qb-in { flex: 1; min-width: 0; height: 32px; font-size: 13px; }
+.qb-tax span { white-space: nowrap; }
+.qb-view { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #e9ebef; }
+.qb-view iframe { flex: 1; width: 100%; border: 0; }
+.qb-view .alert { margin: 16px 28px 0; }
+.qb-foot-note { font-size: 12.5px; opacity: .8; }
+.print-embedded .print-toolbar { display: none; }
+/* Settings → Finance → Taxes */
+.tax-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.tax-head p { margin: 0; max-width: 640px; color: var(--text-dim); font-size: 13px; }
+.tax-presets { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 12.5px; color: var(--text-dim); }
+.tax-contexts { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; margin-top: 6px; }
+.tax-contexts .check-row { align-items: flex-start; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.tax-contexts .check-row span { display: flex; flex-direction: column; gap: 2px; }
+.tax-contexts small { color: var(--text-dim); font-size: 12px; }
+.field-label { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+@media (max-width: 720px) {
+  .qb-top { flex-wrap: wrap; padding: 10px 16px; }
+  .qb-no { order: 3; width: 100%; }
+  .qb-no .qb-in { flex: 1; width: auto; }
+}
 .qb-body { flex: 1; overflow: auto; padding: 20px 28px 30px; }
 .qb-head { display: flex; justify-content: space-between; gap: 30px; align-items: flex-start; }
 .qb-fields { display: flex; gap: 16px; flex-wrap: wrap; }
@@ -3034,7 +3061,7 @@ textarea.qb-in { height: auto; padding: 8px 10px; resize: vertical; }
 .qb-btn:disabled { opacity: .55; cursor: wait; }
 .qb-bottom { display: flex; justify-content: space-between; gap: 30px; margin-top: 22px; flex-wrap: wrap; }
 .qb-memo { flex: 1; max-width: 460px; min-width: 260px; }
-.qb-totals { width: 320px; font-size: 15px; }
+.qb-totals { width: 380px; max-width: 100%; font-size: 15px; }
 .qb-totals > div { display: flex; justify-content: space-between; padding: 7px 0; }
 .qb-grand { font-weight: 700; font-size: 18px; border-top: 1px solid #c9ccd1; }
 .qb-note { font-size: 12px; color: #6b6c72; margin-top: 6px; }
@@ -3505,18 +3532,25 @@ tr.def-hot td { background: #fff6f5; }
 /* ── Student ID cards (85.6 × 54 mm, 10 per A4) ── */
 .idc-page { display: grid !important; grid-template-columns: repeat(2, 85.6mm); grid-auto-rows: 54mm; gap: 1.5mm 6mm; justify-content: center; align-content: start; }
 .idc { width: 85.6mm; height: 54mm; border: 1px dashed #b8c4be; border-radius: 3mm; overflow: hidden; display: flex; flex-direction: column; font-size: 7.4pt; color: #1d2a24; background: #fff; break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-.idc-top { display: flex; align-items: center; gap: 2mm; padding: 1.6mm 2.4mm; background: #1f5c45; color: #fff; }
+.idc { --idc-main: #1f5c45; --idc-band: #e8b84a; --idc-band-ink: #1d2a24; }
+.idc-lead { --idc-main: #7a1f2b; --idc-band: #e8b84a; }
+.idc-deputy { --idc-main: #4b2a7b; --idc-band: #d8c3f0; }
+.idc-coord { --idc-main: #1e3a6e; --idc-band: #f0c14b; }
+.idc-senior { --idc-main: #0f5e78; --idc-band: #9fdcec; }
+.idc-office { --idc-main: #3d4b5c; --idc-band: #cfd8e2; }
+.idc-support { --idc-main: #7a4a1e; --idc-band: #f2c48d; }
+.idc-top { display: flex; align-items: center; gap: 2mm; padding: 1.6mm 2.4mm; background: var(--idc-main); color: #fff; }
 .idc-top img { width: 8mm; height: 8mm; object-fit: contain; background: #fff; border-radius: 50%; padding: .5mm; }
 .idc-top div { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
 .idc-top b { font-size: 9pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .idc-top span { font-size: 6.4pt; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.idc-band { background: #e8b84a; color: #1d2a24; font-weight: 800; font-size: 6.4pt; letter-spacing: .8px; text-align: center; padding: .5mm 0; }
+.idc-band { background: var(--idc-band); color: var(--idc-band-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 800; font-size: 6.4pt; letter-spacing: .8px; text-align: center; padding: .5mm 0; }
 .idc-body { flex: 1; display: grid; grid-template-columns: 19mm minmax(0, 1fr) 14mm; gap: 2mm; padding: 2mm 2.4mm 1mm; align-items: center; min-height: 0; overflow: hidden; }
 .idc-photo { width: 19mm; height: 24mm; border: 1px solid #c9d3ce; border-radius: 1.5mm; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #eef3f0; }
 .idc-photo img { width: 100%; height: 100%; object-fit: cover; }
 .idc-photo span { font-size: 13pt; font-weight: 700; color: #7a8a82; }
 .idc-info { min-width: 0; display: flex; flex-direction: column; gap: .8mm; }
-.idc .idc-name { font-size: 9pt; font-weight: 800; color: #1f5c45; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.idc .idc-name { font-size: 9pt; font-weight: 800; color: var(--idc-main); line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .idc dl { display: flex; flex-direction: column; gap: .35mm; min-width: 0; margin: 0; }
 .idc-row { display: grid; grid-template-columns: 10.5mm minmax(0, 1fr); gap: 1mm; align-items: baseline; line-height: 1.25; }
 .idc dt { color: #6b7a72; font-size: 5.6pt; text-transform: uppercase; letter-spacing: .2px; white-space: nowrap; }
@@ -3547,6 +3581,16 @@ tr.def-hot td { background: #fff6f5; }
 .cert-fields dt { color: #5a6a62; min-width: 36mm; }
 .cert-fields dd { font-weight: 600; }
 .cert-leaving .cert-fields { grid-template-columns: 1fr; }
+.cert-fields dd { min-width: 0; overflow-wrap: anywhere; }
+/* The admission form carries the most fields: tighter spacing keeps it on one page. */
+.cert-admission .cert-ref { margin-top: 4mm; }
+.cert-admission .cert-title-row { min-height: 28mm; margin: 0 0 2mm; }
+.cert-admission .cert-photo { width: 24mm; height: 28mm; }
+.cert-admission .cert-fields { margin-bottom: 3mm; }
+.cert-admission .cert-fields div { padding: 1.5mm 0; font-size: 12.5px; }
+.cert-admission .cert-fields dt { min-width: 30mm; }
+.cert-admission .cert-sec { margin-top: 3mm; }
+.cert-admission .cert-signs { padding-top: 14mm; }
 .cert-note { font-size: 12.5px; color: #444; margin-top: 3mm; }
 .cert-signs { margin-top: auto; display: flex; justify-content: space-between; gap: 10mm; padding-top: 22mm; }
 .cert-signs span { flex: 1; max-width: 60mm; border-top: 1px solid #333; padding-top: 2mm; text-align: center; font-weight: 600; font-size: 13px; display: flex; flex-direction: column; }
@@ -3668,3 +3712,6 @@ table.reg tr.att-row-open td { background: var(--jade-light); }
 
 /* Row "More" menu button stays on one line */
 .row-menu > .link-btn { white-space: nowrap; }
+
+.qbp-tot > div { gap: 12px; }
+.qbp-tot > div > span:last-child { white-space: nowrap; }

@@ -191,14 +191,10 @@ export const settingsService = {
   async addOption(key: OptionKey, value: string) {
     await dbConnect();
     const clean = value.trim();
-    await Settings.findOneAndUpdate(
-      {},
-      {
-        $setOnInsert: defaults,
-        $addToSet: { [`optionLists.${key}`]: clean },
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
+    // Make sure the settings document exists first: one update can't both insert the default
+    // option lists and add to one of them ("would create a conflict at 'optionLists'").
+    await Settings.updateOne({}, { $setOnInsert: defaults }, { upsert: true });
+    await Settings.updateOne({}, { $addToSet: { [`optionLists.${key}`]: clean } });
     // A new fee head gets its own income account in the chart of accounts straight away.
     if (key === "feeHeads") {
       const { accountingService } = await import("@/backend/services/accounting.service");

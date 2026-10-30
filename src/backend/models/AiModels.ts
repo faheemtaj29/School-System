@@ -8,6 +8,8 @@ import { Schema, models, model, Types } from "mongoose";
 
 export type TaxType = "vat" | "gst" | "sales_tax" | "withholding" | "other";
 export type TaxApplication = "input" | "output";
+/** Where a tax is offered: student fee vouchers, payment / receipt vouchers, store & course sales. */
+export type TaxContext = "fees" | "payments" | "receipts" | "sales";
 
 export interface ITax {
   name: string;
@@ -17,6 +19,13 @@ export interface ITax {
   application: TaxApplication;
   accountCode: string;
   accountName: string;
+  appliesTo: TaxContext[];
+  /** Selected automatically (fees: always added when above the threshold). */
+  autoApply: boolean;
+  /** Price already includes the tax (GST-style taxes only). */
+  inclusive: boolean;
+  /** Only charged when the amount is above this. */
+  threshold: number;
   isActive: boolean;
   effectiveFrom: Date;
   effectiveTo?: Date;
@@ -38,10 +47,14 @@ const TaxSchema = new Schema<ITax>(
     application: {
       type: String,
       enum: ["input", "output"],
-      required: true,
+      default: "output",
     },
     accountCode: { type: String, required: true, trim: true },
     accountName: { type: String, required: true, trim: true },
+    appliesTo: { type: [String], enum: ["fees", "payments", "receipts", "sales"], default: [] },
+    autoApply: { type: Boolean, default: false },
+    inclusive: { type: Boolean, default: false },
+    threshold: { type: Number, default: 0, min: 0 },
     isActive: { type: Boolean, default: true },
     effectiveFrom: { type: Date, required: true, default: Date.now },
     effectiveTo: Date,

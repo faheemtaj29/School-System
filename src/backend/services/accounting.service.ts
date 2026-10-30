@@ -332,6 +332,20 @@ export function calcTax(
   return { amount: round(amount + taxAmount), taxAmount };
 }
 
+/** Store & course sales tax: the "sales" tax from the Taxes setup, else the older single tax in Settings. */
+async function salesTaxSettings(settings: { taxEnabled?: boolean; taxRate?: number; taxInclusive?: boolean; taxName?: string }) {
+  const { taxService } = await import("@/backend/services/tax.service");
+  return (
+    (await taxService.salesTax()) || {
+      taxEnabled: settings.taxEnabled,
+      taxRate: settings.taxRate,
+      taxInclusive: settings.taxInclusive,
+      taxName: settings.taxName,
+      accountCode: "",
+    }
+  );
+}
+
 function mapMethod(method?: string): "cash" | "bank" | "online" | "cheque" | undefined {
   if (!method) return undefined;
   if (method === "card") return "online";
@@ -546,6 +560,25 @@ async function previewVoucherNumber(type: string, branchCode: string, date: Date
   return `${prefix}-${branch}-${year}-${String(next).padStart(5, "0")}`;
 }
 
+/** The next auto number, unless the user typed their own — which must not be in use. */
+async function chosenVoucherNumber(
+  wanted: string | undefined,
+  type: string,
+  branchCode: string,
+  date: Date,
+  series?: string | null,
+  exceptId?: string
+) {
+  const typed = String(wanted || "").trim();
+  if (typed && typed !== (await previewVoucherNumber(type, branchCode, date, series))) {
+    if (await Voucher.exists({ number: typed, ...(exceptId ? { _id: { $ne: exceptId } } : {}) })) {
+      throw new ServiceError("CONFLICT", `Voucher number ${typed} is already used — pick another`, 409);
+    }
+    return typed;
+  }
+  return nextVoucherNumber(type, branchCode, date, series);
+}
+
 /**
  * Credit lines for a split income posting: weights scaled to `base`, merged per account,
  * the last line taking any rounding difference. Without splits, one line to `fallback`.
@@ -705,7 +738,7 @@ async function createDoubleEntryVoucher(
     data.voucherType
   );
   const series = data.series && SERIES_TYPE[data.series] === data.voucherType ? data.series : undefined;
-  const number = await nextVoucherNumber(data.voucherType, branchCode, date, series);
+  const number = await chosenVoucherNumber(data.number, data.voucherType, branchCode, date, series);
   const posted = forced?.status === "posted" || data.postNow;
 
   return Voucher.create({
@@ -726,7 +759,7 @@ async function createDoubleEntryVoucher(
     subtotal: invoice?.subtotal || checked.total,
     discountAmount: data.discountAmount,
     taxAmount: data.taxAmount,
-    taxName: data.taxAmount > 0 ? settings.taxName || "Tax" : undefined,
+    taxName: data.taxAmount > 0 ? data.taxName || settings.taxName || "Tax" : undefined,
     grandTotal: invoice?.grandTotal || checked.total,
     items: data.items.map((item) => ({
       ...item,
@@ -1173,12 +1206,21 @@ export const accountingService = {
     return voucher;
   },
 
+  /**
+   * Change a voucher, QuickBooks style: drafts, and posted vouchers entered by hand, can be edited
+   * in place (reports read posted vouchers, so they follow at once; the audit trail keeps the old
+   * version). Vouchers made by Fees, HR, Store etc. are changed from where they came from.
+   */
   async updateVoucherDraft(id: string, data: VoucherInput, actor?: SessionUser) {
     await ensureSeeded();
     const voucher = await Voucher.findById(id);
     if (!voucher) throw new ServiceError("NOT_FOUND", "Voucher not found", 404);
-    if (voucher.status !== "draft") {
-      throw new ServiceError("CONFLICT", "Only draft vouchers can be updated", 409);
+    const wasPosted = voucher.status === "posted";
+    if (wasPosted && (voucher.sourceType || "manual") !== "manual") {
+      throw new ServiceError("CONFLICT", `${voucher.number} was made by ${voucher.sourceType} — change it there`, 409);
+    }
+    if (voucher.status !== "draft" && !wasPosted) {
+      throw new ServiceError("CONFLICT", `A ${voucher.status} voucher can't be changed`, 409);
     }
     const before = voucherSnapshot(voucher.toObject());
 
@@ -1192,7 +1234,14 @@ export const accountingService = {
       invoice?.lines || data.lines,
       data.voucherType
     );
-    const posted = Boolean(data.postNow);
+    const posted = wasPosted || Boolean(data.postNow);
+    const typed = String(data.number || "").trim();
+    if (typed && typed !== voucher.number) {
+      if (await Voucher.exists({ number: typed, _id: { $ne: voucher._id } })) {
+        throw new ServiceError("CONFLICT", `Voucher number ${typed} is already used — pick another`, 409);
+      }
+      voucher.number = typed;
+    }
 
     voucher.voucherType = data.voucherType;
     voucher.date = date;
@@ -1207,7 +1256,7 @@ export const accountingService = {
     voucher.subtotal = invoice?.subtotal || checked.total;
     voucher.discountAmount = data.discountAmount;
     voucher.taxAmount = data.taxAmount;
-    voucher.taxName = data.taxAmount > 0 ? settings.taxName || "Tax" : undefined;
+    voucher.taxName = data.taxAmount > 0 ? data.taxName || settings.taxName || "Tax" : undefined;
     voucher.grandTotal = invoice?.grandTotal || checked.total;
     voucher.items = data.items.map((item) => ({
       ...item,
@@ -1215,7 +1264,9 @@ export const accountingService = {
     }));
     voucher.lines = checked.lines;
 
-    if (posted) {
+    if (wasPosted) {
+      // Stays posted with its original posting date.
+    } else if (posted) {
       voucher.status = "posted";
       voucher.postedAt = new Date();
       voucher.postedBy = actor?.id as never;
@@ -2386,7 +2437,7 @@ export const accountingService = {
     const tax =
       data.taxAmount != null
         ? { amount: data.amount, taxAmount: data.taxAmount }
-        : calcTax(data.amount, settings);
+        : calcTax(data.amount, await salesTaxSettings(settings));
     const cash = await systemAccount(data.method === "bank" || data.method === "online" ? "bank" : "cash");
     const opposite = await systemAccount(data.type === "income" ? "miscIncome" : "generalExpense");
     await createDoubleEntryVoucher(
@@ -2431,9 +2482,9 @@ export const accountingService = {
       return null;
     }
     const settings = await loadFinanceSettings();
-    const tax = post.skipTax
-      ? { amount: post.amount, taxAmount: 0 }
-      : calcTax(post.amount, settings);
+    // Fee vouchers carry their taxes as their own lines (see taxService.withFeeTaxes).
+    const sales = post.skipTax || post.sourceType === "fee" ? null : await salesTaxSettings(settings);
+    const tax = sales ? calcTax(post.amount, sales) : { amount: post.amount, taxAmount: 0 };
     const date = post.date ? new Date(post.date) : new Date();
     const branchCode = (post.branchCode || settings.defaultBranchCode || "MAIN").toUpperCase();
     const cash = await systemAccount(
@@ -2448,7 +2499,9 @@ export const accountingService = {
     const opposite = await systemAccount(oppositeKey);
     const taxAccount =
       tax.taxAmount > 0
-        ? await systemAccount(post.type === "income" ? "taxPayable" : "taxInput")
+        ? post.type === "income" && sales?.accountCode
+          ? { code: sales.accountCode }
+          : await systemAccount(post.type === "income" ? "taxPayable" : "taxInput")
         : null;
     const base = round(tax.amount - tax.taxAmount);
     const credits = post.type === "income" ? splitCredits(post.splits, base, opposite.code) : [];
@@ -2487,7 +2540,7 @@ export const accountingService = {
       subtotal: base,
       discountAmount: 0,
       taxAmount: tax.taxAmount,
-      taxName: tax.taxAmount ? settings.taxName || "Tax" : undefined,
+      taxName: tax.taxAmount ? sales?.taxName || settings.taxName || "Tax" : undefined,
       grandTotal: tax.amount,
       items: [],
       lines: checked.lines,
@@ -2594,10 +2647,13 @@ export const accountingService = {
   /** Apply FBR-style withholding on an expense and post a WHT payable note. */
   async applyWht(id: string) {
     await dbConnect();
-    const settings = await Settings.findOne().lean();
-    const rate = settings?.whtRate ?? 0;
+    // The withholding tax set for payments in Settings → Tax & Finance → Taxes (older setups: whtRate).
+    const { taxService } = await import("@/backend/services/tax.service");
+    const wht = (await taxService.active("payments")).find((t) => t.type === "withholding");
+    const settings = wht ? null : await Settings.findOne().lean();
+    const rate = wht?.rate ?? settings?.whtRate ?? 0;
     if (rate <= 0) {
-      throw new ServiceError("VALIDATION", "Set WHT rate in Settings → Tax & Finance first", 400);
+      throw new ServiceError("VALIDATION", "Add a withholding tax for payments in Settings → Tax & Finance → Taxes first", 400);
     }
     const item = await LedgerEntry.findById(id);
     if (!item) throw new ServiceError("NOT_FOUND", "Entry not found", 404);
@@ -2607,9 +2663,9 @@ export const accountingService = {
     if ((item.whtAmount || 0) > 0) {
       throw new ServiceError("CONFLICT", "WHT already applied on this entry", 409);
     }
-    const wht = Math.round(((item.amount * rate) / 100) * 100) / 100;
-    item.whtAmount = wht;
-    item.notes = `${item.notes ? `${item.notes} · ` : ""}WHT ${rate}% = ${wht}`;
+    const amount = Math.round(((item.amount * rate) / 100) * 100) / 100;
+    item.whtAmount = amount;
+    item.notes = `${item.notes ? `${item.notes} · ` : ""}WHT ${rate}% = ${amount}`;
     await item.save();
     return item;
   },

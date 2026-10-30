@@ -63,6 +63,10 @@ export function PrintShell({
       window.removeEventListener("beforeprint", apply);
     };
   }, [title]);
+  // Shown inside the app (e.g. a voucher just saved): the app's own buttons replace the toolbar.
+  useEffect(() => {
+    document.documentElement.classList.toggle("print-embedded", window.self !== window.top);
+  }, []);
   // On a phone the A4 page is shrunk to fit the screen; printing uses the real size.
   const pagesRef = useRef<HTMLDivElement>(null);
   useEffect(() => {

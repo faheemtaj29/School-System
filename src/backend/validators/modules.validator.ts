@@ -212,8 +212,12 @@ export const voucherSchema = z.object({
   isAdjusting: z.boolean().optional(),
   /** Own numbering for cash/bank payments & receipts and expense vouchers. */
   series: z.enum(["CPV", "BPV", "CRV", "BRV", "EXP"]).optional(),
+  /** Leave empty (or as suggested) for the next auto number; a typed number must be unused. */
+  number: z.string().trim().max(40).optional(),
   discountAmount: z.coerce.number().min(0).default(0),
   taxAmount: z.coerce.number().min(0).default(0),
+  /** Which tax the tax amount is (e.g. "Withholding Tax @ 10%"). */
+  taxName: z.string().trim().max(80).optional(),
   items: z.array(invoiceItemSchema).default([]),
   lines: z.array(voucherLineSchema).default([]),
   postNow: z.boolean().default(false),

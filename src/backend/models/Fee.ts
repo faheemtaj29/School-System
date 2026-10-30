@@ -3,6 +3,9 @@ import mongoose, { Schema, models, model, Types } from "mongoose";
 export interface IFeeLine {
   head: string;
   amount: number;
+  /** Set on a tax line (e.g. advance tax on fee): its tax code and the payable account it posts to. */
+  taxCode?: string;
+  taxAccount?: string;
 }
 
 export interface IFeePayment {
@@ -64,6 +67,8 @@ const FeeLineSchema = new Schema<IFeeLine>(
   {
     head: { type: String, required: true, trim: true },
     amount: { type: Number, required: true, min: 0 },
+    taxCode: String,
+    taxAccount: String,
   },
   { _id: false }
 );

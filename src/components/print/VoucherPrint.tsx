@@ -29,6 +29,7 @@ type Data = {
     grandTotal?: number;
     subtotal?: number;
     taxAmount?: number;
+    taxName?: string;
     lines: Line[];
     createdBy?: { name?: string } | null;
   };
@@ -64,9 +65,21 @@ export function VoucherPrintPage({ id }: { id: string }) {
   const isPay = v?.voucherType === "payment";
   const isRec = v?.voucherType === "receipt";
   const settle = v?.lines.filter((l) => l.isCashBank && (isPay ? l.credit > 0 : l.debit > 0)) || [];
-  const cats = v?.lines.filter((l) => !settle.includes(l)) || [];
+  // A tax line (withholding deducted, or GST added) is shown in the totals, not as a category.
+  const taxLines =
+    v && (v.taxAmount || 0) > 0
+      ? v.lines.filter((l) => !settle.includes(l) && (l.narration === v.taxName || (isPay ? l.credit > 0 : l.debit > 0)))
+      : [];
+  const cats = v?.lines.filter((l) => !settle.includes(l) && !taxLines.includes(l)) || [];
   const simple = (isPay || isRec) && settle.length > 0;
-  const total = v ? v.lines.reduce((s, l) => s + (l.debit || 0), 0) : 0;
+  const subtotal = cats.reduce((s, l) => s + (isPay ? l.debit || 0 : l.credit || 0), 0);
+  /** Tax that comes off the amount (withheld) is negative; tax charged on top is positive. */
+  const taxSigned = taxLines.reduce((s, l) => s + (isPay ? (l.debit || 0) - (l.credit || 0) : (l.credit || 0) - (l.debit || 0)), 0);
+  const total = simple
+    ? settle.reduce((s, l) => s + (isPay ? l.credit : l.debit), 0)
+    : v
+      ? v.lines.reduce((s, l) => s + (l.debit || 0), 0)
+      : 0;
   const cash = settle.some((l) => /cash/i.test(l.accountName || "") && !l.bankName);
   const title = v
     ? v.series === "EXP"
@@ -174,8 +187,13 @@ export function VoucherPrintPage({ id }: { id: string }) {
             <div className="qbp-tot">
               {simple ? (
                 <>
-                  <div><span>SUBTOTAL</span><span>{money(v.subtotal ?? total)}</span></div>
-                  <div><span>TAX</span><span>{money(v.taxAmount || 0)}</span></div>
+                  <div><span>SUBTOTAL</span><span>{money(subtotal)}</span></div>
+                  {taxLines.length ? (
+                    <div>
+                      <span>{(v.taxName || "TAX").toUpperCase()}{taxSigned < 0 ? " (DEDUCTED)" : ""}</span>
+                      <span>{taxSigned < 0 ? "−" : ""}{money(Math.abs(taxSigned))}</span>
+                    </div>
+                  ) : null}
                 </>
               ) : null}
               <div className="qbp-big">

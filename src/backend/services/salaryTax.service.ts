@@ -14,6 +14,26 @@ function round(n: number) {
 }
 
 export const SALARY_TAX_PRESETS: Record<string, SalaryTaxConfig & { label: string }> = {
+  pakistan_2026_27: {
+    preset: "pakistan_2026_27",
+    label: "Pakistan — salaried, FY 2026-27 (Jul–Jun)",
+    yearStartMonth: 7,
+    slabs: [
+      { from: 0, rate: 0 },
+      { from: 600000, rate: 1 },
+      { from: 1200000, rate: 11 },
+      { from: 2200000, rate: 20 },
+      { from: 3200000, rate: 25 },
+      { from: 4100000, rate: 29 },
+      { from: 5600000, rate: 32 },
+      { from: 7000000, rate: 35 },
+    ],
+    standardDeduction: 0,
+    rebateUpTo: 0,
+    cessPercent: 0,
+    medicalExemptPercent: 10,
+    certificateTitle: "Certificate of Deduction of Income Tax on Salary (Section 149)",
+  },
   pakistan_2025_26: {
     preset: "pakistan_2025_26",
     label: "Pakistan — salaried, tax year 2025-26 (Jul–Jun)",
@@ -108,7 +128,7 @@ export const salaryTaxService = {
     if (s?.salaryTax?.slabs?.length) return s.salaryTax as SalaryTaxConfig;
     const cur = String(s?.currency || "").toUpperCase();
     if (cur.includes("INR") || cur.includes("₹")) return SALARY_TAX_PRESETS.india_new_2025_26;
-    if (cur.includes("PKR")) return SALARY_TAX_PRESETS.pakistan_2025_26;
+    if (cur.includes("PKR") || cur === "RS") return SALARY_TAX_PRESETS.pakistan_2026_27;
     return SALARY_TAX_PRESETS.none;
   },
 

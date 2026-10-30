@@ -12,6 +12,7 @@ import { accountingService } from "@/backend/services/accounting.service";
 import { DISCOUNT_DEFAULTS } from "@/backend/services/student.service";
 import { Settings } from "@/backend/models/Settings";
 import { platformService } from "@/backend/services/platform.service";
+import { taxService } from "@/backend/services/tax.service";
 import type { SessionUser } from "@/backend/types";
 
 const studentPopulate = {
@@ -41,8 +42,8 @@ function cleanLines(lines: { head: string; amount: number }[]) {
   return cleaned;
 }
 
-function titleFromLines(lines: { head: string; amount: number }[], fallback?: string) {
-  const named = lines.filter((l) => l.amount > 0).map((l) => l.head);
+function titleFromLines(lines: { head: string; amount: number; taxCode?: string }[], fallback?: string) {
+  const named = lines.filter((l) => l.amount > 0 && !l.taxCode).map((l) => l.head);
   if (fallback?.trim()) return fallback.trim();
   if (named.length <= 2) return named.join(" + ");
   return `${named[0]} + ${named.length - 1} more`;
@@ -122,7 +123,7 @@ export async function syncFeeLedger(fee: {
   branchCode?: string;
   studentId: unknown;
   payments?: { amount: number; date: Date; method: string; receiptNo: string }[];
-  lines?: { head: string; amount: number }[];
+  lines?: { head: string; amount: number; taxAccount?: string }[];
 }) {
   const paid = fee.paidAmount || 0;
   const id = String(fee._id);
@@ -139,7 +140,8 @@ export async function syncFeeLedger(fee: {
   // in proportion to their amounts on the voucher.
   const splits = [];
   for (const l of fee.lines || []) {
-    if (l.amount > 0) splits.push({ accountCode: await accountingService.feeHeadAccount(l.head), amount: l.amount });
+    // A tax line (advance tax on fee) is owed to the government: it goes to its payable, not income.
+    if (l.amount > 0) splits.push({ accountCode: l.taxAccount || (await accountingService.feeHeadAccount(l.head)), amount: l.amount });
   }
   if (fee.payments?.length) {
     await accountingService.removeBySource("fee", id);
@@ -202,7 +204,7 @@ export const feeService = {
       .lean();
     if (!student) throw new ServiceError("NOT_FOUND", "Student not found", 404);
 
-    const lines = cleanLines(data.lines);
+    const lines = await taxService.withFeeTaxes(cleanLines(data.lines));
     const gross = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
     const priced = applyConcession(gross, student);
     if (data.paidAmount > priced.amount) {
@@ -237,7 +239,7 @@ export const feeService = {
 
   async update(id: string, data: FeeInput) {
     await dbConnect();
-    const lines = cleanLines(data.lines);
+    const lines = await taxService.withFeeTaxes(cleanLines(data.lines));
     const gross = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
     const existing = await Fee.findById(id).lean();
     if (!existing) throw new ServiceError("NOT_FOUND", "Fee not found", 404);
@@ -324,7 +326,7 @@ export const feeService = {
   async generateBulk(data: BulkFeeInput & { studentId?: string; issueBatch?: string }) {
     await dbConnect();
     const issueBatch = data.issueBatch || newBatch();
-    const lines = cleanLines(data.lines);
+    const lines = await taxService.withFeeTaxes(cleanLines(data.lines));
     const gross = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
     const title = titleFromLines(lines, data.title);
 
@@ -401,7 +403,7 @@ export const feeService = {
       .lean();
     if (!student) throw new ServiceError("NOT_FOUND", "Student not found", 404);
 
-    const lines = cleanLines(data.lines);
+    const lines = await taxService.withFeeTaxes(cleanLines(data.lines));
     const gross = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
     const priced = applyConcession(gross, student);
     const n = data.installments;
@@ -419,7 +421,7 @@ export const feeService = {
       due.setMonth(due.getMonth() + i);
       const share = parts[i] / (priced.amount || 1);
       const partLines = lines.map((line) => ({
-        head: line.head,
+        ...line,
         amount: roundMoney(line.amount * share),
       }));
       const doc = await Fee.create({

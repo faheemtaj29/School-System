@@ -1,6 +1,7 @@
 "use client";
 
 import { SampleData } from "@/components/settings/SampleData";
+import { TaxSettings } from "@/components/settings/TaxSettings";
 import { StartFresh } from "@/components/settings/StartFresh";
 import { CampusLogo } from "@/components/settings/CampusLogo";
 import { DEFAULT_CHALLAN_TERMS } from "@/lib/challanTerms";
@@ -996,37 +997,7 @@ export default function SettingsPage() {
 
           {tab === "finance" ? (
             <div className="form-grid">
-              <Field label="Enable tax on ledger posts">
-                <select
-                  className={inputClass}
-                  value={form.taxEnabled ? "yes" : "no"}
-                  onChange={(e) => setForm({ ...form, taxEnabled: e.target.value === "yes" })}
-                >
-                  <option value="no">Off</option>
-                  <option value="yes">On — apply to fees, distance learning & store</option>
-                </select>
-              </Field>
-              <Field label="Tax name">
-                <input className={inputClass} value={form.taxName} onChange={(e) => setForm({ ...form, taxName: e.target.value })} placeholder="GST / VAT" />
-              </Field>
-              <Field label="Tax rate %">
-                <input
-                  type="number"
-                  className={inputClass}
-                  value={form.taxRate}
-                  onChange={(e) => setForm({ ...form, taxRate: Number(e.target.value) })}
-                />
-              </Field>
-              <Field label="Tax mode">
-                <select
-                  className={inputClass}
-                  value={form.taxInclusive ? "inclusive" : "exclusive"}
-                  onChange={(e) => setForm({ ...form, taxInclusive: e.target.value === "inclusive" })}
-                >
-                  <option value="inclusive">Inclusive (tax inside amount)</option>
-                  <option value="exclusive">Exclusive (tax added on top)</option>
-                </select>
-              </Field>
+              {/* Taxes (GST, withholding, advance tax on fee…) are set in the Taxes panel below. */}
               <Field label="Late fee %">
                 <input
                   type="number"
@@ -1078,18 +1049,10 @@ export default function SettingsPage() {
                   </button>
                 </Field>
               </div>
-              <Field label="WHT rate % (FBR-style)">
-                <input
-                  type="number"
-                  className={inputClass}
-                  value={form.whtRate ?? 0}
-                  onChange={(e) => setForm({ ...form, whtRate: Number(e.target.value) })}
-                />
-              </Field>
               <div className="form-grid one" style={{ gridColumn: "1 / -1" }}>
                 <p style={{ fontSize: 12.5, color: "var(--text-dim)", margin: 0 }}>
-                  When fees, inventory, or distance enrollments post to Accounting, tax is calculated from these settings.
-                  Paid payslips post as payroll expense (no tax). All modules share one ledger.
+                  GST, withholding and advance tax on fee are set in the Taxes panel below; salary income tax uses
+                  the slabs in HR → Salary Tax. All modules share one ledger.
                 </p>
               </div>
             </div>
@@ -1451,6 +1414,13 @@ export default function SettingsPage() {
           ) : null}
         </form>
       </Panel>
+
+      {/* Outside the settings form: taxes save on their own. */}
+      {tab === "finance" ? (
+        <Panel title="Taxes" meta="FEES · VOUCHERS · SALES">
+          <TaxSettings />
+        </Panel>
+      ) : null}
     </>
   );
 }

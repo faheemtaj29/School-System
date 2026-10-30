@@ -53,6 +53,23 @@ function Photo({ url, name }: { url: string | null; name: string }) {
 type CardRow = { label: string; value: string; className?: string };
 
 /**
+ * Card colours by post, so rank shows at a glance: leadership in maroon, deputies in purple,
+ * coordinators / heads of department in navy, senior teachers in teal, teachers in the school
+ * green, office staff in slate and support staff in brown.
+ */
+export function cardTone(post: string) {
+  const p = post.toLowerCase();
+  if (/vice|deputy|assistant principal/.test(p)) return "deputy";
+  if (/principal|director|head ?(master|mistress)|chairman|owner|ceo|rector/.test(p)) return "lead";
+  if (/coordinator|head of|hod|in-?charge|supervisor|incharge/.test(p)) return "coord";
+  if (/senior/.test(p)) return "senior";
+  if (/teacher|lecturer|instructor|tutor|educator|professor/.test(p)) return "teacher";
+  if (/driver|guard|security|peon|sweeper|clean|maid|helper|gardener|cook|aya|watch|janitor|mali|chowkidar|attendant/.test(p)) return "support";
+  if (p) return "office";
+  return "teacher";
+}
+
+/**
  * One credit-card-size ID card. Every value sits on its own line and is cut short with "…"
  * rather than running into the photo, the QR code or the footer.
  */
@@ -64,7 +81,9 @@ function IdCardView({
   rows,
   qrText,
   validity,
+  tone,
 }: {
+  tone?: string;
   head: Head;
   band: string;
   name: string;
@@ -76,7 +95,7 @@ function IdCardView({
   const qr = useQr(qrText);
   const returnTo = [head.address, head.phone].filter(Boolean).join(" · ") || head.name;
   return (
-    <article className="idc">
+    <article className={`idc${tone ? ` idc-${tone}` : ""}`}>
       <header className="idc-top">
         {head.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -185,7 +204,8 @@ export function StaffIdCardsPrint({ kind, ids }: { kind: "teacher" | "staff"; id
                 <IdCardView
                   key={c._id}
                   head={c.head}
-                  band={kind === "teacher" ? "TEACHER IDENTITY CARD" : "STAFF IDENTITY CARD"}
+                  tone={cardTone(c.designation || "")}
+                  band={`${kind === "teacher" ? "TEACHER" : "STAFF"} IDENTITY CARD${c.designation ? ` · ${c.designation.toUpperCase()}` : ""}`}
                   name={c.name}
                   photoUrl={c.photoUrl}
                   rows={[

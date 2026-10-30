@@ -30,6 +30,15 @@ function yearlyTax(income: number, c: Config) {
   return tax * (1 + (c.cessPercent || 0) / 100);
 }
 
+/** "Rs 6,000 + 11% of the amount exceeding Rs 1,200,000" — the slab as the Finance Act words it. */
+function slabText(c: Config, i: number) {
+  const slabs = [...c.slabs].sort((a, b) => a.from - b.from);
+  const s = c.slabs[i];
+  if (!s.rate) return "Tax free";
+  const fixed = Math.round(yearlyTax(s.from + (c.standardDeduction || 0), { ...c, rebateUpTo: 0, cessPercent: 0, slabs }));
+  return `${fixed ? `${formatNumber(fixed)} + ` : ""}${s.rate}% of the amount exceeding ${formatNumber(s.from)}`;
+}
+
 /** Salary income-tax rules: pick a country preset or edit the slabs. */
 export function SalaryTaxSettings({ editable }: { editable: boolean }) {
   const [cfg, setCfg] = useState<Config | null>(null);
@@ -86,7 +95,7 @@ export function SalaryTaxSettings({ editable }: { editable: boolean }) {
         <div>
           <table className="reg report-table">
             <thead>
-              <tr><th>Yearly taxable salary above</th><th className="right">Tax rate on that part</th>{editable ? <th /> : null}</tr>
+              <tr><th>Yearly taxable salary above</th><th className="right">Tax rate on that part</th><th>Tax on this slab</th>{editable ? <th /> : null}</tr>
             </thead>
             <tbody>
               {cfg.slabs.map((s, i) => (
@@ -105,6 +114,7 @@ export function SalaryTaxSettings({ editable }: { editable: boolean }) {
                       `${s.rate}%`
                     )}
                   </td>
+                  <td className="cell-sub">{slabText(cfg, i)}</td>
                   {editable ? (
                     <td>
                       <button type="button" className="link-btn danger" onClick={() => setCfg({ ...cfg, slabs: cfg.slabs.filter((_, j) => j !== i) })}>Remove</button>
