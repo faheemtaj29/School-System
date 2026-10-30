@@ -1,25 +1,21 @@
 import type { Metadata } from "next";
-import { Spectral, Work_Sans, Space_Mono } from "next/font/google";
+import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import { settingsService } from "@/backend/services/settings.service";
 import { themeCss } from "@/lib/theme";
 import "./globals.css";
 
-const display = Spectral({
+/** Headings. */
+const display = Plus_Jakarta_Sans({
   variable: "--font-display",
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
+  weight: ["500", "600", "700", "800"],
 });
 
-const sans = Work_Sans({
+/** Text and numbers (tabular figures); --font-mono points here too, see globals.css. */
+const sans = Inter({
   variable: "--font-sans",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-});
-
-const mono = Space_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-  weight: ["400", "700"],
 });
 
 export const metadata: Metadata = {
@@ -42,7 +38,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${display.variable} ${sans.variable} ${mono.variable}`}
+      className={`${display.variable} ${sans.variable}`}
     >
       <head>
         <style id="sabaq-theme" dangerouslySetInnerHTML={{ __html: css }} />

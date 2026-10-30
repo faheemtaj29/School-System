@@ -218,25 +218,43 @@ export default function StudentsPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <div className="chips">
-          <button
-            type="button"
-            className={`filter-chip${!filterClass ? " active" : ""}`}
-            onClick={() => setFilterClass("")}
+        {/* A few classes read well as chips; a long list becomes a dropdown instead of a wall of buttons. */}
+        {classes.length > 8 ? (
+          <select
+            className={inputClass}
+            style={{ maxWidth: 260, marginBottom: 0 }}
+            value={filterClass}
+            onChange={(e) => setFilterClass(e.target.value)}
+            aria-label="Filter by class"
           >
-            All Classes
-          </button>
-          {classes.map((c) => (
+            <option value="">All classes ({classes.length})</option>
+            {classes.map((c) => (
+              <option key={c._id} value={c._id}>
+                {c.name} - {c.section}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div className="chips">
             <button
-              key={c._id}
               type="button"
-              className={`filter-chip${filterClass === c._id ? " active" : ""}`}
-              onClick={() => setFilterClass(c._id)}
+              className={`filter-chip${!filterClass ? " active" : ""}`}
+              onClick={() => setFilterClass("")}
             >
-              {c.name}-{c.section}
+              All Classes
             </button>
-          ))}
-        </div>
+            {classes.map((c) => (
+              <button
+                key={c._id}
+                type="button"
+                className={`filter-chip${filterClass === c._id ? " active" : ""}`}
+                onClick={() => setFilterClass(c._id)}
+              >
+                {c.name}-{c.section}
+              </button>
+            ))}
+          </div>
+        )}
         {branches.length > 1 ? (
           <div className="chips">
             <button

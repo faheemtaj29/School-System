@@ -136,7 +136,7 @@ export function Hero({
   extra?: ReactNode;
 }) {
   return (
-    <div className="hero">
+    <div className="hero page-hero">
       <div className="hero-text">
         {kicker ? <div className="hero-kicker">{kicker}</div> : null}
         <h1>{title}</h1>

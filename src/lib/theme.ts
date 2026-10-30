@@ -20,13 +20,13 @@ export type ThemePreset = {
 };
 
 export const THEME_PRESETS: ThemePreset[] = [
-  { key: "jade", name: "Sabaq Jade", primary: "#157a5c", accent: "#e8992e", sidebar: "#0e211a", surface: "#f4f6f2" },
-  { key: "indigo", name: "Indigo Night", primary: "#4c5fd5", accent: "#f0a500", sidebar: "#161a3d", surface: "#f4f5fb" },
-  { key: "royal", name: "Royal Blue", primary: "#1d4ed8", accent: "#0ea5e9", sidebar: "#0f1c3f", surface: "#f3f6fb" },
-  { key: "maroon", name: "Maroon Classic", primary: "#9b2c2c", accent: "#d69e2e", sidebar: "#2b1414", surface: "#faf5f4" },
-  { key: "teal", name: "Deep Teal", primary: "#0f766e", accent: "#f59e0b", sidebar: "#10231f", surface: "#f2f7f6" },
-  { key: "plum", name: "Plum Study", primary: "#6d28d9", accent: "#ec4899", sidebar: "#1d1130", surface: "#f7f4fc" },
-  { key: "graphite", name: "Graphite", primary: "#334155", accent: "#0ea5e9", sidebar: "#0f172a", surface: "#f4f6f8" },
+  { key: "jade", name: "Sabaq Jade", primary: "#157a5c", accent: "#e8992e", sidebar: "#0e211a", surface: "#f5f7f6" },
+  { key: "indigo", name: "Indigo Night", primary: "#4c5fd5", accent: "#f0a500", sidebar: "#161a3d", surface: "#f5f6fa" },
+  { key: "royal", name: "Royal Blue", primary: "#1d4ed8", accent: "#0ea5e9", sidebar: "#0f1c3f", surface: "#f4f6fa" },
+  { key: "maroon", name: "Maroon Classic", primary: "#9b2c2c", accent: "#d69e2e", sidebar: "#2b1414", surface: "#f8f6f5" },
+  { key: "teal", name: "Deep Teal", primary: "#0f766e", accent: "#f59e0b", sidebar: "#10231f", surface: "#f4f7f7" },
+  { key: "plum", name: "Plum Study", primary: "#6d28d9", accent: "#ec4899", sidebar: "#1d1130", surface: "#f7f5fa" },
+  { key: "graphite", name: "Graphite", primary: "#334155", accent: "#0ea5e9", sidebar: "#0f172a", surface: "#f5f6f8" },
 ];
 
 export const DEFAULT_THEME: Theme = {
