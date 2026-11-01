@@ -12,6 +12,37 @@ import { LeaveRequest, Payslip } from "@/backend/models/HR";
 import { Student } from "@/backend/models/Student";
 import { Teacher } from "@/backend/models/Teacher";
 import { salaryTaxService, taxYearLabel, taxYearOf } from "@/backend/services/salaryTax.service";
+import { TimetableSlot } from "@/backend/models/CampusModules";
+import { Course, Enrollment } from "@/backend/models/ELearning";
+import { ExamTerm } from "@/backend/models/ExamWorkflow";
+import { examCenterService, markScopeForTeacher } from "@/backend/services/examCenter.service";
+
+const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+/** Papers this teacher marks in the open exam terms, with how many students are done. */
+async function markingWork(teacher: { _id: unknown; subjects?: unknown[]; classes?: unknown[] }) {
+  const scope = await markScopeForTeacher(teacher);
+  const terms = await ExamTerm.find({ status: { $in: ["active", "draft"] } }).select("_id name status").sort({ startDate: -1 }).limit(3).lean();
+  const out = [];
+  for (const t of terms) {
+    const ov = await examCenterService.termOverview(String(t._id), scope).catch(() => null);
+    if (!ov) continue;
+    for (const c of ov.classes) {
+      for (const sub of c.subjects) {
+        out.push({
+          termId: String(t._id),
+          term: t.name,
+          classLabel: c.classLabel,
+          subject: sub.name,
+          examDate: sub.examDate || null,
+          entered: sub.marksEntered,
+          students: c.students,
+        });
+      }
+    }
+  }
+  return out;
+}
 import type { SessionUser } from "@/backend/types";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -66,7 +97,7 @@ export const teacherProfileController = {
         .lean();
       if (!teacher) return jsonError("Teacher not found", 404);
       const classIds = (teacher.classes || []).map((c: { _id: unknown }) => c._id);
-      const [payslips, leaves, counts, cfg] = await Promise.all([
+      const [payslips, leaves, counts, cfg, slots, courses, marking] = await Promise.all([
         Payslip.find({ teacherId: teacher._id }).sort({ month: -1 }).lean(),
         LeaveRequest.find({ teacherId: teacher._id }).sort({ createdAt: -1 }).limit(20).lean(),
         Student.aggregate([
@@ -74,6 +105,16 @@ export const teacherProfileController = {
           { $group: { _id: "$classId", n: { $sum: 1 } } },
         ]),
         salaryTaxService.config(),
+        TimetableSlot.find({ teacherId: teacher._id })
+          .populate("classId", "name section")
+          .populate("subjectId", "name code")
+          .lean(),
+        Course.find({ teacherId: teacher._id }).select("code title mode status startDate").sort({ createdAt: -1 }).lean(),
+        markingWork(teacher),
+      ]);
+      const enrolled = await Enrollment.aggregate<{ _id: unknown; n: number }>([
+        { $match: { courseId: { $in: courses.map((c) => c._id) }, status: { $ne: "dropped" } } },
+        { $group: { _id: "$courseId", n: { $sum: 1 } } },
       ]);
       const now = new Date();
       const thisYear = taxYearOf(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`, cfg);
@@ -89,6 +130,31 @@ export const teacherProfileController = {
         })),
         payslips,
         leaves,
+        timetable: slots
+          .map((sl) => {
+            const cls = sl.classId as unknown as { name?: string; section?: string } | null;
+            const sub = sl.subjectId as unknown as { name?: string } | null;
+            return {
+              day: sl.day,
+              period: sl.period,
+              startTime: sl.startTime || "",
+              endTime: sl.endTime || "",
+              classLabel: cls?.name ? `${cls.name}${cls.section ? ` – ${cls.section}` : ""}` : "",
+              subject: sub?.name || "",
+              room: sl.room || "",
+              kind: sl.kind,
+            };
+          })
+          .sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day) || a.period - b.period),
+        courses: courses.map((c) => ({
+          _id: String(c._id),
+          code: c.code,
+          title: c.title,
+          mode: c.mode,
+          status: c.status,
+          students: enrolled.find((x) => String(x._id) === String(c._id))?.n || 0,
+        })),
+        marking,
         tax: {
           yearLabel: taxYearLabel(shownYear, cfg),
           shownYear,

@@ -3,7 +3,7 @@
 import { AdvanceFeeModal } from "@/components/fees/FeeTools";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EmptyState, Panel, StatusBadge } from "@/components/ui";
+import { EmptyState, Panel, StatusBadge, inputClass } from "@/components/ui";
 import { PersonPhoto } from "@/components/PersonPhoto";
 import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
 
@@ -79,13 +79,38 @@ type Profile = {
   };
   results: { cards: Card[]; tests: { _id: string; date: string; title: string; subject: string; marks: number; maxMarks: number; grade: string }[] };
   timeline: { date: string; kind: string; title: string; detail?: string }[];
+  courses: { _id: string; courseId: string; code: string; title: string; mode: string; status: string; enrolledAt: string; progress: number; lecturesDone: number; lectures: number }[];
+  siblings: { _id: string; name: string; admissionNo: string; classLabel: string; status: string; photoUrl: string | null }[];
+  notes: Note[];
   viewer: { role: string };
 };
 
-type Tab = "overview" | "record" | "attendance" | "fees" | "results";
+type Note = { _id: string; kind: string; text: string; date: string; shared: boolean; by: string };
+
+type Tab = "overview" | "record" | "attendance" | "fees" | "results" | "notes" | "courses" | "documents";
+const TABS: Tab[] = ["overview", "record", "attendance", "fees", "results", "notes", "courses", "documents"];
+
+const NOTE_LABEL: Record<string, string> = {
+  academic: "Academic",
+  behaviour: "Behaviour",
+  achievement: "Achievement",
+  health: "Health",
+  meeting: "Parent meeting",
+  other: "Other",
+};
+
+/** One printable document on the Documents tab. */
+function Doc({ title, sub, href }: { title: string; sub: string; href: string }) {
+  return (
+    <a className="sp-doc" href={href} target="_blank" rel="noreferrer">
+      <b>{title}</b>
+      <span>{sub}</span>
+    </a>
+  );
+}
 
 const STATUS_LABEL: Record<Status, string> = { present: "P", absent: "A", late: "L", excused: "E" };
-const KIND_ICON: Record<string, string> = { admission: "🎓", fee: "🧾", payment: "💵", result: "📊", absent: "✕", tc: "📄" };
+const KIND_ICON: Record<string, string> = { admission: "🎓", fee: "🧾", payment: "💵", result: "📊", absent: "✕", tc: "📄", achievement: "🏅", note: "✎" };
 
 function Info({ label, value }: { label: string; value?: string | number | null }) {
   return (
@@ -114,9 +139,12 @@ export function StudentProfileView({ id, portal = false }: { id: string; portal?
   useEffect(() => {
     const wanted = new URLSearchParams(window.location.search).get("tab");
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reads the URL once on arrival
-    if (wanted && ["overview", "record", "attendance", "fees", "results"].includes(wanted)) setTab(wanted as Tab);
+    if (wanted && TABS.includes(wanted as Tab)) setTab(wanted as Tab);
   }, []);
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [note, setNote] = useState({ kind: "academic", text: "", date: toDateInput(new Date()), shared: false });
+  const [noteBusy, setNoteBusy] = useState(false);
+  const [noteErr, setNoteErr] = useState("");
   const [marking, setMarking] = useState("");
 
   const [advanceOpen, setAdvanceOpen] = useState(false);
@@ -147,6 +175,31 @@ export function StudentProfileView({ id, portal = false }: { id: string; portal?
   const canMark = data.viewer.role === "admin" || data.viewer.role === "teacher";
   const canPhoto = data.viewer.role !== "student" && data.viewer.role !== "parent";
   const latest = data.results.cards[0];
+
+  const isStaff = !portal && data.viewer.role !== "student" && data.viewer.role !== "parent";
+  const unpaid = data.ledger.challans.filter((c) => c.status !== "paid");
+
+  async function addNote() {
+    if (!data) return;
+    setNoteErr("");
+    setNoteBusy(true);
+    const res = await fetch(`/api/students/${id}/notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(note),
+    });
+    const d = await res.json();
+    setNoteBusy(false);
+    if (!res.ok) return setNoteErr(d.error || "Could not save the note");
+    setData({ ...data, notes: [d.note, ...data.notes] });
+    setNote({ ...note, text: "" });
+  }
+
+  async function removeNote(n: Note) {
+    if (!data || !confirm("Delete this note?")) return;
+    const res = await fetch(`/api/students/${id}/notes?note=${n._id}`, { method: "DELETE" });
+    if (res.ok) setData({ ...data, notes: data.notes.filter((x) => x._id !== n._id) });
+  }
 
   async function mark(date: string, status: Status) {
     setMarking(date);
@@ -222,6 +275,9 @@ export function StudentProfileView({ id, portal = false }: { id: string; portal?
             ["attendance", "Attendance"],
             ["fees", "Fee ledger"],
             ["results", `Results (${data.results.cards.length || data.results.tests.length})`],
+            ["notes", `Notes${data.notes.length ? ` (${data.notes.length})` : ""}`],
+            ["courses", `Courses${data.courses.length ? ` (${data.courses.length})` : ""}`],
+            ["documents", "Print & documents"],
           ] as [Tab, string][]
         ).map(([k, l]) => (
           <button key={k} type="button" className={`filter-chip${tab === k ? " active" : ""}`} onClick={() => setTab(k)}>
@@ -257,6 +313,33 @@ export function StudentProfileView({ id, portal = false }: { id: string; portal?
             <Info label="Previous school" value={s.previousSchool} />
             <Info label="Status" value={s.status} />
           </Panel>
+          {data.siblings.length ? (
+            <Panel title="Brothers & sisters" meta={`${data.siblings.length} IN SCHOOL`}>
+              <div className="sp-family">
+                {data.siblings.map((b) => {
+                  const inner = (
+                    <>
+                      {b.photoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={b.photoUrl} alt="" />
+                      ) : (
+                        <span className="sp-family-i">{b.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}</span>
+                      )}
+                      <span>
+                        <b>{b.name}</b>
+                        <small>{b.classLabel} · {b.admissionNo}{b.status !== "active" ? ` · ${b.status}` : ""}</small>
+                      </span>
+                    </>
+                  );
+                  return portal ? (
+                    <div key={b._id} className="sp-family-row">{inner}</div>
+                  ) : (
+                    <Link key={b._id} href={`/students/${b._id}`} className="sp-family-row">{inner}</Link>
+                  );
+                })}
+              </div>
+            </Panel>
+          ) : null}
           {s.tcNo ? (
             <Panel title="Transfer Certificate">
               <Info label="TC no." value={s.tcNo} />
@@ -534,6 +617,122 @@ export function StudentProfileView({ id, portal = false }: { id: string; portal?
             </Panel>
           ) : null}
         </>
+      ) : null}
+
+      {/* ── notes ──────────────────────────────────────────────── */}
+      {tab === "notes" ? (
+        <Panel title={isStaff ? "Notes & remarks" : "Notes from school"} meta={`${data.notes.length} NOTES`}>
+          {isStaff ? (
+            <div className="sp-note-form no-print">
+              {noteErr ? <div className="alert err">{noteErr}</div> : null}
+              <div className="sp-note-row">
+                <select className={inputClass} value={note.kind} onChange={(e) => setNote({ ...note, kind: e.target.value })}>
+                  {Object.entries(NOTE_LABEL).map(([k, l]) => (
+                    <option key={k} value={k}>{l}</option>
+                  ))}
+                </select>
+                <input type="date" className={inputClass} value={note.date} onChange={(e) => setNote({ ...note, date: e.target.value })} />
+                <label className="check-row">
+                  <input type="checkbox" checked={note.shared} onChange={(e) => setNote({ ...note, shared: e.target.checked })} />
+                  Show to parent
+                </label>
+              </div>
+              <textarea
+                className={inputClass}
+                rows={3}
+                value={note.text}
+                placeholder="e.g. Improved a lot in reading this month; needs practice in multiplication tables."
+                onChange={(e) => setNote({ ...note, text: e.target.value })}
+              />
+              <div>
+                <button type="button" className="btn-dark" disabled={noteBusy || note.text.trim().length < 2} onClick={addNote}>
+                  {noteBusy ? "Saving…" : "Add note"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {!data.notes.length ? (
+            <EmptyState message={isStaff ? "No notes yet. Record progress, behaviour, achievements or a parent meeting." : "No notes from the school yet."} />
+          ) : (
+            <ul className="sp-notes">
+              {data.notes.map((n) => (
+                <li key={n._id} className={`sp-note sp-note-${n.kind}`}>
+                  <div className="sp-note-head">
+                    <span className="sp-note-kind">{NOTE_LABEL[n.kind] || n.kind}</span>
+                    <time>{prettyDate(n.date)}</time>
+                    {n.by ? <span>· {n.by}</span> : null}
+                    {isStaff ? <span className={`badge${n.shared ? " present" : ""}`}>{n.shared ? "Shared with parent" : "Staff only"}</span> : null}
+                    {isStaff ? (
+                      <button type="button" className="link-btn danger no-print" onClick={() => removeNote(n)}>Delete</button>
+                    ) : null}
+                  </div>
+                  <p>{n.text}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      ) : null}
+
+      {/* ── distance-learning courses ─────────────────────────── */}
+      {tab === "courses" ? (
+        <Panel title="Online & distance courses" meta={`${data.courses.length} COURSES`}>
+          {!data.courses.length ? (
+            <EmptyState message={portal ? "Not enrolled in any course yet — browse the course catalogue in Distance Learning." : "Not enrolled in any distance-learning course."} />
+          ) : (
+            <div className="sp-courses">
+              {data.courses.map((c) => (
+                <div key={c._id} className="sp-course">
+                  <div>
+                    <b>{c.title}</b>
+                    <small>{c.code} · {c.mode} · enrolled {prettyDate(c.enrolledAt)}</small>
+                  </div>
+                  <StatusBadge status={c.status === "pending" ? "pending" : c.status === "completed" ? "paid" : "active"} />
+                  <div className="sp-progress" aria-label={`${c.progress}% complete`}>
+                    <i style={{ width: `${Math.min(100, c.progress)}%` }} />
+                  </div>
+                  <small>{c.progress}% · {c.lecturesDone} of {c.lectures} lectures</small>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="form-actions no-print">
+            <Link href="/distance-learning" className="btn-ghost">Open Distance Learning</Link>
+          </div>
+        </Panel>
+      ) : null}
+
+      {/* ── print centre ───────────────────────────────────────── */}
+      {tab === "documents" ? (
+        <Panel title="Print & documents" meta="OPENS READY TO PRINT OR SAVE AS PDF">
+          <div className="sp-docs">
+            {isStaff ? (
+              <>
+                <Doc title="Admission form" sub="Filled-in form with photo box" href={`/print/certificate?student=${s._id}&type=admission`} />
+                <Doc title="Studying certificate" sub="Confirms current class & session" href={`/print/certificate?student=${s._id}&type=studying`} />
+                <Doc title="Character certificate" sub="Conduct while at the school" href={`/print/certificate?student=${s._id}&type=character`} />
+                <Doc title="Fee clearance" sub="Only when no fee is outstanding" href={`/print/certificate?student=${s._id}&type=clearance`} />
+                <Doc title="School leaving / TC" sub="Leaving date, reason & conduct" href={`/print/certificate?student=${s._id}&type=leaving`} />
+                <Doc title="Student ID card" sub="Credit-card size with QR code" href={`/print/id-cards?ids=${s._id}`} />
+              </>
+            ) : null}
+            <Doc title="Fee ledger" sub={`Every challan & payment · balance ${cur} ${formatNumber(data.ledger.balance)}`} href={`/print/student-ledger?student=${s._id}`} />
+            {unpaid.length ? (
+              <Doc
+                title={`Unpaid challan${unpaid.length > 1 ? `s (${unpaid.length})` : ""}`}
+                sub={unpaid.map((c) => c.title).slice(0, 2).join(", ")}
+                href={`/print/fee-challans?ids=${unpaid.map((c) => c._id).join(",")}&copies=${portal ? 1 : 3}`}
+              />
+            ) : null}
+            {latest ? (
+              <Doc
+                title={`Result card — ${latest.term}`}
+                sub={`${latest.percent}% · ${latest.grade} · ${latest.result}`}
+                href={`/print/result-cards?termId=${latest.termId}&classIds=${latest.classId}&student=${s._id}`}
+              />
+            ) : null}
+          </div>
+        </Panel>
       ) : null}
     </>
   );

@@ -765,12 +765,13 @@ export const reportsController = {
   },
 };
 
-type EKind = "course" | "lecture" | "material" | "enrollment" | "diploma" | "quiz" | "quiz-attempt";
+type EKind = "course" | "catalogue" | "lecture" | "material" | "enrollment" | "diploma" | "quiz" | "quiz-attempt";
 
 function eKind(req: Request): EKind {
   const k = new URL(req.url).searchParams.get("kind") || "course";
   if (
     k === "lecture" ||
+    k === "catalogue" ||
     k === "material" ||
     k === "enrollment" ||
     k === "diploma" ||
@@ -822,6 +823,9 @@ export const elearningController = {
         });
       }
       const stats = await elearningService.stats(scope);
+      if (kind === "catalogue") {
+        return jsonOk({ kind, stats, portal, catalogue: await elearningService.catalogue(portal.role === "student" ? portal.studentId : null) });
+      }
       if (kind === "lecture") {
         return jsonOk({
           kind,
@@ -895,6 +899,12 @@ export const elearningController = {
           { attempt: await elearningService.submitQuiz(parsed.data, session!) },
           201
         );
+      }
+      if (kind === "catalogue") {
+        // A student (or their parent) asks to join a course from the catalogue.
+        if (portal.role !== "student" || !portal.studentId) return jsonError("Only students can join courses here", 403);
+        if (typeof body.courseId !== "string" || !/^[a-f0-9]{24}$/i.test(body.courseId)) return jsonError("Choose a course");
+        return jsonOk(await elearningService.selfEnroll(portal.studentId, body.courseId), 201);
       }
       if (session!.role === "student" || session!.role === "parent") {
         return jsonError("Students can only submit quiz attempts", 403);

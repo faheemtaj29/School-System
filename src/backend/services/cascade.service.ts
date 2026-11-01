@@ -16,6 +16,7 @@ import { Exam } from "@/backend/models/Exam";
 import { ExamMark, ExamSchedule } from "@/backend/models/ExamWorkflow";
 import { Fee } from "@/backend/models/Fee";
 import { LeaveRequest, Payslip } from "@/backend/models/HR";
+import { StudentNote } from "@/backend/models/StudentNote";
 import { LedgerEntry, type LedgerSource } from "@/backend/models/Ledger";
 import { MessageLog } from "@/backend/models/Messaging";
 import { Student } from "@/backend/models/Student";
@@ -60,6 +61,7 @@ export const cascadeService = {
       ExamMark.deleteMany({ studentId: id }),
       Exam.updateMany({ "results.studentId": sid }, { $pull: { results: { studentId: sid } } }),
       Enrollment.deleteMany({ studentId: id }),
+      StudentNote.deleteMany({ studentId: id }),
       Diploma.deleteMany({ studentId: id }),
       QuizAttempt.deleteMany({ studentId: id }),
       HostelAllocation.deleteMany({ studentId: id }),

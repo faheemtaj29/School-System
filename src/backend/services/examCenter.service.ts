@@ -86,13 +86,18 @@ export type MarkScope = { classTeacherOf: Set<string>; subjects: Set<string>; cl
 export async function markScopeFor(session: SessionUser): Promise<MarkScope> {
   if (session.role !== "teacher") return null;
   await dbConnect();
-  const teacher = await resolveTeacher(session);
+  return markScopeForTeacher(await resolveTeacher(session));
+}
+
+/** The same scope for a known teacher record (e.g. on their profile). */
+export async function markScopeForTeacher(teacher: { _id: unknown; subjects?: unknown[]; classes?: unknown[] } | null): Promise<NonNullable<MarkScope>> {
   if (!teacher) return { classTeacherOf: new Set(), subjects: new Set(), classes: new Set() };
+  await dbConnect();
   const own = await ClassModel.find({ classTeacher: teacher._id }).select("_id").lean();
   return {
     classTeacherOf: new Set(own.map((c) => String(c._id))),
-    subjects: new Set((teacher.subjects || []).map(String)),
-    classes: new Set((teacher.classes || []).map(String)),
+    subjects: new Set((teacher.subjects || []).map((x) => String((x as { _id?: unknown })?._id ?? x))),
+    classes: new Set((teacher.classes || []).map((x) => String((x as { _id?: unknown })?._id ?? x))),
   };
 }
 

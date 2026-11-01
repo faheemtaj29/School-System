@@ -61,11 +61,16 @@ type Profile = {
   payslips: Payslip[];
   leaves: { _id: string; leaveType: string; fromDate: string; toDate: string; days: number; status: string; reason?: string }[];
   tax: { yearLabel: string; shownYear: number; yearStartMonth: number; years: { startYear: number; label: string }[]; gross: number; taxable: number; tax: number; net: number };
+  timetable: { day: string; period: number; startTime: string; endTime: string; classLabel: string; subject: string; room: string; kind: string }[];
+  courses: { _id: string; code: string; title: string; mode: string; status: string; students: number }[];
+  marking: { termId: string; term: string; classLabel: string; subject: string; examDate: string | null; entered: number; students: number }[];
   canEdit: boolean;
   isSelf: boolean;
 };
 
-type Tab = "overview" | "salary" | "classes" | "leaves";
+type Tab = "overview" | "timetable" | "marking" | "salary" | "classes" | "courses" | "leaves" | "documents";
+
+const DAYS: [string, string][] = [["mon", "Mon"], ["tue", "Tue"], ["wed", "Wed"], ["thu", "Thu"], ["fri", "Fri"], ["sat", "Sat"]];
 
 function monthLabel(m: string) {
   const [y, mo] = m.split("-").map(Number);
@@ -88,6 +93,13 @@ export default function TeacherProfilePage() {
   const [data, setData] = useState<Profile | null>(null);
   const [err, setErr] = useState("");
   const [tab, setTab] = useState<Tab>("overview");
+  // Links such as /teachers/<id>?tab=marking open that tab directly.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("tab") as Tab | null;
+    const tabs: Tab[] = ["overview", "timetable", "marking", "salary", "classes", "courses", "leaves", "documents"];
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads the URL once on arrival
+    if (wanted && tabs.includes(wanted)) setTab(wanted);
+  }, []);
   const [year, setYear] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
   const [contact, setContact] = useState({ phone: "", address: "", city: "", emergencyName: "", emergencyPhone: "", bloodGroup: "" });
@@ -153,7 +165,7 @@ export default function TeacherProfilePage() {
         </div>
         <div className="tp-hero-stats">
           <div><small>Classes</small><b>{data.classes.length}</b></div>
-          <div><small>Students</small><b>{data.classes.reduce((s, c) => s + c.students, 0)}</b></div>
+          <div><small>Marks to enter</small><b>{data.marking.reduce((s, m) => s + Math.max(0, m.students - m.entered), 0)}</b></div>
           <div><small>Salary paid {data.tax.yearLabel}</small><b>{cur} {formatNumber(data.tax.net)}</b></div>
           <div><small>Tax deducted {data.tax.yearLabel}</small><b>{cur} {formatNumber(data.tax.tax)}</b></div>
         </div>
@@ -163,9 +175,13 @@ export default function TeacherProfilePage() {
         {(
           [
             ["overview", "Bio-data"],
-            ["salary", "Salary & Tax"],
+            ["timetable", "Timetable"],
+            ["marking", `Exam marks${data.marking.length ? ` (${data.marking.length})` : ""}`],
             ["classes", "Classes & Subjects"],
+            ["courses", `Online courses${data.courses.length ? ` (${data.courses.length})` : ""}`],
+            ["salary", "Salary & Tax"],
             ["leaves", "Leaves"],
+            ["documents", "Print & documents"],
           ] as [Tab, string][]
         ).map(([k, l]) => (
           <button key={k} type="button" className={`filter-chip${tab === k ? " active" : ""}`} onClick={() => setTab(k)}>
@@ -341,6 +357,114 @@ export default function TeacherProfilePage() {
             )}
           </Panel>
         </div>
+      ) : null}
+
+      {tab === "timetable" ? (
+        <Panel title="Weekly timetable" meta={`${data.timetable.length} PERIODS`}>
+          {!data.timetable.length ? (
+            <EmptyState message="No periods on the timetable yet — set them up in Campus → Timetable." />
+          ) : (
+            <div className="tt-week">
+              {DAYS.map(([key, label]) => {
+                const periods = data.timetable.filter((p) => p.day === key);
+                return (
+                  <div key={key} className="tt-day">
+                    <h4>{label}</h4>
+                    {!periods.length ? <span className="tt-free">—</span> : null}
+                    {periods.map((p, i) => (
+                      <div key={i} className={`tt-slot tt-${p.kind}`}>
+                        <small>P{p.period}{p.startTime ? ` · ${p.startTime}${p.endTime ? `–${p.endTime}` : ""}` : ""}</small>
+                        <b>{p.subject || (p.kind === "free" ? "Free" : p.kind)}</b>
+                        <span>{p.classLabel}{p.room ? ` · Room ${p.room}` : ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Panel>
+      ) : null}
+
+      {tab === "marking" ? (
+        <Panel title="Exam marks to enter" meta="OPEN EXAM TERMS">
+          {!data.marking.length ? (
+            <EmptyState message="No papers to mark in the open exam terms." />
+          ) : (
+            <table className="reg">
+              <thead>
+                <tr><th>Term</th><th>Class</th><th>Paper</th><th>Exam date</th><th>Progress</th><th className="right">Done</th></tr>
+              </thead>
+              <tbody>
+                {data.marking.map((m, i) => {
+                  const pct = m.students ? Math.round((m.entered / m.students) * 100) : 0;
+                  return (
+                    <tr key={i}>
+                      <td>{m.term}</td>
+                      <td>{m.classLabel}</td>
+                      <td><b>{m.subject}</b></td>
+                      <td>{m.examDate ? prettyDate(m.examDate) : "—"}</td>
+                      <td style={{ minWidth: 140 }}>
+                        <div className="sp-progress"><i style={{ width: `${pct}%` }} /></div>
+                      </td>
+                      <td className="num">{m.entered}/{m.students}{pct >= 100 ? " ✓" : ""}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+          <div className="form-actions">
+            <Link href="/exams?tab=marks" className="btn-dark">Enter marks</Link>
+          </div>
+        </Panel>
+      ) : null}
+
+      {tab === "courses" ? (
+        <Panel title="Online & distance courses" meta={`${data.courses.length} COURSES`}>
+          {!data.courses.length ? (
+            <EmptyState message="Not teaching any online course." />
+          ) : (
+            <table className="reg">
+              <thead><tr><th>Code</th><th>Course</th><th>Mode</th><th className="right">Students</th><th className="right">Status</th></tr></thead>
+              <tbody>
+                {data.courses.map((c) => (
+                  <tr key={c._id}>
+                    <td className="mono">{c.code}</td>
+                    <td><b>{c.title}</b></td>
+                    <td style={{ textTransform: "capitalize" }}>{c.mode}</td>
+                    <td className="num">{c.students}</td>
+                    <td className="right"><StatusBadge status={c.status === "open" || c.status === "ongoing" ? "active" : c.status} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <div className="form-actions">
+            <Link href="/distance-learning" className="btn-ghost">Open Distance Learning</Link>
+          </div>
+        </Panel>
+      ) : null}
+
+      {tab === "documents" ? (
+        <Panel title="Print & documents" meta="OPENS READY TO PRINT OR SAVE AS PDF">
+          <div className="sp-docs">
+            <a className="sp-doc" href={`/print/id-cards?kind=teacher&ids=${t._id}`} target="_blank" rel="noreferrer">
+              <b>Teacher ID card</b>
+              <span>Coloured by post, with QR code</span>
+            </a>
+            <a className="sp-doc" href={`/print/tax-certificate?teacher=${t._id}${year ? `&year=${year}` : ""}`} target="_blank" rel="noreferrer">
+              <b>Salary tax certificate</b>
+              <span>{data.tax.yearLabel} · tax {cur} {formatNumber(data.tax.tax)}</span>
+            </a>
+            {data.payslips[0] ? (
+              <a className="sp-doc" href={`/print/payslip?id=${data.payslips[0]._id}`} target="_blank" rel="noreferrer">
+                <b>Latest payslip</b>
+                <span>{monthLabel(data.payslips[0].month)} · net {cur} {formatNumber(data.payslips[0].net)}</span>
+              </a>
+            ) : null}
+          </div>
+        </Panel>
       ) : null}
 
       {tab === "leaves" ? (

@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import { MaterialsPanel, embedUrl } from "@/components/elearning/Materials";
+import { ContinueLearning, CourseCatalogue } from "@/components/elearning/Catalogue";
 import {
   EmptyState,
   Field,
@@ -87,7 +88,7 @@ type Diploma = {
   status: string;
 };
 
-type Tab = "courses" | "lectures" | "materials" | "enrollments" | "diplomas" | "quizzes";
+type Tab = "catalogue" | "courses" | "lectures" | "materials" | "enrollments" | "diplomas" | "quizzes";
 
 const courseBlank = {
   code: "",
@@ -494,8 +495,8 @@ export default function DistanceLearningPage() {
               ? "Your courses — schedule live sessions and upload recorded lectures"
               : "Online classes, live & recorded lectures, enrollments and diplomas"
         }
-        actionLabel={canManage && tab !== "materials" ? actionLabel : undefined}
-        onAction={canManage && tab !== "materials" ? openCreate : undefined}
+        actionLabel={canManage && tab !== "materials" && tab !== "catalogue" ? actionLabel : undefined}
+        onAction={canManage && tab !== "materials" && tab !== "catalogue" ? openCreate : undefined}
       />
 
       <div className="pay-stat-row">
@@ -524,7 +525,8 @@ export default function DistanceLearningPage() {
       <div className="tabs">
         {(
           [
-            ["courses", "Courses"],
+            ["courses", isStudent ? "My Courses" : "Courses"],
+            ["catalogue", "Course Catalogue"],
             ["lectures", "Live & Recorded"],
             ["materials", "Study Materials"],
             ["enrollments", "Enrollments"],
@@ -637,6 +639,21 @@ export default function DistanceLearningPage() {
           )}
         </Panel>
       ) : null}
+
+      {isStudent ? (
+        <ContinueLearning
+          courses={enrollments.map((e) => ({
+            _id: e._id,
+            title: typeof e.courseId === "string" ? "Course" : e.courseId.title,
+            code: typeof e.courseId === "string" ? "" : e.courseId.code,
+            progress: e.progress || 0,
+            status: e.status,
+          }))}
+          onOpen={() => setTab("lectures")}
+        />
+      ) : null}
+
+      {tab === "catalogue" ? <CourseCatalogue isStudent={isStudent} currency={cur} onJoined={load} /> : null}
 
       {tab === "materials" ? (
         <MaterialsPanel

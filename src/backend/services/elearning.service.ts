@@ -264,6 +264,65 @@ export const elearningService = {
     return { ok: true };
   },
 
+  // —— Course catalogue (students browse and join) ——
+  /** Courses open for joining, with seats left and, for a student, whether they have joined. */
+  async catalogue(studentId?: string | null) {
+    await dbConnect();
+    const courses = await Course.find({ status: { $in: ["open", "ongoing"] } })
+      .populate("teacherId", "firstName lastName")
+      .sort({ startDate: 1, createdAt: -1 })
+      .lean();
+    const ids = courses.map((c) => c._id);
+    const [seats, lectures, materials, mine] = await Promise.all([
+      Enrollment.aggregate<{ _id: unknown; n: number }>([
+        { $match: { courseId: { $in: ids }, status: { $in: ["pending", "active"] } } },
+        { $group: { _id: "$courseId", n: { $sum: 1 } } },
+      ]),
+      Lecture.aggregate<{ _id: unknown; n: number }>([{ $match: { courseId: { $in: ids } } }, { $group: { _id: "$courseId", n: { $sum: 1 } } }]),
+      Material.aggregate<{ _id: unknown; n: number }>([{ $match: { courseId: { $in: ids } } }, { $group: { _id: "$courseId", n: { $sum: 1 } } }]),
+      studentId ? Enrollment.find({ studentId, courseId: { $in: ids } }).select("courseId status").lean() : Promise.resolve([]),
+    ]);
+    const n = (list: { _id: unknown; n: number }[], id: unknown) => list.find((x) => String(x._id) === String(id))?.n || 0;
+    return courses.map((c) => {
+      const t = c.teacherId as unknown as { firstName?: string; lastName?: string } | null;
+      return {
+        _id: String(c._id),
+        code: c.code,
+        title: c.title,
+        description: c.description || "",
+        mode: c.mode,
+        level: c.level,
+        fee: c.fee || 0,
+        durationWeeks: c.durationWeeks,
+        startDate: c.startDate || null,
+        status: c.status,
+        teacher: t?.firstName ? `${t.firstName} ${t.lastName || ""}`.trim() : "",
+        seatsLeft: Math.max(0, (c.maxSeats || 0) - n(seats, c._id)),
+        lectures: n(lectures, c._id),
+        materials: n(materials, c._id),
+        weeks: (c.outline || []).length,
+        myStatus: (mine as { courseId: unknown; status: string }[]).find((e) => String(e.courseId) === String(c._id))?.status || null,
+      };
+    });
+  },
+
+  /** A student joins a course: free courses start at once; paid ones wait for the office (fee). */
+  async selfEnroll(studentId: string, courseId: string) {
+    await dbConnect();
+    const course = await Course.findById(courseId).select("status fee title").lean();
+    if (!course || !["open", "ongoing"].includes(course.status)) {
+      throw new ServiceError("VALIDATION", "This course is not open for joining", 400);
+    }
+    const existing = await Enrollment.findOne({ studentId, courseId }).lean();
+    if (existing && existing.status !== "dropped") {
+      throw new ServiceError("CONFLICT", existing.status === "pending" ? "Your request is already waiting for approval" : "You are already in this course", 409);
+    }
+    if (existing) await Enrollment.deleteOne({ _id: existing._id });
+    const status = (course.fee || 0) > 0 ? "pending" : "active";
+    const enrollment = await this.enroll({ courseId, studentId, status, progress: 0, feePaid: 0 });
+    return { enrollment, status };
+  },
+
   // —— Study materials ——
   /** A teacher sees materials of the courses they teach; a student those of their enrolled courses. */
   async listMaterials(courseId?: string | null, scope?: { teacherId?: string; studentId?: string }) {

@@ -10,6 +10,8 @@ import { Exam } from "@/backend/models/Exam";
 import { ExamMark, ExamTerm } from "@/backend/models/ExamWorkflow";
 import { Fee } from "@/backend/models/Fee";
 import { Student } from "@/backend/models/Student";
+import { StudentNote, NOTE_KINDS } from "@/backend/models/StudentNote";
+import { Enrollment, Lecture } from "@/backend/models/ELearning";
 import { printHeader } from "@/backend/services/accounting.service";
 import { examCenterService } from "@/backend/services/examCenter.service";
 import { ServiceError } from "@/backend/types";
@@ -179,15 +181,74 @@ async function results(studentId: string) {
   return { cards, tests };
 }
 
+/** Distance-learning courses with progress (lectures done of lectures in the course). */
+async function courses(studentId: string) {
+  const list = await Enrollment.find({ studentId, status: { $ne: "dropped" } })
+    .populate("courseId", "code title mode status durationWeeks")
+    .sort({ enrolledAt: -1 })
+    .lean();
+  const ids = list.map((e) => (e.courseId as unknown as { _id: unknown } | null)?._id).filter(Boolean);
+  const lectureCounts = await Lecture.aggregate<{ _id: unknown; n: number }>([
+    { $match: { courseId: { $in: ids } } },
+    { $group: { _id: "$courseId", n: { $sum: 1 } } },
+  ]);
+  return list
+    .filter((e) => e.courseId)
+    .map((e) => {
+      const c = e.courseId as unknown as { _id: unknown; code: string; title: string; mode: string; status: string };
+      const lectures = lectureCounts.find((x) => String(x._id) === String(c._id))?.n || 0;
+      return {
+        _id: String(e._id),
+        courseId: String(c._id),
+        code: c.code,
+        title: c.title,
+        mode: c.mode,
+        status: e.status,
+        enrolledAt: e.enrolledAt,
+        progress: e.progress || 0,
+        lecturesDone: (e.completedLectureIds || []).length,
+        lectures,
+      };
+    });
+}
+
+/** Brothers and sisters: other students with the same parent phone. */
+async function siblings(s: { _id: unknown; parentPhone?: string }) {
+  const phone = String(s.parentPhone || "").replace(/\D/g, "");
+  if (phone.length < 7) return [];
+  const candidates = await Student.find({ _id: { $ne: s._id }, parentPhone: { $exists: true, $ne: "" } })
+    .select("firstName lastName admissionNo classId status parentPhone photoUpdatedAt")
+    .populate("classId", "name section")
+    .lean();
+  return candidates
+    .filter((c) => String(c.parentPhone || "").replace(/\D/g, "").endsWith(phone.slice(-10)))
+    .map((c) => {
+      const cls = c.classId as unknown as { name?: string; section?: string } | null;
+      return {
+        _id: String(c._id),
+        name: `${c.firstName} ${c.lastName}`,
+        admissionNo: c.admissionNo,
+        classLabel: cls?.name ? `${cls.name}${cls.section ? ` – ${cls.section}` : ""}` : "—",
+        status: c.status,
+        photoUrl: photoUrl("student", c._id, c.photoUpdatedAt),
+      };
+    });
+}
+
 export const studentProfileService = {
-  async profile(id: string) {
+  async profile(id: string, viewerRole = "admin") {
     await dbConnect();
     const s = await loadStudent(id);
-    const [ledger, attendance, res, header] = await Promise.all([
+    const portal = viewerRole === "student" || viewerRole === "parent";
+    const [ledger, attendance, res, header, courseList, family, notes] = await Promise.all([
       feeLedger(id),
       attendanceRecord(id),
       results(id),
       printHeader(s.branchCode),
+      courses(id),
+      siblings(s),
+      // The family sees only the notes the school chose to share.
+      StudentNote.find({ studentId: id, ...(portal ? { shared: true } : {}) }).sort({ date: -1, createdAt: -1 }).limit(200).lean(),
     ]);
 
     // Track record: the important dated events, newest first.
@@ -211,6 +272,9 @@ export const studentProfileService = {
     for (const d of attendance.days.filter((x) => x.status === "absent").slice(0, 15)) {
       timeline.push({ date: d.date, kind: "absent", title: "Absent", detail: d.note || undefined });
     }
+    for (const n of notes.filter((x) => x.kind === "achievement" || x.kind === "behaviour")) {
+      timeline.push({ date: n.date, kind: n.kind === "achievement" ? "achievement" : "note", title: n.kind === "achievement" ? "Achievement" : "Behaviour note", detail: n.text.slice(0, 140) });
+    }
     if (s.tcIssuedDate) {
       timeline.push({ date: s.tcIssuedDate, kind: "tc", title: "Transfer certificate issued", detail: s.tcNo ? `TC no. ${s.tcNo}` : undefined });
     }
@@ -224,7 +288,40 @@ export const studentProfileService = {
       attendance,
       results: res,
       timeline: timeline.slice(0, 80),
+      courses: courseList,
+      siblings: family,
+      notes: notes.map((n) => ({
+        _id: String(n._id),
+        kind: n.kind,
+        text: n.text,
+        date: n.date,
+        shared: n.shared,
+        by: n.createdByName || "",
+      })),
     };
+  },
+
+  async addNote(id: string, input: { kind: string; text: string; date?: string; shared?: boolean }, actor: { id: string; name: string }) {
+    await dbConnect();
+    await loadStudent(id);
+    if (!NOTE_KINDS.includes(input.kind as (typeof NOTE_KINDS)[number])) throw new ServiceError("VALIDATION", "Unknown note type", 400);
+    const n = await StudentNote.create({
+      studentId: id,
+      kind: input.kind,
+      text: input.text,
+      date: input.date ? new Date(input.date) : new Date(),
+      shared: Boolean(input.shared),
+      createdBy: actor.id,
+      createdByName: actor.name,
+    });
+    return { _id: String(n._id), kind: n.kind, text: n.text, date: n.date, shared: n.shared, by: n.createdByName || "" };
+  },
+
+  async removeNote(id: string, noteId: string) {
+    await dbConnect();
+    const r = await StudentNote.deleteOne({ _id: noteId, studentId: id });
+    if (!r.deletedCount) throw new ServiceError("NOT_FOUND", "Note not found", 404);
+    return { ok: true };
   },
 
   /** Mark one student present/absent/late/excused for a day (adds to the class sheet). */
