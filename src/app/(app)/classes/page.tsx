@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EmptyState, Hero, MiniAvatar, Panel } from "@/components/ui";
+import { EmptyState, Hero, MiniAvatar, PaginationControls, Panel, usePaginatedList } from "@/components/ui";
 import { ClassForm } from "@/components/forms/SchoolForms";
+import { SetupHistory } from "@/components/SetupHistory";
 import {
   ClassItem,
   STAGE_LABEL,
@@ -217,14 +218,15 @@ export default function ClassesPage() {
     return [...set].sort().reverse();
   }, [classes, year]);
 
-  const grouped = useMemo(() => {
-    const visible = classes.filter((c) => {
+  const visibleClasses = useMemo(() => classes.filter((c) => {
       if (yearFilter && c.academicYear !== yearFilter) return false;
       if (stageFilter && (c.stage || "unassigned") !== stageFilter) return false;
       return true;
-    });
+    }), [classes, stageFilter, yearFilter]);
+  const classPagination = usePaginatedList(visibleClasses);
+  const grouped = useMemo(() => {
     const map = new Map<string, ClassItem[]>();
-    for (const c of visible) {
+    for (const c of classPagination.pageItems) {
       const key = c.stage || "unassigned";
       map.set(key, [...(map.get(key) ?? []), c]);
     }
@@ -232,7 +234,7 @@ export default function ClassesPage() {
     return order
       .filter((k) => map.has(k))
       .map((k) => ({ key: k, label: STAGE_LABEL[k] ?? k, items: map.get(k)! }));
-  }, [classes, stageFilter, yearFilter]);
+  }, [classPagination.pageItems]);
 
   const totalPicked = catalog
     .filter((s) => picked.includes(s.key))
@@ -596,12 +598,16 @@ export default function ClassesPage() {
                         Delete
                       </button>
                     </div>
+                    <SetupHistory url={`/api/classes/${c._id}/history`} label="Setup history" />
                   </div>
                 );
               })}
             </div>
           </div>
           ))}
+          {visibleClasses.length ? (
+            <PaginationControls page={classPagination.page} pageSize={classPagination.pageSize} total={visibleClasses.length} pageCount={classPagination.pageCount} onPageChange={classPagination.setPage} onPageSizeChange={classPagination.setPageSize} />
+          ) : null}
         </>
       ) : null}
 

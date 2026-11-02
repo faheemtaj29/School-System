@@ -101,22 +101,36 @@ async function payFigures(data: PayslipInput, excludeId?: string) {
 export const hrService = {
   async listLeaves() {
     await dbConnect();
-    return LeaveRequest.find()
-      .populate("teacherId", "firstName lastName employeeId branchCode photoUpdatedAt")
-      .sort({ createdAt: -1 })
-      .lean();
+    const [teacherLeaves, staffLeaves] = await Promise.all([
+      LeaveRequest.find({ $or: [{ employeeModel: "Teacher" }, { employeeModel: { $exists: false } }] })
+        .populate({ path: "teacherId", model: Teacher, select: "firstName lastName employeeId branchCode photoUpdatedAt designation" })
+        .sort({ createdAt: -1 }).lean(),
+      LeaveRequest.find({ employeeModel: "Staff" })
+        .populate({ path: "teacherId", model: Staff, select: "firstName lastName employeeId branchCode photoUpdatedAt designation" })
+        .sort({ createdAt: -1 }).lean(),
+    ]);
+    return [...teacherLeaves, ...staffLeaves].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   },
 
-  async listLeavesForTeacher(teacherId: string) {
+  async listLeavesForEmployee(teacherId: string, employeeModel: "Teacher" | "Staff" = "Teacher") {
     await dbConnect();
-    return LeaveRequest.find({ teacherId })
-      .populate("teacherId", "firstName lastName employeeId branchCode photoUpdatedAt")
+    const employeeFilter = employeeModel === "Teacher"
+      ? { $or: [{ employeeModel: "Teacher" }, { employeeModel: { $exists: false } }] }
+      : { employeeModel: "Staff" };
+    return LeaveRequest.find({ teacherId, ...employeeFilter })
+      .populate({ path: "teacherId", model: employeeModel === "Staff" ? Staff : Teacher, select: "firstName lastName employeeId branchCode photoUpdatedAt designation" })
       .sort({ createdAt: -1 })
       .lean();
   },
 
   async createLeave(data: LeaveInput, session?: SessionUser | null) {
     await dbConnect();
+    const EmployeeModel = data.employeeModel === "Staff" ? Staff : Teacher;
+    if (!(await EmployeeModel.exists({ _id: data.teacherId }))) {
+      throw new ServiceError("NOT_FOUND", "Employee not found", 404);
+    }
     const leave = await LeaveRequest.create({
       ...data,
       fromDate: new Date(data.fromDate),
@@ -155,8 +169,13 @@ export const hrService = {
       id,
       { status, reviewedBy: userId || undefined },
       { new: true }
-    ).populate("teacherId", "firstName lastName employeeId");
+    );
     if (!item) throw new ServiceError("NOT_FOUND", "Leave request not found", 404);
+    await item.populate({
+      path: "teacherId",
+      model: item.employeeModel === "Staff" ? Staff : Teacher,
+      select: "firstName lastName employeeId",
+    });
     return item;
   },
 
@@ -177,9 +196,12 @@ export const hrService = {
     return slips.map((s: { _id: unknown }) => ({ ...s, voucher: numbers.get(String(s._id)) || null }));
   },
 
-  async listPayslipsForTeacher(teacherId: string) {
+  async listPayslipsForEmployee(teacherId: string, employeeModel: "Teacher" | "Staff" = "Teacher") {
     await dbConnect();
-    return Payslip.find({ teacherId })
+    const filter = employeeModel === "Teacher"
+      ? { teacherId, $or: [{ employeeModel: "Teacher" }, { employeeModel: { $exists: false } }] }
+      : { teacherId, employeeModel: "Staff" };
+    return Payslip.find(filter)
       .populate("teacherId", "firstName lastName employeeId email branchCode photoUpdatedAt")
       .sort({ month: -1 })
       .lean();

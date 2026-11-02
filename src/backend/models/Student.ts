@@ -1,4 +1,5 @@
 import mongoose, { Schema, models, model, Types } from "mongoose";
+import { SetupRevisionSchema, type ISetupRevision } from "./SetupRevision";
 
 export interface IStudent {
   admissionNo: string;
@@ -46,6 +47,7 @@ export interface IStudent {
   user?: Types.ObjectId;
   /** Parent's portal login (one parent login can have several children). */
   parentUser?: Types.ObjectId;
+  setupHistory?: ISetupRevision[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -94,6 +96,7 @@ const StudentSchema = new Schema<IStudent>(
     photoUpdatedAt: Date,
     user: { type: Schema.Types.ObjectId, ref: "User" },
     parentUser: { type: Schema.Types.ObjectId, ref: "User", index: true, sparse: true },
+    setupHistory: { type: [SetupRevisionSchema], select: false, default: undefined },
   },
   { timestamps: true }
 );

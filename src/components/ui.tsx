@@ -1,12 +1,67 @@
 "use client";
 
-import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { PlusIcon } from "@/components/Icons";
 import { TableExport } from "@/components/TableExport";
 import { LoginAccess } from "@/components/LoginAccess";
 
 export const inputClass = "inp";
+
+export function usePaginatedList<T>(items: T[], initialPageSize = 50) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(initialPageSize);
+  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pageItems = useMemo(
+    () => items.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [items, currentPage, pageSize],
+  );
+  return {
+    page: currentPage,
+    pageSize,
+    setPage,
+    setPageSize: (size: number) => {
+      setPageSize(size);
+      setPage(1);
+    },
+    pageCount,
+    pageItems,
+  };
+}
+
+export function PaginationControls({
+  page,
+  pageSize,
+  total,
+  pageCount,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  pageCount: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
+}) {
+  const first = total ? (page - 1) * pageSize + 1 : 0;
+  const last = Math.min(page * pageSize, total);
+  return (
+    <div className="list-pagination">
+      <span>{first}–{last} of {total}</span>
+      <label>
+        Rows
+        <select className="inp" value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))}>
+          {[25, 50, 100].map((size) => <option key={size} value={size}>{size}</option>)}
+        </select>
+      </label>
+      <button type="button" className="btn-ghost" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>Previous</button>
+      <span>Page {page} of {pageCount}</span>
+      <button type="button" className="btn-ghost" onClick={() => onPageChange(page + 1)} disabled={page >= pageCount}>Next</button>
+    </div>
+  );
+}
 
 export type OptionListKey =
   | "ledgerCategories"
@@ -395,7 +450,7 @@ function PortalAccessDialog({
                   Set a password now and tell them
                 </label>
                 {mode === "password" ? (
-                  <input className={inputClass} type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters, letters and numbers" />
+                  <input className={inputClass} type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters, letters and numbers" />
                 ) : null}
                 {error ? <div className="alert err">{error}</div> : null}
                 <div>

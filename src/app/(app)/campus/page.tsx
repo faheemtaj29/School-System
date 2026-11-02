@@ -7,9 +7,11 @@ import {
   Field,
   Hero,
   ModalForm,
+  PaginationControls,
   Panel,
   StatusBadge,
   inputClass,
+  usePaginatedList,
 } from "@/components/ui";
 import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
 
@@ -669,6 +671,18 @@ export default function CampusOpsPage() {
   const shownMenu = menu.filter((m) => match(m.sku, m.name, m.category));
   const shownAssets = assets.filter((a) => match(a.tag, a.name, a.category, a.location));
   const shownDocs = documents.filter((d) => match(d.title, d.category, d.ownerName));
+  const slotsPagination = usePaginatedList(shownSlots);
+  const booksPagination = usePaginatedList(shownBooks);
+  const loansPagination = usePaginatedList(loans);
+  const vehiclesPagination = usePaginatedList(shownVehicles);
+  const roomsPagination = usePaginatedList(shownRooms);
+  const allocationsPagination = usePaginatedList(allocations);
+  const visitsPagination = usePaginatedList(shownVisits);
+  const menuPagination = usePaginatedList(shownMenu);
+  const salesPagination = usePaginatedList(sales);
+  const assetsPagination = usePaginatedList(shownAssets);
+  const documentsPagination = usePaginatedList(shownDocs);
+  const jobsPagination = usePaginatedList(jobs);
 
   return (
     <>
@@ -744,6 +758,7 @@ export default function CampusOpsPage() {
 
       {active === "timetable" ? (
         <Panel title={config.register} meta={`${shownSlots.length} PERIODS`}>
+          {shownSlots.length ? <ListPagination list={slotsPagination} total={shownSlots.length} /> : null}
           {!shownSlots.length ? (
             <EmptyState message="No periods allocated yet. Add a slot — clashes on class, teacher or room are blocked automatically." />
           ) : (
@@ -761,7 +776,7 @@ export default function CampusOpsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {shownSlots.map((s) => (
+                  {slotsPagination.pageItems.map((s) => (
                     <tr key={s._id}>
                       <td className="num">{s.day.toUpperCase()}</td>
                       <td className="num">{s.period}</td>
@@ -809,6 +824,7 @@ export default function CampusOpsPage() {
       {active === "library" ? (
         <>
           <Panel title="Library Catalogue" meta={`${shownBooks.length} TITLES`}>
+            {shownBooks.length ? <ListPagination list={booksPagination} total={shownBooks.length} /> : null}
             {!shownBooks.length ? (
               <EmptyState message="Catalogue is empty. Add a book to start issuing." />
             ) : (
@@ -825,7 +841,7 @@ export default function CampusOpsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {shownBooks.map((b) => (
+                    {booksPagination.pageItems.map((b) => (
                       <tr key={b._id}>
                         <td>
                           <div style={{ fontWeight: 600 }}>{b.title}</div>
@@ -878,6 +894,7 @@ export default function CampusOpsPage() {
           </Panel>
 
           <Panel title="Issue & Return Register" meta={`${loans.length} MOVEMENTS`}>
+            {loans.length ? <ListPagination list={loansPagination} total={loans.length} /> : null}
             {!loans.length ? (
               <EmptyState message="No books issued yet." />
             ) : (
@@ -895,7 +912,7 @@ export default function CampusOpsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {loans.map((l) => (
+                    {loansPagination.pageItems.map((l) => (
                       <tr key={l._id}>
                         <td>{l.bookId?.title || "—"}</td>
                         <td>
@@ -941,6 +958,7 @@ export default function CampusOpsPage() {
 
       {active === "transport" ? (
         <Panel title={config.register} meta={`${shownVehicles.length} VEHICLES`}>
+          {shownVehicles.length ? <ListPagination list={vehiclesPagination} total={shownVehicles.length} /> : null}
           {!shownVehicles.length ? (
             <EmptyState message="No vehicles registered. Add a bus or van to build routes." />
           ) : (
@@ -958,7 +976,7 @@ export default function CampusOpsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {shownVehicles.map((v) => (
+                  {vehiclesPagination.pageItems.map((v) => (
                     <tr key={v._id}>
                       <td className="num">{v.code}</td>
                       <td>
@@ -1007,6 +1025,7 @@ export default function CampusOpsPage() {
       {active === "hostel" ? (
         <>
           <Panel title={config.register} meta={`${shownRooms.length} ROOMS`}>
+            {shownRooms.length ? <ListPagination list={roomsPagination} total={shownRooms.length} /> : null}
             {!shownRooms.length ? (
               <EmptyState message="No hostel rooms yet. Add rooms before allocating beds." />
             ) : (
@@ -1024,7 +1043,7 @@ export default function CampusOpsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {shownRooms.map((r) => (
+                    {roomsPagination.pageItems.map((r) => (
                       <tr key={r._id}>
                         <td>
                           <div style={{ fontWeight: 600 }}>{r.hostelName}</div>
@@ -1073,6 +1092,7 @@ export default function CampusOpsPage() {
           </Panel>
 
           <Panel title="Current Residents" meta={`${allocations.length} ACTIVE`}>
+            {allocations.length ? <ListPagination list={allocationsPagination} total={allocations.length} /> : null}
             {!allocations.length ? (
               <EmptyState message="No active bed allocations." />
             ) : (
@@ -1088,7 +1108,7 @@ export default function CampusOpsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {allocations.map((a) => (
+                    {allocationsPagination.pageItems.map((a) => (
                       <tr key={a._id}>
                         <td style={{ fontWeight: 600 }}>{a.studentName}</td>
                         <td>
@@ -1121,6 +1141,7 @@ export default function CampusOpsPage() {
 
       {active === "medical" ? (
         <Panel title={config.register} meta={`${shownVisits.length} VISITS`}>
+          {shownVisits.length ? <ListPagination list={visitsPagination} total={shownVisits.length} /> : null}
           {!shownVisits.length ? (
             <EmptyState message="No clinic visits recorded." />
           ) : (
@@ -1138,7 +1159,7 @@ export default function CampusOpsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {shownVisits.map((v) => (
+                  {visitsPagination.pageItems.map((v) => (
                     <tr key={v._id}>
                       <td>{prettyDate(v.visitDate)}</td>
                       <td>
@@ -1181,6 +1202,7 @@ export default function CampusOpsPage() {
       {active === "cafeteria" ? (
         <>
           <Panel title="Menu" meta={`${shownMenu.length} ITEMS`}>
+            {shownMenu.length ? <ListPagination list={menuPagination} total={shownMenu.length} /> : null}
             {!shownMenu.length ? (
               <EmptyState message="No menu items yet. Add items before recording sales." />
             ) : (
@@ -1197,7 +1219,7 @@ export default function CampusOpsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {shownMenu.map((m) => (
+                    {menuPagination.pageItems.map((m) => (
                       <tr key={m._id}>
                         <td className="num">{m.sku}</td>
                         <td style={{ fontWeight: 600 }}>{m.name}</td>
@@ -1240,6 +1262,7 @@ export default function CampusOpsPage() {
           </Panel>
 
           <Panel title="Counter Sales" meta={`${sales.length} RECEIPTS`}>
+            {sales.length ? <ListPagination list={salesPagination} total={sales.length} /> : null}
             {!sales.length ? (
               <EmptyState message="No sales recorded today." />
             ) : (
@@ -1256,7 +1279,7 @@ export default function CampusOpsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sales.map((s) => (
+                    {salesPagination.pageItems.map((s) => (
                       <tr key={s._id}>
                         <td className="num">{s.number}</td>
                         <td>{prettyDate(s.saleDate)}</td>
@@ -1283,6 +1306,7 @@ export default function CampusOpsPage() {
 
       {active === "assets" ? (
         <Panel title={config.register} meta={`${shownAssets.length} ASSETS`}>
+          {shownAssets.length ? <ListPagination list={assetsPagination} total={shownAssets.length} /> : null}
           {!shownAssets.length ? (
             <EmptyState message="No assets tagged yet. Register furniture, IT equipment or vehicles." />
           ) : (
@@ -1300,7 +1324,7 @@ export default function CampusOpsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {shownAssets.map((a) => (
+                  {assetsPagination.pageItems.map((a) => (
                     <tr key={a._id}>
                       <td className="num">{a.tag}</td>
                       <td style={{ fontWeight: 600 }}>{a.name}</td>
@@ -1337,6 +1361,7 @@ export default function CampusOpsPage() {
 
       {active === "documents" ? (
         <Panel title={config.register} meta={`${shownDocs.length} DOCUMENTS`}>
+          {shownDocs.length ? <ListPagination list={documentsPagination} total={shownDocs.length} /> : null}
           {!shownDocs.length ? (
             <EmptyState message="No documents stored. Every upload keeps a version history." />
           ) : (
@@ -1353,7 +1378,7 @@ export default function CampusOpsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {shownDocs.map((d) => (
+                  {documentsPagination.pageItems.map((d) => (
                     <tr key={d._id}>
                       <td>
                         <div style={{ fontWeight: 600 }}>{d.title}</div>
@@ -1405,6 +1430,7 @@ export default function CampusOpsPage() {
 
       {active === "ai" ? (
         <Panel title={config.register} meta={`${jobs.length} JOBS`}>
+          {jobs.length ? <ListPagination list={jobsPagination} total={jobs.length} /> : null}
           <p style={{ margin: "0 0 16px", fontSize: 12.5, color: "var(--text-dim)" }}>
             AI runs through a service layer, never hard-coded into the database. Without{" "}
             <code>AI_PROVIDER_URL</code> a built-in stub returns structured drafts, so the model
@@ -1425,7 +1451,7 @@ export default function CampusOpsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {jobs.map((j) => (
+                  {jobsPagination.pageItems.map((j) => (
                     <tr key={j._id}>
                       <td>
                         <div style={{ fontWeight: 600 }}>{j.kind.replace(/_/g, " ")}</div>
@@ -2296,5 +2322,26 @@ export default function CampusOpsPage() {
         ) : null}
       </ModalForm>
     </>
+  );
+}
+
+type PaginationState = {
+  page: number;
+  pageSize: number;
+  pageCount: number;
+  setPage: (page: number) => void;
+  setPageSize: (size: number) => void;
+};
+
+function ListPagination({ list, total }: { list: PaginationState; total: number }) {
+  return (
+    <PaginationControls
+      page={list.page}
+      pageSize={list.pageSize}
+      total={total}
+      pageCount={list.pageCount}
+      onPageChange={list.setPage}
+      onPageSizeChange={list.setPageSize}
+    />
   );
 }

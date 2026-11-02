@@ -189,7 +189,7 @@ export const sampleDataService = {
           status: "published",
           schedules: plan.plans.map((p) => ({ classId: p.classId, rows: p.rows.filter((r) => r.examDate) })),
         }),
-        actor.id
+        { id: actor.id, name: actor.name }
       );
       await examCenterService.assignRollNumbers(rollNumberSchema.parse({ termId, classIds, mode: "sequence", startFrom: 1001 }));
       for (const p of plan.plans) {

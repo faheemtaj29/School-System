@@ -1,4 +1,5 @@
 import mongoose, { Schema, models, model, Types } from "mongoose";
+import { SetupRevisionSchema, type ISetupRevision } from "./SetupRevision";
 
 export type AcademicStage =
   | "pre-primary"
@@ -25,6 +26,7 @@ export interface IClass {
   /** Reusable monthly fee heads and amounts for this class. */
   feeStructure?: { head: string; amount: number }[];
   subjects: Types.ObjectId[];
+  setupHistory?: ISetupRevision[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -57,6 +59,7 @@ const ClassSchema = new Schema<IClass>(
       default: [],
     },
     subjects: [{ type: Schema.Types.ObjectId, ref: "Subject" }],
+    setupHistory: { type: [SetupRevisionSchema], select: false, default: undefined },
   },
   { timestamps: true }
 );

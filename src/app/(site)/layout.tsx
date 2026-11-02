@@ -12,13 +12,20 @@ const links = [
 ];
 
 export default async function SiteLayout({ children }: { children: ReactNode }) {
-  const { content, branches } = await siteService.publicData();
+  const { content, branches, logoUrl } = await siteService.publicData();
 
   return (
     <div className="site">
       <header className="site-nav">
         <Link href="/" className="site-brand">
-          <span className="site-badge">S</span>
+          <span className="site-badge">
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt="" />
+            ) : (
+              content.brandName.trim().charAt(0).toUpperCase() || "S"
+            )}
+          </span>
           <span>
             {content.brandName}
             <small>{content.tagline}</small>

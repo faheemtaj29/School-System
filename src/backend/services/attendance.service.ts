@@ -23,10 +23,11 @@ function calendarDate(value: string) {
 }
 
 export const attendanceService = {
-  async list(filters: { classId?: string | null; date?: string | null }) {
+  async list(filters: { classId?: string | null; classIds?: string[]; date?: string | null; page?: number; pageSize?: number }) {
     await dbConnect();
     const query: Record<string, unknown> = {};
     if (filters.classId) query.classId = filters.classId;
+    else if (filters.classIds) query.classId = { $in: filters.classIds };
     if (filters.date) {
       const d = calendarDate(filters.date);
       const next = new Date(d);
@@ -34,13 +35,18 @@ export const attendanceService = {
       query.date = { $gte: d, $lt: next };
     }
 
-    return Attendance.find(query)
+    const total = await Attendance.countDocuments(query);
+    const pageSize = filters.pageSize || 50;
+    const pageCount = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(filters.page || 1, pageCount);
+    const attendance = await Attendance.find(query)
       .populate("classId", "name section")
       .populate("records.studentId", "firstName lastName admissionNo rollNumber")
       .sort({ date: -1 })
-      // One class: about six months of daily sheets; all classes: the latest 50.
-      .limit(filters.classId && !filters.date ? 180 : 50)
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
       .lean();
+    return { attendance, pagination: { page, pageSize, total, pageCount } };
   },
 
   async upsert(data: AttendanceInput, takenBy?: string) {

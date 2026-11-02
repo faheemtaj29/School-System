@@ -1,6 +1,6 @@
 "use client";
 
-import { PrintShell, QbLetterhead, fmtDate, usePrintData } from "./PrintShell";
+import { DocumentSigns, PrintShell, QbLetterhead, fmtDate, usePrintData, type SchoolHeader } from "./PrintShell";
 import { amountInWords } from "./FeePrints";
 
 type PayLine = { head: string; amount: number };
@@ -39,7 +39,7 @@ type Data = {
   ytd: { taxYear: string; gross: number; tax: number; net: number };
   /** The salary journal (PAY-… voucher) posted when it was paid. */
   voucher?: { number: string; id: string } | null;
-  school: { name: string; campus?: string; address?: string; phone?: string; email?: string; currency: string; logoUrl: string | null };
+  school: SchoolHeader & { currency: string };
 };
 
 function money(n: number) {
@@ -179,12 +179,12 @@ export function PayslipPrintPage({ id }: { id: string }) {
             </div>
           </div>
 
-          <div className="signs">
-            <span>Prepared by</span>
-            <span>Accountant</span>
-            <span>Principal / Head</span>
-            <span>Employee&apos;s signature</span>
-          </div>
+          <DocumentSigns signatures={data.school.signatures} signers={[
+            { label: "Prepared by", role: "preparedBy" },
+            { label: "Accountant", role: "accountant" },
+            { label: "Principal / Head", role: "principal" },
+            { label: "Employee's signature" },
+          ]} />
         </section>
       ) : null}
     </PrintShell>

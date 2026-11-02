@@ -39,7 +39,7 @@ export const classController = {
   },
 
   async create(req: Request) {
-    const { error } = await requireAuth(["admin"]);
+    const { session, error } = await requireAuth(["admin"]);
     if (error) return error;
     try {
       const body = await req.json();
@@ -50,21 +50,32 @@ export const classController = {
       }
       const parsed = classSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
-      return jsonOk({ class: await classService.create(parsed.data) }, 201);
+      return jsonOk({ class: await classService.create(parsed.data, session?.name) }, 201);
     } catch (e) {
       return fromServiceError(e);
     }
   },
 
   async update(req: Request, ctx: Ctx) {
-    const { error } = await requireAuth(["admin"]);
+    const { session, error } = await requireAuth(["admin"]);
     if (error) return error;
     try {
       const { id } = await ctx.params;
       const body = await req.json();
       const parsed = classSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
-      return jsonOk({ class: await classService.update(id, parsed.data) });
+      return jsonOk({ class: await classService.update(id, parsed.data, session?.name) });
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  async history(_: Request, ctx: Ctx) {
+    const { error } = await requireAuth(["admin"]);
+    if (error) return error;
+    try {
+      const { id } = await ctx.params;
+      return jsonOk({ history: await classService.setupHistory(id) });
     } catch (e) {
       return fromServiceError(e);
     }

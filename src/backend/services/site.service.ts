@@ -35,9 +35,15 @@ export const siteService = {
       const created = await SiteContent.create(settings?.schoolName ? { brandName: settings.schoolName } : {});
       doc = created.toObject();
     }
-    // Until the website name is edited, follow the school name from Settings.
+    // Older seeded sites stored this placeholder as if it were a custom brand.
     const factory = SiteContent.schema.path("brandName").options.default;
-    if (settings?.schoolName && doc.brandName === factory) doc = { ...doc, brandName: settings.schoolName };
+    const storedBrand = doc.brandName?.trim();
+    if (
+      settings?.schoolName &&
+      (!storedBrand || storedBrand === factory || storedBrand === "Sabaq Model School")
+    ) {
+      doc = { ...doc, brandName: settings.schoolName };
+    }
     return doc;
   },
 
@@ -82,6 +88,9 @@ export const siteService = {
         ? settings.branches
         : [{ code: "MAIN", name: "Main Campus" }],
       currency: settings?.currency || "PKR",
+      logoUrl: settings?.logoUpdatedAt
+        ? `/api/settings/logo?v=${new Date(settings.logoUpdatedAt).getTime()}`
+        : null,
       academicYear,
       classOptions,
       courses: content.showCourses ? courses : [],

@@ -91,18 +91,18 @@ export const studentController = {
         if (body.kind === "promote") {
           const parsed = promoteSchema.safeParse(body);
           if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
-          return jsonOk(await studentService.promotePassed(parsed.data), 201);
+          return jsonOk(await studentService.promotePassed(parsed.data, { name: session!.name }), 201);
         }
         const parsed = promoteAllSchema.safeParse(body);
         if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
-        return jsonOk(await studentService.promoteAll(parsed.data), 201);
+        return jsonOk(await studentService.promoteAll(parsed.data, { name: session!.name }), 201);
       }
       const parsed = studentSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
       if (!(await canAccessClass(session!, parsed.data.classId))) {
         return jsonError("You are not assigned to this class", 403);
       }
-      const student = await studentService.create(parsed.data);
+      const student = await studentService.create(parsed.data, { name: session!.name });
       return jsonOk({ student }, 201);
     } catch (e) {
       return fromServiceError(e);
@@ -133,8 +133,20 @@ export const studentController = {
           return jsonError("You are not assigned to the target class", 403);
         }
       }
-      const student = await studentService.update(id, parsed.data);
+      const student = await studentService.update(id, parsed.data, { name: session!.name });
       return jsonOk({ student });
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  async history(_: Request, ctx: Ctx) {
+    const { error } = await requireAuth(["admin"]);
+    if (error) return error;
+    try {
+      const { id } = await ctx.params;
+      if (!isValidObjectId(id)) return jsonError("Invalid student ID", 400);
+      return jsonOk({ history: await studentService.setupHistory(id) });
     } catch (e) {
       return fromServiceError(e);
     }

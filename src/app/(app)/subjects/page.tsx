@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EmptyState, Hero, MiniAvatar, Panel, RowMenu } from "@/components/ui";
+import { EmptyState, Hero, MiniAvatar, PaginationControls, Panel, RowMenu, usePaginatedList } from "@/components/ui";
 import { SubjectForm } from "@/components/forms/SchoolForms";
 import {
   ClassItem,
@@ -127,22 +127,25 @@ export default function SubjectsPage() {
     return map;
   }, [classes]);
 
-  const groups = useMemo(() => {
+  const matchingSubjects = useMemo(() => {
     const term = search.trim().toLowerCase();
-    const visible = subjects.filter(
+    return subjects.filter(
       (s) =>
         (!stage || (s.stage || "unassigned") === stage) &&
         (!term || s.name.toLowerCase().includes(term) || s.code.toLowerCase().includes(term))
     );
+  }, [subjects, stage, search]);
+  const subjectPagination = usePaginatedList(matchingSubjects);
+  const groups = useMemo(() => {
     const map = new Map<string, SubjectItem[]>();
-    for (const s of visible) {
+    for (const s of subjectPagination.pageItems) {
       const key = s.stage || "unassigned";
       map.set(key, [...(map.get(key) ?? []), s]);
     }
     return [...STAGE_ORDER, "unassigned"]
       .filter((k) => map.has(k))
       .map((k) => ({ key: k, label: STAGE_LABEL[k] ?? k, items: map.get(k)! }));
-  }, [subjects, stage, search]);
+  }, [subjectPagination.pageItems]);
 
   return (
     <>
@@ -298,6 +301,9 @@ export default function SubjectsPage() {
           </Panel>
         ))
       )}
+      {matchingSubjects.length ? (
+        <PaginationControls page={subjectPagination.page} pageSize={subjectPagination.pageSize} total={matchingSubjects.length} pageCount={subjectPagination.pageCount} onPageChange={subjectPagination.setPage} onPageSizeChange={subjectPagination.setPageSize} />
+      ) : null}
 
       <SubjectForm open={open} onClose={() => setOpen(false)} onSaved={load} initial={editing} />
     </>

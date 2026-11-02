@@ -82,7 +82,19 @@ export const examCenterController = {
     try {
       const parsed = dateSheetSaveSchema.safeParse(await req.json());
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
-      return jsonOk(await examCenterService.saveDateSheets(parsed.data, session?.id));
+      return jsonOk(await examCenterService.saveDateSheets(parsed.data, { id: session?.id, name: session?.name }));
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
+  async dateSheetHistory(req: Request) {
+    const { error } = await requireAuth(["admin"]);
+    if (error) return error;
+    const { termId, classId } = query(req);
+    if (!needIds(termId, classId)) return jsonError("Select an exam term and class");
+    try {
+      return jsonOk({ history: await examCenterService.dateSheetHistory(termId, classId) });
     } catch (e) {
       return fromServiceError(e);
     }

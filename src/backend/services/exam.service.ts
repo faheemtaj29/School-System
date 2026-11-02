@@ -6,7 +6,10 @@ import { Exam } from "@/backend/models/Exam";
 import { ClassModel } from "@/backend/models/Class";
 import { Student } from "@/backend/models/Student";
 import { ServiceError } from "@/backend/types";
+import { setupRevision } from "@/backend/lib/setupHistory";
 import type { ExamInput, MarksheetInput } from "@/backend/validators/exam.validator";
+
+type HistoryActor = { name?: string };
 
 function sumComponents(c?: { theory?: number; viva?: number; assignment?: number; attendance?: number; project?: number } | null) {
   if (!c) return 0;
@@ -46,18 +49,36 @@ export const examService = {
       .lean();
   },
 
-  async create(data: ExamInput) {
+  async create(data: ExamInput, actor?: HistoryActor) {
     await dbConnect();
-    const item = await Exam.create(toPayload(data));
+    const payload = toPayload(data);
+    const item = await Exam.create({
+      ...payload,
+      setupHistory: [
+        setupRevision(`Created ${data.title}`, {
+          ...payload,
+          results: payload.results.map((result) => ({ ...result, studentId: String(result.studentId) })),
+        }, actor?.name),
+      ],
+    });
     return populated(String(item._id));
   },
 
-  async update(id: string, data: ExamInput) {
+  async update(id: string, data: ExamInput, actor?: HistoryActor) {
     await dbConnect();
+    const payload = { ...toPayload(data), teacherId: data.teacherId || null };
     const item = await Exam.findByIdAndUpdate(
       id,
-      { ...toPayload(data), teacherId: data.teacherId || null },
-      { new: true }
+      {
+        $set: payload,
+        $push: {
+          setupHistory: setupRevision(`Updated ${data.title}`, {
+            ...payload,
+            results: payload.results.map((result) => ({ ...result, studentId: String(result.studentId) })),
+          }, actor?.name),
+        },
+      },
+      { new: true, runValidators: true }
     )
       .populate("classId", "name section")
       .populate("subjectId", "name code")
@@ -65,6 +86,13 @@ export const examService = {
       .populate("results.studentId", "firstName lastName admissionNo");
     if (!item) throw new ServiceError("NOT_FOUND", "Exam not found", 404);
     return item;
+  },
+
+  async setupHistory(id: string) {
+    await dbConnect();
+    const item = await Exam.findById(id).select("+setupHistory").lean();
+    if (!item) throw new ServiceError("NOT_FOUND", "Exam not found", 404);
+    return item.setupHistory || [];
   },
 
   async remove(id: string) {
@@ -94,7 +122,7 @@ export const examService = {
    * Bulk-save a mark sheet: upserts one Exam per subject in the class.
    * Auto-calculates `marks` as the sum of components.
    */
-  async saveMarksheet(input: MarksheetInput) {
+  async saveMarksheet(input: MarksheetInput, actor?: HistoryActor) {
     await dbConnect();
     const cls = await ClassModel.findById(input.classId).lean();
     if (!cls) throw new ServiceError("NOT_FOUND", "Class not found", 404);
@@ -122,6 +150,16 @@ export const examService = {
       });
 
       const title = `${cls.name}-${cls.section} ${input.termLabel || input.examType} ${input.academicYear}`;
+      const payload = {
+        title,
+        examType: input.examType,
+        classId: input.classId,
+        subjectId: sub.subjectId,
+        date: new Date(input.date),
+        maxMarks: sub.maxMarks,
+        markComponents: sub.markComponents,
+        results,
+      };
       return Exam.findOneAndUpdate(
         {
           classId: input.classId,
@@ -130,15 +168,18 @@ export const examService = {
           title,
         },
         {
-          $set: {
-            title,
-            examType: input.examType,
-            classId: input.classId,
-            subjectId: sub.subjectId,
-            date: new Date(input.date),
-            maxMarks: sub.maxMarks,
-            markComponents: sub.markComponents,
-            results,
+          $set: payload,
+          $push: {
+            setupHistory: setupRevision(
+              `Saved ${title} · ${results.length} students`,
+              {
+                ...payload,
+                classId: String(input.classId),
+                subjectId: String(sub.subjectId),
+                results: results.map((result) => ({ ...result, studentId: String(result.studentId) })),
+              },
+              actor?.name
+            ),
           },
         },
         { upsert: true, new: true }

@@ -2,6 +2,7 @@
 
 import QRCode from "qrcode";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { DocumentSignatureUrls } from "@/lib/documentSignatures";
 
 export type SchoolHeader = {
   name: string;
@@ -9,7 +10,10 @@ export type SchoolHeader = {
   campus?: string;
   address?: string;
   phone?: string;
+  email?: string;
+  website?: string;
   logoUrl?: string | null;
+  signatures?: DocumentSignatureUrls;
 };
 
 /** Loads JSON for a print page and shows a toolbar that is hidden on paper. */
@@ -116,17 +120,33 @@ export function PrintShell({
   );
 }
 
-export function SchoolHead({ school, title, sub }: { school: SchoolHeader; title: string; sub?: string }) {
+export function SchoolHead({
+  school,
+  title,
+  sub,
+  className = "doc-head",
+}: {
+  school: SchoolHeader;
+  title: string;
+  sub?: string;
+  className?: string;
+}) {
   return (
-    <header className="doc-head">
+    <header className={className}>
       {school.logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={school.logoUrl} alt="" />
-      ) : null}
+      ) : (
+        <span className="doc-mark" aria-hidden="true">{school.name.trim().charAt(0).toUpperCase() || "S"}</span>
+      )}
       <div className="doc-head-text">
         <h1>{school.name}</h1>
-        {school.campus || school.address || school.phone ? (
-          <p>{[school.campus, school.address, school.phone ? `Ph: ${school.phone}` : ""].filter(Boolean).join(" · ")}</p>
+        {school.campus || school.address || school.phone || school.email || school.website ? (
+          <p>
+            {[school.campus, school.address, school.phone ? `Ph: ${school.phone}` : "", school.email, school.website]
+              .filter(Boolean)
+              .map((item) => <span key={item}>{item}</span>)}
+          </p>
         ) : null}
       </div>
       <div className="doc-head-title">
@@ -166,24 +186,54 @@ export function QbLetterhead({
   school,
   extra,
 }: {
-  school: SchoolHeader & { email?: string };
+  school: SchoolHeader;
   /** An extra contact line, e.g. the employer's tax number. */
   extra?: string;
 }) {
   return (
     <div className="qbp-top">
+      {school.logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="qbp-logo" src={school.logoUrl} alt="" />
+      ) : (
+        <span className="qbp-mark" aria-hidden="true">{school.name.trim().charAt(0).toUpperCase() || "S"}</span>
+      )}
       <div className="qbp-co">
         <b>{school.name}</b>
         {school.campus ? <span>{school.campus}</span> : null}
         {school.address ? <span>{school.address}</span> : null}
         {school.phone ? <span>{school.phone}</span> : null}
         {school.email ? <span>{school.email}</span> : null}
+        {school.website ? <span>{school.website}</span> : null}
         {extra ? <span>{extra}</span> : null}
       </div>
-      {school.logoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img className="qbp-logo" src={school.logoUrl} alt="" />
-      ) : null}
+      <span className="qbp-spacer" aria-hidden="true" />
+    </div>
+  );
+}
+
+export function DocumentSigns({
+  signatures,
+  signers,
+  className = "signs",
+}: {
+  signatures?: DocumentSignatureUrls;
+  signers: { label: string; role?: keyof DocumentSignatureUrls }[];
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      {signers.map(({ label, role }) => (
+        <div className="signer" key={`${role || "blank"}-${label}`}>
+          <div className="signer-mark">
+            {role && signatures?.[role] ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={signatures[role]} alt="" />
+            ) : null}
+          </div>
+          <span>{label}</span>
+        </div>
+      ))}
     </div>
   );
 }

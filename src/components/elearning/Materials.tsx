@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { EmptyState, Field, ModalForm, Panel, inputClass } from "@/components/ui";
+import { EmptyState, Field, ModalForm, PaginationControls, Panel, inputClass, usePaginatedList } from "@/components/ui";
 
 type Ref = { _id: string; code?: string; title: string };
 
@@ -18,6 +18,8 @@ export type Material = {
   size?: number;
   createdAt: string;
 };
+
+const EMPTY_MATERIALS: Material[] = [];
 
 /* ---------- what a file or link is, and how to show it ---------- */
 
@@ -379,6 +381,7 @@ export function MaterialsPanel({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [viewing, setViewing] = useState<Material | null>(null);
+  const pagination = usePaginatedList(items || EMPTY_MATERIALS);
 
   const load = useCallback(() => {
     fetch(`/api/elearning?kind=material${course ? `&courseId=${course}` : ""}`)
@@ -481,7 +484,7 @@ export function MaterialsPanel({
         />
       ) : (
         <div className="mat-grid">
-          {items.map((m) => {
+          {pagination.pageItems.map((m) => {
             const type = m.fileType || materialType(m.fileName || m.url);
             return (
               <div key={m._id} className="mat-card">
@@ -518,6 +521,9 @@ export function MaterialsPanel({
           })}
         </div>
       )}
+      {items?.length ? (
+        <PaginationControls page={pagination.page} pageSize={pagination.pageSize} total={items.length} pageCount={pagination.pageCount} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} />
+      ) : null}
 
       <ModalForm title="Add study material" subtitle="A file students can view and download, or a link" open={open} onClose={() => setOpen(false)} onSubmit={save} submitLabel="Add material" wide>
         {err ? <div className="alert err">{err}</div> : null}

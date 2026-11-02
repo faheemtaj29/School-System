@@ -4,6 +4,7 @@ import { SampleData } from "@/components/settings/SampleData";
 import { TaxSettings } from "@/components/settings/TaxSettings";
 import { StartFresh } from "@/components/settings/StartFresh";
 import { CampusLogo } from "@/components/settings/CampusLogo";
+import { DocumentSignatures } from "@/components/settings/DocumentSignatures";
 import { DEFAULT_CHALLAN_TERMS } from "@/lib/challanTerms";
 import { CURRENCIES, normalizeCurrency } from "@/lib/currency";
 import { FormEvent, useCallback, useEffect, useState } from "react";
@@ -607,6 +608,7 @@ export default function SettingsPage() {
                   <input className={inputClass} value={form.country || "Pakistan"} onChange={(e) => setForm({ ...form, country: e.target.value })} />
                 </Field>
               </div>
+              <DocumentSignatures />
 
               <div className="form-section-title" style={{ marginTop: 20 }}>Academic Settings</div>
               <div className="form-grid">
@@ -904,6 +906,7 @@ export default function SettingsPage() {
                         accent: preset.accent,
                         sidebar: preset.sidebar,
                         surface: preset.surface,
+                        solid: true,
                       })
                     }
                   >

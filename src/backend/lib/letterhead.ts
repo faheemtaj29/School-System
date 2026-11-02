@@ -5,6 +5,7 @@
  * ledgers, certificates and notices alike.
  */
 import { Settings } from "@/backend/models/Settings";
+import type { DocumentSignatureRole, DocumentSignatureUrls } from "@/lib/documentSignatures";
 
 export type Letterhead = {
   name: string;
@@ -13,6 +14,8 @@ export type Letterhead = {
   address: string;
   phone: string;
   email: string;
+  website: string;
+  signatures: DocumentSignatureUrls;
   registrationNo: string;
   currency: string;
   logoUrl: string | null;
@@ -23,8 +26,11 @@ type BranchLean = { code: string; name: string; address?: string; phone?: string
 /** Loads settings once and returns a lookup by campus code (for documents that span campuses). */
 export async function letterheads() {
   const s = await Settings.findOne()
-    .select("schoolName address phone email logoUpdatedAt branches defaultBranchCode registrationNo currency")
+    .select("schoolName address phone email website logoUpdatedAt branches defaultBranchCode registrationNo currency +documentSignatures")
     .lean();
+  const documentSignatures = s?.documentSignatures as
+    | Partial<Record<DocumentSignatureRole, { updatedAt?: Date | string }>>
+    | undefined;
   const branches = (s?.branches || []) as BranchLean[];
   const schoolLogo = s?.logoUpdatedAt ? `/api/settings/logo?v=${new Date(s.logoUpdatedAt).getTime()}` : null;
   return (branchCode?: string | null): Letterhead => {
@@ -37,6 +43,14 @@ export async function letterheads() {
       address: b?.address || s?.address || "",
       phone: b?.phone || s?.phone || "",
       email: b?.email || s?.email || "",
+      website: s?.website || "",
+      signatures: Object.fromEntries(
+        Object.entries(documentSignatures || {}).flatMap(([role, signature]) =>
+          signature?.updatedAt
+            ? [[role, `/api/settings/signature?role=${role}&v=${new Date(signature.updatedAt).getTime()}`]]
+            : []
+        )
+      ) as DocumentSignatureUrls,
       registrationNo: s?.registrationNo || "",
       currency: s?.currency || "PKR",
       logoUrl: b?.logoUpdatedAt

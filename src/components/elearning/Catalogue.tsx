@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { EmptyState, Panel } from "@/components/ui";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { EmptyState, PaginationControls, Panel, usePaginatedList } from "@/components/ui";
 import { formatNumber } from "@/lib/types";
 
 type CatalogueCourse = {
@@ -103,7 +103,8 @@ export function CourseCatalogue({ isStudent, currency, onJoined }: { isStudent: 
     }
   }
 
-  const shown = (list || []).filter((c) => !q || `${c.code} ${c.title} ${c.teacher} ${c.level}`.toLowerCase().includes(q.toLowerCase()));
+  const shown = useMemo(() => (list || []).filter((c) => !q || `${c.code} ${c.title} ${c.teacher} ${c.level}`.toLowerCase().includes(q.toLowerCase())), [list, q]);
+  const pagination = usePaginatedList(shown);
 
   return (
     <Panel title="Course Catalogue" meta={list ? `${list.length} OPEN COURSES` : undefined}>
@@ -118,7 +119,7 @@ export function CourseCatalogue({ isStudent, currency, onJoined }: { isStudent: 
         <EmptyState message={list.length ? "No course matches your search." : "No courses are open for joining right now."} />
       ) : (
         <div className="cat-grid">
-          {shown.map((c) => {
+          {pagination.pageItems.map((c) => {
             const full = c.seatsLeft <= 0;
             return (
               <article key={c._id} className="cat-card">
@@ -153,6 +154,9 @@ export function CourseCatalogue({ isStudent, currency, onJoined }: { isStudent: 
           })}
         </div>
       )}
+      {shown.length ? (
+        <PaginationControls page={pagination.page} pageSize={pagination.pageSize} total={shown.length} pageCount={pagination.pageCount} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} />
+      ) : null}
     </Panel>
   );
 }

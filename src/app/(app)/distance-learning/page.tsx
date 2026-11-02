@@ -980,7 +980,7 @@ export default function DistanceLearningPage() {
                     <th>Program</th>
                     <th>Grade</th>
                     <th>Issued</th>
-                    {role === "admin" ? <th className="right">Actions</th> : null}
+                    <th className="right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1000,9 +1000,17 @@ export default function DistanceLearningPage() {
                       </td>
                       <td>{dip.grade || "—"}</td>
                       <td className="num">{prettyDate(dip.issueDate)}</td>
-                      {role === "admin" ? (
-                        <td>
-                          <div className="row-actions">
+                      <td>
+                        <div className="row-actions">
+                          <a
+                            className="link-btn"
+                            href={`/print/diploma?id=${encodeURIComponent(dip._id)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Print certificate
+                          </a>
+                          {role === "admin" ? (
                             <button
                               type="button"
                               className="link-btn danger"
@@ -1010,9 +1018,9 @@ export default function DistanceLearningPage() {
                             >
                               Revoke
                             </button>
-                          </div>
-                        </td>
-                      ) : null}
+                          ) : null}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

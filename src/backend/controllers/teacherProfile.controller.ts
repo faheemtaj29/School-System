@@ -99,7 +99,10 @@ export const teacherProfileController = {
       const classIds = (teacher.classes || []).map((c: { _id: unknown }) => c._id);
       const [payslips, leaves, counts, cfg, slots, courses, marking] = await Promise.all([
         Payslip.find({ teacherId: teacher._id }).sort({ month: -1 }).lean(),
-        LeaveRequest.find({ teacherId: teacher._id }).sort({ createdAt: -1 }).limit(20).lean(),
+        LeaveRequest.find({
+          teacherId: teacher._id,
+          $or: [{ employeeModel: "Teacher" }, { employeeModel: { $exists: false } }],
+        }).sort({ createdAt: -1 }).limit(20).lean(),
         Student.aggregate([
           { $match: { classId: { $in: classIds }, status: "active" } },
           { $group: { _id: "$classId", n: { $sum: 1 } } },

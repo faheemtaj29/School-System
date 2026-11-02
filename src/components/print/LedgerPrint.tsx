@@ -1,8 +1,8 @@
 "use client";
 
-import { PrintShell, fmtDate, usePrintData, QbLetterhead } from "./PrintShell";
+import { DocumentSigns, PrintShell, fmtDate, usePrintData, QbLetterhead, type SchoolHeader } from "./PrintShell";
 
-type School = { name: string; address: string; phone: string; email: string; currency: string; logoUrl: string | null };
+type School = SchoolHeader & { currency: string };
 
 type StatementData = {
   account: { code: string; name: string; type: string; bankName?: string; accountNumber?: string; partyType?: string };
@@ -183,12 +183,12 @@ export function LedgerStatementPrintPage({ query }: { query: string }) {
             </div>
           </div>
 
-          <div className="signs">
-            <span>Prepared by</span>
-            <span>Checked by</span>
-            <span>Accountant</span>
-            <span>Party&apos;s confirmation</span>
-          </div>
+          <DocumentSigns signatures={data.school.signatures} signers={[
+            { label: "Prepared by", role: "preparedBy" },
+            { label: "Checked by", role: "checkedBy" },
+            { label: "Accountant", role: "accountant" },
+            { label: "Party's confirmation" },
+          ]} />
         </section>
       ) : null}
     </PrintShell>
@@ -282,12 +282,12 @@ export function StockLedgerPrintPage({ query }: { query: string }) {
             </div>
           </div>
 
-          <div className="signs">
-            <span>Store keeper</span>
-            <span>Checked by</span>
-            <span>Accountant</span>
-            <span>Approved by</span>
-          </div>
+          <DocumentSigns signatures={data.school.signatures} signers={[
+            { label: "Store keeper", role: "storeKeeper" },
+            { label: "Checked by", role: "checkedBy" },
+            { label: "Accountant", role: "accountant" },
+            { label: "Approved by", role: "approvedBy" },
+          ]} />
         </section>
       ) : null}
     </PrintShell>
@@ -458,12 +458,12 @@ export function StudentLedgerPrintPage({ query }: { query: string }) {
               <div className="qbp-big"><span>{data.ledger.balance > 0 ? "BALANCE DUE" : "ADVANCE"}</span><b>{cur} {money(Math.abs(data.ledger.balance))}</b></div>
             </div>
           </div>
-          <div className="signs">
-            <span>Accounts office</span>
-            <span>Checked by</span>
-            <span>Principal</span>
-            <span>Parent&apos;s signature</span>
-          </div>
+          <DocumentSigns signatures={data.school.signatures} signers={[
+            { label: "Accounts office", role: "accountant" },
+            { label: "Checked by", role: "checkedBy" },
+            { label: "Principal", role: "principal" },
+            { label: "Parent's signature" },
+          ]} />
         </section>
       ) : null}
     </PrintShell>

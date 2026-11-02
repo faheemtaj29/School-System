@@ -10,9 +10,11 @@ import {
   PortalAccessButton,
   RowMenu,
   StatusBadge,
+  PaginationControls,
   inputClass,
   Field,
   ModalForm,
+  usePaginatedList,
 } from "@/components/ui";
 import { ImportStudents } from "@/components/students/ImportStudents";
 import { StudentForm } from "@/components/forms/PeopleForms";
@@ -81,6 +83,7 @@ export default function StudentsPage() {
       `• ${d.fees} fee challan(s)${d.paidFees ? ` — ${d.paidFees} with payments, and their receipts and accounting entries` : ""}`,
       `• attendance on ${d.attendanceDays} day(s)`,
       `• ${d.examMarks} exam mark(s) and result cards`,
+      ...(d.leaveRequests ? [`• ${d.leaveRequests} student leave request(s)`] : []),
       "• the student's and (if no other child) the parent's login",
       "",
       "This cannot be undone.",
@@ -169,6 +172,7 @@ export default function StudentsPage() {
         (s.rollNumber || "").toLowerCase().includes(q)
     );
   }, [students, search]);
+  const pagination = usePaginatedList(filtered);
 
   return (
     <>
@@ -324,7 +328,7 @@ export default function StudentsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((s) => (
+                {pagination.pageItems.map((s) => (
                   <tr key={s._id}>
                     <td className="num">{s.rollNumber || "—"}</td>
                     <td>
@@ -385,6 +389,14 @@ export default function StudentsPage() {
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            page={pagination.page}
+            pageSize={pagination.pageSize}
+            total={filtered.length}
+            pageCount={pagination.pageCount}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.setPageSize}
+          />
         </Panel>
       )}
 

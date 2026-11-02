@@ -11,7 +11,9 @@ import {
   PortalAccessButton,
   RowMenu,
   StatusBadge,
+  PaginationControls,
   inputClass,
+  usePaginatedList,
 } from "@/components/ui";
 import { PersonPhoto, savePickedPhoto } from "@/components/PersonPhoto";
 import { formatCnic } from "@/components/forms/PeopleForms";
@@ -80,6 +82,7 @@ export default function StaffPage() {
       s.employeeId.toLowerCase().includes(search.toLowerCase()) ||
       s.department.toLowerCase().includes(search.toLowerCase())
     ), [staff, search]);
+  const pagination = usePaginatedList(filtered);
 
   const load = useCallback(async () => {
     const d = await fetch("/api/staff").then((r) => r.json());
@@ -213,7 +216,7 @@ export default function StaffPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length ? filtered.map((s) => (
+                {filtered.length ? pagination.pageItems.map((s) => (
                   <tr key={s._id}>
                     <td>
                       <NameCell name={fullName(s)} sub={[s.phone, s.email].filter(Boolean).join(" · ")} photo={photoSrc("staff", s)} />
@@ -255,6 +258,14 @@ export default function StaffPage() {
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            page={pagination.page}
+            pageSize={pagination.pageSize}
+            total={filtered.length}
+            pageCount={pagination.pageCount}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.setPageSize}
+          />
         </Panel>
       )}
 

@@ -7,9 +7,11 @@ import {
   Hero,
   NameCell,
   OptionSelect,
+  PaginationControls,
   Panel,
   StatusBadge,
   inputClass,
+  usePaginatedList,
 } from "@/components/ui";
 import { FeeForm } from "@/components/forms/SchoolForms";
 import { Defaulters } from "@/components/fees/Defaulters";
@@ -187,6 +189,16 @@ export default function FeesPage() {
       (!filterMonth || f.billingMonth === filterMonth) &&
       (!feeSearch || feeStudentName(f).includes(feeSearch.toLowerCase()))),
     [fees, filterClass, filterMonth, feeSearch]);
+  const allFees = useMemo(
+    () => fees.filter((f) =>
+      (!filterClass || studentClass(f) === filterClass) &&
+      (!filterMonth || f.billingMonth === filterMonth)
+    ),
+    [fees, filterClass, filterMonth],
+  );
+  const pendingPagination = usePaginatedList(pendingFees);
+  const receivedPagination = usePaginatedList(receivedFees);
+  const allPagination = usePaginatedList(allFees);
 
   /** The same printed challan (bank / school / parent copies) used for bulk printing and the student ledger. */
   function openChallan(id: string) {
@@ -532,8 +544,9 @@ export default function FeesPage() {
           {!pendingFees.length ? (
             <EmptyState message="No pending fees for this selection." />
           ) : (
-            <div className="table-scroll">
-              <table className="reg">
+            <>
+              <div className="table-scroll">
+                <table className="reg">
                 <thead>
                   <tr>
                     <th>Student</th>
@@ -546,10 +559,12 @@ export default function FeesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pendingFees.map((fee) => <FeeRow key={fee._id} fee={fee} showPay />)}
+                  {pendingPagination.pageItems.map((fee) => <FeeRow key={fee._id} fee={fee} showPay />)}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+              <PaginationControls page={pendingPagination.page} pageSize={pendingPagination.pageSize} total={pendingFees.length} pageCount={pendingPagination.pageCount} onPageChange={pendingPagination.setPage} onPageSizeChange={pendingPagination.setPageSize} />
+            </>
           )}
         </Panel>
       ) : null}
@@ -561,8 +576,9 @@ export default function FeesPage() {
           {!receivedFees.length ? (
             <EmptyState message="No paid fees for this selection." />
           ) : (
-            <div className="table-scroll">
-              <table className="reg">
+            <>
+              <div className="table-scroll">
+                <table className="reg">
                 <thead>
                   <tr>
                     <th>Student</th>
@@ -575,10 +591,12 @@ export default function FeesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {receivedFees.map((fee) => <FeeRow key={fee._id} fee={fee} />)}
+                  {receivedPagination.pageItems.map((fee) => <FeeRow key={fee._id} fee={fee} />)}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+              <PaginationControls page={receivedPagination.page} pageSize={receivedPagination.pageSize} total={receivedFees.length} pageCount={receivedPagination.pageCount} onPageChange={receivedPagination.setPage} onPageSizeChange={receivedPagination.setPageSize} />
+            </>
           )}
         </Panel>
       ) : null}
@@ -587,11 +605,12 @@ export default function FeesPage() {
       {tab === "all" ? (
         <Panel title="All Vouchers">
           {renderFilters()}
-          {!fees.filter((f) => (!filterClass || studentClass(f) === filterClass) && (!filterMonth || f.billingMonth === filterMonth)).length ? (
+          {!allFees.length ? (
             <EmptyState message="No fee vouchers found." />
           ) : (
-            <div className="table-scroll">
-              <table className="reg">
+            <>
+              <div className="table-scroll">
+                <table className="reg">
                 <thead>
                   <tr>
                     <th>Student</th>
@@ -604,12 +623,12 @@ export default function FeesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {fees
-                    .filter((f) => (!filterClass || studentClass(f) === filterClass) && (!filterMonth || f.billingMonth === filterMonth))
-                    .map((fee) => <FeeRow key={fee._id} fee={fee} showPay />)}
+                  {allPagination.pageItems.map((fee) => <FeeRow key={fee._id} fee={fee} showPay />)}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+              <PaginationControls page={allPagination.page} pageSize={allPagination.pageSize} total={allFees.length} pageCount={allPagination.pageCount} onPageChange={allPagination.setPage} onPageSizeChange={allPagination.setPageSize} />
+            </>
           )}
         </Panel>
       ) : null}

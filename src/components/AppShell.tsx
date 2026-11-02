@@ -78,7 +78,7 @@ const navGroups: NavGroup[] = [
       { href: "/teachers", label: "Teachers", Icon: TeachersIcon, roles: ["admin"] },
       { href: "/teachers/me", label: "My Profile", Icon: PersonIcon, roles: ["teacher"] },
       { href: "/staff", label: "Campus Staff", Icon: PersonIcon, roles: ["admin"] },
-      { href: "/hr", label: "HR & Payroll", Icon: HrIcon, roles: ["admin", "teacher"] },
+      { href: "/hr", label: "HR & Payroll", Icon: HrIcon, roles: ["admin", "teacher", "staff"] },
     ],
   },
   {
@@ -386,9 +386,15 @@ export function AppShell({
       <div className="main">
         <div className="topbar">
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div className="menu-btn" onClick={() => setOpen((v) => !v)}>
+            <button
+              type="button"
+              className="menu-btn"
+              aria-label={open ? "Close navigation" : "Open navigation"}
+              aria-expanded={open}
+              onClick={() => setOpen((v) => !v)}
+            >
               <MenuIcon />
-            </div>
+            </button>
             <div className="search">
               <SearchIcon />
               Search students, roll no, class, fees…

@@ -1,4 +1,5 @@
 import { Schema, model, models, Types } from "mongoose";
+import { SetupRevisionSchema, type ISetupRevision } from "./SetupRevision";
 
 export interface IExamTypeMaster {
   key: string;
@@ -104,6 +105,7 @@ export interface IExamSchedule {
   rows: IExamScheduleRow[];
   /** Exam roll numbers issued for this term (printed on slips and result cards). */
   rollNumbers?: IExamRollNumber[];
+  setupHistory?: ISetupRevision[];
   institutionCode: string;
   createdBy?: Types.ObjectId;
   updatedBy?: Types.ObjectId;
@@ -161,6 +163,7 @@ const ExamScheduleSchema = new Schema<IExamSchedule>(
       ],
       default: [],
     },
+    setupHistory: { type: [SetupRevisionSchema], select: false, default: undefined },
     institutionCode: { type: String, required: true, uppercase: true, trim: true, default: "MAIN" },
     createdBy: { type: Schema.Types.ObjectId, ref: "User" },
     updatedBy: { type: Schema.Types.ObjectId, ref: "User" },

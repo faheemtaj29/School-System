@@ -374,6 +374,8 @@ type StudentDoc = {
   admissionNo: string;
   rollNumber?: string;
   parentName?: string;
+  dateOfBirth?: Date;
+  photoUpdatedAt?: Date;
 };
 
 type ExamDoc = {
@@ -458,6 +460,8 @@ function buildResultCards(students: StudentDoc[], exams: ExamDoc[]) {
         admissionNo: student.admissionNo,
         rollNumber: student.rollNumber || "",
         parentName: student.parentName || "",
+        dateOfBirth: student.dateOfBirth?.toISOString() || "",
+        photoUpdatedAt: student.photoUpdatedAt?.toISOString() || "",
       },
       subjects: rows,
       totalMax,
@@ -481,4 +485,3 @@ function buildResultCards(students: StudentDoc[], exams: ExamDoc[]) {
     position: positionById.get(card.student._id) || 0,
   }));
 }
-

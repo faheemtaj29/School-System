@@ -12,6 +12,7 @@ import { Exam } from "@/backend/models/Exam";
 import { ExamMark, ExamSchedule, ExamTerm } from "@/backend/models/ExamWorkflow";
 import { Fee } from "@/backend/models/Fee";
 import { LeaveRequest, Payslip } from "@/backend/models/HR";
+import { StudentLeaveRequest } from "@/backend/models/StudentLeave";
 import { InventoryItem, StockVoucher } from "@/backend/models/Inventory";
 import { LedgerEntry } from "@/backend/models/Ledger";
 import { MessageLog } from "@/backend/models/Messaging";
@@ -99,6 +100,7 @@ export const resetService = {
 
     if (want.has("students")) {
       count("students", (await Student.deleteMany({})).deletedCount);
+      count("student leave requests", (await StudentLeaveRequest.deleteMany({})).deletedCount);
       count("portal logins", (await User.deleteMany({ role: { $in: ["student", "parent"] } })).deletedCount);
       count("admission applications", (await Admission.deleteMany({})).deletedCount);
       count("exam marks", (await ExamMark.deleteMany({})).deletedCount);

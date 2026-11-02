@@ -7,6 +7,7 @@ import { Student } from "@/backend/models/Student";
 import { Subject } from "@/backend/models/Subject";
 import { CURRICULUM, canonicalSubjects, curriculumSummary } from "@/backend/data/curriculum";
 import { ServiceError } from "@/backend/types";
+import { setupRevision } from "@/backend/lib/setupHistory";
 import type { ClassInput, CurriculumImportInput } from "@/backend/validators/class.validator";
 
 /** Shared between parallel first requests so the ladder is only seeded once. */
@@ -56,28 +57,53 @@ export const classService = {
     return item;
   },
 
-  async create(data: ClassInput) {
+  async create(data: ClassInput, byName?: string) {
     await dbConnect();
-    return ClassModel.create({
+    const payload = {
       ...data,
       branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
       classTeacher: data.classTeacher || undefined,
+    };
+    return ClassModel.create({
+      ...payload,
+      setupHistory: [
+        setupRevision(`Created ${data.name}-${data.section}`, {
+          ...payload,
+          subjects: payload.subjects.map(String),
+        }, byName),
+      ],
     });
   },
 
-  async update(id: string, data: ClassInput) {
+  async update(id: string, data: ClassInput, byName?: string) {
     await dbConnect();
+    const payload = {
+      ...data,
+      branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
+      classTeacher: data.classTeacher || null,
+    };
     const item = await ClassModel.findByIdAndUpdate(
       id,
       {
-        ...data,
-        branchCode: data.branchCode ? data.branchCode.toUpperCase() : undefined,
-        classTeacher: data.classTeacher || null,
+        $set: payload,
+        $push: {
+          setupHistory: setupRevision(`Updated ${data.name}-${data.section}`, {
+            ...payload,
+            subjects: payload.subjects.map(String),
+          }, byName),
+        },
       },
-      { new: true }
+      { new: true, runValidators: true }
     );
     if (!item) throw new ServiceError("NOT_FOUND", "Class not found", 404);
     return item;
+  },
+
+  async setupHistory(id: string) {
+    await dbConnect();
+    const item = await ClassModel.findById(id).select("+setupHistory").lean();
+    if (!item) throw new ServiceError("NOT_FOUND", "Class not found", 404);
+    return item.setupHistory || [];
   },
 
   async remove(id: string) {
@@ -164,10 +190,19 @@ export const classService = {
       rows.map((row) => ({
         updateOne: {
           filter: row.filter,
-          update: { $set: row.set, $setOnInsert: row.filter },
+          update: {
+            $set: row.set,
+            $setOnInsert: row.filter,
+            $push: {
+              setupHistory: setupRevision(
+                `Curriculum refreshed for ${row.filter.name}-${row.filter.section}`,
+                { ...row.filter, ...row.set }
+              ),
+            },
+          },
           upsert: true,
         },
-      })),
+      })) as never,
       { ordered: false }
     );
 

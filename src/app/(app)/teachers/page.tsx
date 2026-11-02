@@ -10,7 +10,9 @@ import {
   PortalAccessButton,
   RowMenu,
   StatusBadge,
+  PaginationControls,
   inputClass,
+  usePaginatedList,
 } from "@/components/ui";
 import { TeacherForm } from "@/components/forms/PeopleForms";
 import { ClassItem, SubjectItem, TeacherItem, fullName, photoSrc } from "@/lib/types";
@@ -70,6 +72,7 @@ export default function TeachersPage() {
       (!search || fullName(t).toLowerCase().includes(search.toLowerCase()) ||
        (t.employeeId && t.employeeId.toLowerCase().includes(search.toLowerCase())))
     ), [teachers, filter, search]);
+  const pagination = usePaginatedList(visible);
 
   return (
     <>
@@ -128,7 +131,7 @@ export default function TeachersPage() {
                 </tr>
               </thead>
               <tbody>
-                {visible.map((t) => (
+                {pagination.pageItems.map((t) => (
                   <tr key={t._id}>
                     <td>
                       <NameCell
@@ -179,6 +182,14 @@ export default function TeachersPage() {
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            page={pagination.page}
+            pageSize={pagination.pageSize}
+            total={visible.length}
+            pageCount={pagination.pageCount}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.setPageSize}
+          />
         </Panel>
       )}
 

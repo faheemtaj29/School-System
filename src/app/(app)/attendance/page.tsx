@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { EmptyState, Field, Hero, NameCell, Panel, inputClass } from "@/components/ui";
+import { EmptyState, Field, Hero, NameCell, PaginationControls, Panel, inputClass } from "@/components/ui";
 import { CheckCalendarIcon } from "@/components/Icons";
 import {
   AttendanceItem,
@@ -29,6 +29,10 @@ export default function AttendancePage() {
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [students, setStudents] = useState<StudentItem[]>([]);
   const [history, setHistory] = useState<AttendanceItem[]>([]);
+  const [summaryHistory, setSummaryHistory] = useState<AttendanceItem[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize, setHistoryPageSize] = useState(50);
   const [classId, setClassId] = useState("");
   const [date, setDate] = useState(toDateInput(new Date()));
   const [records, setRecords] = useState<RecordRow[]>([]);
@@ -40,6 +44,8 @@ export default function AttendancePage() {
   const [sheetSaved, setSheetSaved] = useState(false);
   /** Day-by-day sheets of the selected class, newest first. */
   const [classHistory, setClassHistory] = useState<AttendanceItem[]>([]);
+  const [classHistoryTotal, setClassHistoryTotal] = useState(0);
+  const [classHistoryPage, setClassHistoryPage] = useState(1);
   const [alertsOn, setAlertsOn] = useState(true);
 
   useEffect(() => {
@@ -53,11 +59,17 @@ export default function AttendancePage() {
   const loadMeta = useCallback(async () => {
     const [c, a] = await Promise.all([
       fetch("/api/classes").then((r) => r.json()),
-      fetch("/api/attendance").then((r) => r.json()),
+      fetch(`/api/attendance?page=${historyPage}&pageSize=${historyPageSize}`).then((r) => r.json()),
     ]);
     setClasses(c.classes || []);
     setHistory(a.attendance || []);
-  }, []);
+    setHistoryTotal(a.pagination?.total || 0);
+    if (historyPage === 1) setSummaryHistory(a.attendance || []);
+    else {
+      const recent = await fetch(`/api/attendance?page=1&pageSize=${historyPageSize}`).then((r) => r.json());
+      setSummaryHistory(recent.attendance || []);
+    }
+  }, [historyPage, historyPageSize]);
 
   useEffect(() => {
     loadMeta();
@@ -87,8 +99,13 @@ export default function AttendancePage() {
         if (!r.ok) throw new Error(data.error || "Unable to load saved attendance");
         return data;
       }),
+      fetch(`/api/student-leaves?classId=${encodeURIComponent(classId)}&date=${encodeURIComponent(date)}`).then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || "Unable to load approved student leave");
+        return data;
+      }),
     ])
-      .then(([studentData, attendanceData]) => {
+      .then(([studentData, attendanceData, leaveData]) => {
         if (cancelled) return;
         const list: StudentItem[] = studentData.students || [];
         const sheet = (attendanceData.attendance || []).find((item: AttendanceItem) =>
@@ -100,13 +117,30 @@ export default function AttendancePage() {
             return [id, { studentId: id, status: record.status, note: record.note || "" }];
           })
         );
+        const approvedLeaves = new Map<string, { reason?: string }>(
+          (leaveData.leaves || []).map((leave: { studentId: string | { _id: string }; reason?: string }) => {
+            const id = typeof leave.studentId === "string" ? leave.studentId : leave.studentId._id;
+            return [id, { reason: leave.reason }];
+          })
+        );
         setStudents(list);
         setSheetSaved(Boolean(sheet));
-        setRecords(list.map((student) => saved.get(student._id) || {
-          studentId: student._id,
-          // A new sheet starts with everyone present: only absentees need a tap.
-          status: sheet ? "" : "present",
-          note: "",
+        setRecords(list.map((student) => {
+          const existing = saved.get(student._id);
+          const leave = approvedLeaves.get(student._id);
+          if (leave && (!existing || existing.note?.startsWith("Approved leave"))) {
+            return {
+              ...(existing || { studentId: student._id }),
+              status: "excused",
+              note: `Approved leave${leave.reason ? `: ${leave.reason}` : ""}`,
+            };
+          }
+          if (existing) return existing;
+          return {
+            studentId: student._id,
+            status: leave ? "excused" : sheet ? "" : "present",
+            note: leave ? `Approved leave${leave.reason ? `: ${leave.reason}` : ""}` : "",
+          };
         }));
       })
       .catch((e: unknown) => {
@@ -119,11 +153,14 @@ export default function AttendancePage() {
   const loadClassHistory = useCallback(async (id: string) => {
     if (!id) {
       setClassHistory([]);
+      setClassHistoryTotal(0);
       return;
     }
-    const d = await fetch(`/api/attendance?classId=${encodeURIComponent(id)}`).then((r) => r.json()).catch(() => ({}));
+    const d = await fetch(`/api/attendance?classId=${encodeURIComponent(id)}&page=${classHistoryPage}&pageSize=${historyPageSize}`).then((r) => r.json()).catch(() => ({}));
     setClassHistory(d.attendance || []);
-  }, []);
+    setClassHistoryTotal(d.pagination?.total || 0);
+    if (d.pagination?.page && d.pagination.page !== classHistoryPage) setClassHistoryPage(d.pagination.page);
+  }, [classHistoryPage, historyPageSize]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches the class's saved sheets
@@ -178,19 +215,19 @@ export default function AttendancePage() {
   const unmarkedCount = records.filter((r) => !r.status).length;
 
   const summary = useMemo(() => {
-    if (!history.length) return null;
+    if (!summaryHistory.length) return null;
     const todayStr = toDateInput(new Date());
-    const todaySheets = history.filter((h) => toDateInput(new Date(h.date)) === todayStr);
+    const todaySheets = summaryHistory.filter((h) => toDateInput(new Date(h.date)) === todayStr);
     const todayPresent = todaySheets.reduce((a, h) => a + h.records.filter((r) => r.status === "present").length, 0);
     const todayTotal = todaySheets.reduce((a, h) => a + h.records.length, 0);
-    const recent = history.slice(0, 10);
+    const recent = summaryHistory.slice(0, 10);
     const rates = recent.map((h) => {
       const p = h.records.filter((r) => r.status === "present").length;
       return h.records.length ? (p / h.records.length) * 100 : 0;
     });
     const avgRate = rates.length ? Math.round(rates.reduce((a, b) => a + b, 0) / rates.length) : 0;
-    return { todaySheets: todaySheets.length, todayPresent, todayTotal, avgRate, totalSheets: history.length };
-  }, [history]);
+    return { todaySheets: todaySheets.length, todayPresent, todayTotal, avgRate, totalSheets: historyTotal };
+  }, [summaryHistory, historyTotal]);
 
   return (
     <>
@@ -233,7 +270,7 @@ export default function AttendancePage() {
             <div className={`att-sheet-state${sheetSaved ? " saved" : ""}`}>
               {sheetSaved
                 ? "Saved sheet — you are editing the attendance already recorded for this day."
-                : "New sheet — everyone starts as Present. Tap A, L or E for the exceptions, then Save sheet."}
+                : "New sheet — students with approved leave start as Excused; others start Present. All statuses remain editable."}
             </div>
           ) : null}
           {error ? <div className="alert err">{error}</div> : null}
@@ -312,7 +349,11 @@ export default function AttendancePage() {
                           className={`att-cell ${o.cls}${r.status === o.value ? " on" : ""}`}
                           onClick={() => {
                             const next = [...records];
-                            next[idx] = { ...r, status: o.value };
+                            next[idx] = {
+                              ...r,
+                              status: o.value,
+                              note: r.note?.startsWith("Approved leave") && o.value !== "excused" ? "" : r.note,
+                            };
                             setRecords(next);
                           }}
                         >
@@ -355,7 +396,7 @@ export default function AttendancePage() {
 
       <Panel
         title={selectedClass ? `Attendance History — ${selectedClass.name}-${selectedClass.section}` : "Recent Sheets"}
-        meta={selectedClass ? `${classHistory.length} DAY${classHistory.length === 1 ? "" : "S"}` : "ALL CLASSES · LAST 50"}
+        meta={selectedClass ? `${classHistoryTotal} DAY${classHistoryTotal === 1 ? "" : "S"}` : `ALL CLASSES · ${historyTotal} SHEETS`}
       >
         {(selectedClass ? classHistory : history).length === 0 ? (
           <EmptyState message={selectedClass ? "No sheets saved for this class yet." : "No attendance saved yet."} />
@@ -412,6 +453,20 @@ export default function AttendancePage() {
             </table>
           </div>
         )}
+        {(selectedClass ? classHistoryTotal : historyTotal) ? (
+          <PaginationControls
+            page={selectedClass ? classHistoryPage : historyPage}
+            pageSize={historyPageSize}
+            total={selectedClass ? classHistoryTotal : historyTotal}
+            pageCount={Math.max(1, Math.ceil((selectedClass ? classHistoryTotal : historyTotal) / historyPageSize))}
+            onPageChange={selectedClass ? setClassHistoryPage : setHistoryPage}
+            onPageSizeChange={(size) => {
+              setHistoryPageSize(size);
+              setHistoryPage(1);
+              setClassHistoryPage(1);
+            }}
+          />
+        ) : null}
       </Panel>
     </>
   );

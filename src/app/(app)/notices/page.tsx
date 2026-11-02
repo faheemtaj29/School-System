@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { EmptyState, Field, Hero, ModalForm, Panel, RowMenu, StatusBadge, inputClass } from "@/components/ui";
+import { EmptyState, Field, Hero, ModalForm, PaginationControls, Panel, RowMenu, StatusBadge, inputClass, usePaginatedList } from "@/components/ui";
 import { ClassItem, prettyDate, toDateInput } from "@/lib/types";
 
 type Notice = {
@@ -134,7 +134,8 @@ export default function NoticesPage() {
     return c;
   }, [notices]);
 
-  const shown = isAdmin && view !== "all" ? notices.filter((n) => statusOf(n) === view) : notices;
+  const shown = useMemo(() => isAdmin && view !== "all" ? notices.filter((n) => statusOf(n) === view) : notices, [isAdmin, notices, view]);
+  const noticePagination = usePaginatedList(shown);
   const audienceText = (n: Notice) =>
     n.audience === "class" && n.classId ? `${n.classId.name}-${n.classId.section}` : AUDIENCE_LABEL[n.audience] || n.audience;
 
@@ -170,7 +171,7 @@ export default function NoticesPage() {
         {!shown.length ? (
           <EmptyState message={isAdmin ? "Nothing here. Post a notice — it can go to everyone, staff, students, parents or one class." : "No notices right now."} />
         ) : (
-          shown.map((n) => {
+          noticePagination.pageItems.map((n) => {
             const st = statusOf(n);
             return (
               <div key={n._id} className={`nb-item ${n.priority}${st === "expired" ? " dim" : ""}`}>
@@ -211,6 +212,9 @@ export default function NoticesPage() {
             );
           })
         )}
+        {shown.length ? (
+          <PaginationControls page={noticePagination.page} pageSize={noticePagination.pageSize} total={shown.length} pageCount={noticePagination.pageCount} onPageChange={noticePagination.setPage} onPageSizeChange={noticePagination.setPageSize} />
+        ) : null}
       </Panel>
 
       <ModalForm

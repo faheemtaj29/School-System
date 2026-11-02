@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EmptyState, Hero, Panel, StatusBadge, inputClass } from "@/components/ui";
+import { EmptyState, Hero, PaginationControls, Panel, StatusBadge, inputClass, usePaginatedList } from "@/components/ui";
 import { prettyDate, toDateInput } from "@/lib/types";
 
 type Kind = "absence" | "fee" | "result" | "datesheet" | "custom";
@@ -34,6 +34,13 @@ type LogRow = {
   sentBy?: { name: string } | null;
 };
 
+async function fetchJson(url: string) {
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
 const TAB_LABEL: Record<Tab, string> = {
   absence: "Absences",
   fee: "Fee reminders",
@@ -58,6 +65,9 @@ export default function MessagesPage() {
   const [config, setConfig] = useState<Config | null>(null);
   const [classes, setClasses] = useState<ClassOpt[]>([]);
   const [terms, setTerms] = useState<{ _id: string; name: string; academicYear?: string }[]>([]);
+  const [setupLoading, setSetupLoading] = useState(true);
+  const [setupError, setSetupError] = useState("");
+  const [termError, setTermError] = useState("");
   // filters
   const [date, setDate] = useState(toDateInput(new Date()));
   const [classIds, setClassIds] = useState<string[]>([]);
@@ -69,24 +79,47 @@ export default function MessagesPage() {
   const [onlyStudents, setOnlyStudents] = useState<string[]>([]);
   // list
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [preparedFilters, setPreparedFilters] = useState<Record<string, unknown> | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [done, setDone] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [log, setLog] = useState<LogRow[]>([]);
+  const rowsPagination = usePaginatedList(rows || []);
+  const logPagination = usePaginatedList(log);
 
   useEffect(() => {
-    fetch("/api/auth/me").then((r) => r.json()).then((d) => setRole(d.user?.role || ""));
-    fetch("/api/messages?view=config").then((r) => r.json()).then((d) => setConfig(d.config || null));
-    fetch("/api/messages?view=classes").then((r) => r.json()).then((d) => setClasses(d.classes || []));
-    fetch("/api/exams/terms").then((r) => r.json()).then((d) => {
-      setTerms(d.terms || []);
-      setTermId((t) => t || d.terms?.[0]?._id || "");
-    }).catch(() => {});
+    let active = true;
+    Promise.all([
+      fetchJson("/api/auth/me"),
+      fetchJson("/api/messages?view=config"),
+      fetchJson("/api/messages?view=classes"),
+    ])
+      .then(([me, configData, classData]) => {
+        if (!active) return;
+        setRole(me.user?.role || "");
+        setConfig(configData.config || null);
+        setClasses(classData.classes || []);
+      })
+      .catch((e: Error) => {
+        if (active) setSetupError(e.message || "Could not load message settings and class lists.");
+      })
+      .finally(() => {
+        if (active) setSetupLoading(false);
+      });
+    fetchJson("/api/exams/terms")
+      .then((termData) => {
+        if (!active) return;
+        setTerms(termData.terms || []);
+        setTermId((current) => current || termData.terms?.[0]?._id || "");
+      })
+      .catch((e: Error) => {
+        if (active) setTermError(e.message || "Could not load exam terms.");
+      });
     // Opened from Attendance: /messages?kind=absence&date=…&classIds=…
     const q = new URLSearchParams(window.location.search);
     const k = q.get("kind") as Kind | null;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the URL
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read URL parameters once
     if (k && ["absence", "fee", "result", "datesheet", "custom"].includes(k)) setTab(k);
     if (q.get("date")) setDate(q.get("date")!);
     if (q.get("classIds")) setClassIds(q.get("classIds")!.split(",").filter(Boolean));
@@ -98,6 +131,9 @@ export default function MessagesPage() {
     if (q.get("students")) setOnlyStudents(q.get("students")!.split(",").filter(Boolean));
     // Opened from a notice: /messages?kind=custom&text=…
     if (q.get("text")) setText(q.get("text")!);
+    return () => {
+      active = false;
+    };
   }, []);
 
   const kind: Kind | null = ["absence", "fee", "result", "datesheet", "custom"].includes(tab) ? (tab as Kind) : null;
@@ -111,25 +147,28 @@ export default function MessagesPage() {
   );
 
   const loadLog = useCallback(() => {
-    fetch("/api/messages?view=log").then((r) => r.json()).then((d) => setLog(d.log || []));
+    fetchJson("/api/messages?view=log")
+      .then((d) => setLog(d.log || []))
+      .catch((e: Error) => setMsg({ ok: false, text: e.message || "Could not load the sent log." }));
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the list when the tab changes
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clear prepared data when the tab changes
     setRows(null);
+    setPreparedFilters(null);
     setMsg(null);
     setDone({});
     if (tab === "log") loadLog();
   }, [tab, loadLog]);
 
-  async function call(body: Record<string, unknown>) {
+  async function call(body: Record<string, unknown>, requestFilters: Record<string, unknown> = filters) {
     const res = await fetch("/api/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...filters, ...body }),
+      body: JSON.stringify({ ...requestFilters, ...body }),
     });
-    const d = await res.json();
-    if (!res.ok) throw new Error(d.error || "Something went wrong");
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || `Request failed (${res.status})`);
     return d;
   }
 
@@ -140,8 +179,22 @@ export default function MessagesPage() {
     try {
       const d = await call({ action: "prepare" });
       setRows(d.rows);
-      setPicked(new Set(d.rows.filter((r: Row) => r.phone).map((r: Row) => r.studentId)));
-      if (!d.rows.length) setMsg({ ok: true, text: "Nobody to message for this selection." });
+      setPreparedFilters({ ...filters });
+      const withPhone = d.rows.filter((r: Row) => r.phone);
+      setPicked(new Set(withPhone.map((r: Row) => r.studentId)));
+      const emptyReasons: Record<Kind, string> = {
+        absence: `No absences were found for ${prettyDate(date)}. Confirm attendance was saved for that date and class.`,
+        fee: "No unpaid fee challans match these filters. Check the fee status, due dates, class, or batch.",
+        result: "No published results were found for this exam term and class selection.",
+        datesheet: "No exam papers were found for this term and class selection.",
+        custom: "No active students were found for this class selection.",
+      };
+      setMsg({
+        ok: true,
+        text: d.rows.length
+          ? `Prepared ${d.rows.length} message(s); ${withPhone.length} have a parent phone number${withPhone.length ? " and are selected" : ""}.`
+          : emptyReasons[kind || "custom"],
+      });
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
     } finally {
@@ -154,7 +207,7 @@ export default function MessagesPage() {
     if (!confirm(`Send ${picked.size} message(s) now?`)) return;
     setBusy(true);
     try {
-      const d = await call({ action: "send", studentIds: [...picked] });
+      const d = await call({ action: "send", studentIds: [...picked] }, preparedFilters || undefined);
       setDone(Object.fromEntries(d.results.map((r: { studentId: string; status: string }) => [r.studentId, r.status])));
       setMsg({ ok: !d.failed, text: `Sent ${d.sent}${d.failed ? ` · ${d.failed} failed (see Sent log)` : ""}.` });
     } catch (e) {
@@ -169,7 +222,8 @@ export default function MessagesPage() {
     if (!r.waLink) return;
     window.open(r.waLink, "_blank", "noopener");
     setDone((d) => ({ ...d, [r.studentId]: "opened" }));
-    call({ action: "send", studentIds: [r.studentId], manual: true }).catch(() => {});
+    call({ action: "send", studentIds: [r.studentId], manual: true }, preparedFilters || undefined)
+      .catch((e: Error) => setMsg({ ok: false, text: e.message || "Could not record this message." }));
   }
 
   async function saveConfig(patch: Record<string, unknown>) {
@@ -200,6 +254,8 @@ export default function MessagesPage() {
         }
       />
 
+      {setupError ? <div className="alert err">{setupError} Refresh the page and try again.</div> : null}
+      {termError && (kind === "result" || kind === "datesheet") ? <div className="alert err">{termError}</div> : null}
       <div className="chips no-print" style={{ marginBottom: 12 }}>
         {tabs.map((t) => (
           <button key={t} type="button" className={`filter-chip${tab === t ? " active" : ""}`} onClick={() => setTab(t)}>
@@ -259,8 +315,13 @@ export default function MessagesPage() {
                 </select>
               </label>
             ) : null}
-            <button type="button" className="btn-dark" disabled={busy || ((kind === "result" || kind === "datesheet") && !classIds.length)} onClick={prepare}>
-              {busy ? "Working…" : "Prepare list"}
+            <button
+              type="button"
+              className="btn-dark"
+              disabled={busy || setupLoading || !!setupError || ((kind === "result" || kind === "datesheet") && (!classIds.length || !termId || !!termError))}
+              onClick={prepare}
+            >
+              {setupLoading || busy ? "Working…" : "Prepare list"}
             </button>
           </div>
 
@@ -281,6 +342,13 @@ export default function MessagesPage() {
                 </button>
               );
             })}
+            {!setupLoading && !classes.length ? (
+              <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
+                {kind === "result" || kind === "datesheet"
+                  ? "No classes found; add classes before preparing exam messages."
+                  : "No class filters available; this list will include all eligible students."}
+              </span>
+            ) : null}
           </div>
 
           {kind === "custom" ? (
@@ -304,6 +372,14 @@ export default function MessagesPage() {
                   </button>
                 ) : null}
               </div>
+              <PaginationControls
+                page={rowsPagination.page}
+                pageSize={rowsPagination.pageSize}
+                total={rows.length}
+                pageCount={rowsPagination.pageCount}
+                onPageChange={rowsPagination.setPage}
+                onPageSizeChange={rowsPagination.setPageSize}
+              />
               <div className="table-scroll">
                 <table className="reg report-table msg-table">
                   <thead>
@@ -316,7 +392,7 @@ export default function MessagesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((r) => (
+                    {rowsPagination.pageItems.map((r) => (
                       <tr key={r.studentId} className={done[r.studentId] ? "msg-done" : ""}>
                         <td>
                           <input
@@ -357,6 +433,16 @@ export default function MessagesPage() {
 
       {tab === "log" ? (
         <Panel title="Sent log" meta={`${log.length} MESSAGES`}>
+          {log.length ? (
+            <PaginationControls
+              page={logPagination.page}
+              pageSize={logPagination.pageSize}
+              total={log.length}
+              pageCount={logPagination.pageCount}
+              onPageChange={logPagination.setPage}
+              onPageSizeChange={logPagination.setPageSize}
+            />
+          ) : null}
           {!log.length ? (
             <EmptyState message="No messages yet." />
           ) : (
@@ -366,7 +452,7 @@ export default function MessagesPage() {
                   <tr><th>When</th><th>Type</th><th>Student</th><th>To</th><th>How</th><th>Message</th><th className="right">Status</th></tr>
                 </thead>
                 <tbody>
-                  {log.map((l) => (
+                  {logPagination.pageItems.map((l) => (
                     <tr key={l._id}>
                       <td>{prettyDate(l.createdAt)}<small className="msg-sub">{new Date(l.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small></td>
                       <td>{TAB_LABEL[l.kind]}</td>

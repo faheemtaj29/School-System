@@ -1,6 +1,6 @@
 "use client";
 
-import { PrintShell, SchoolHead, fmtDate, usePrintData, useQr, type SchoolHeader } from "./PrintShell";
+import { DocumentSigns, PrintShell, SchoolHead, fmtDate, usePrintData, useQr, type SchoolHeader } from "./PrintShell";
 
 type School = SchoolHeader & {
   currency: string;
@@ -46,24 +46,7 @@ function money(n: number) {
 }
 
 function Head({ school, title, copy }: { school: School; title: string; copy: string }) {
-  return (
-    <header className="fee-doc-head">
-      {school.logoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={school.logoUrl} alt="" />
-      ) : null}
-      <div>
-        <h1>{school.name}</h1>
-        <p>
-          {[school.campus, school.address, school.phone ? `Ph: ${school.phone}` : ""].filter(Boolean).join(" · ")}
-        </p>
-      </div>
-      <div className="fee-doc-copy">
-        <b>{title}</b>
-        <span>{copy}</span>
-      </div>
-    </header>
-  );
+  return <SchoolHead school={school} title={title} sub={copy} />;
 }
 
 type Challan = {
@@ -88,7 +71,7 @@ type Challan = {
   payableAfterDue: number;
   token: string;
   campus: string;
-  head: { name: string; campus: string; address: string; phone: string; logoUrl: string | null };
+  head: SchoolHeader;
   lastPayment: { date: string | null; method: string; receiptNo: string } | null;
   student: { name: string; admissionNo: string; rollNo: string; fatherName: string; phone: string; classLabel: string };
 };
@@ -138,19 +121,7 @@ function ChallanCopy({ c, school, copy, qr }: { c: Challan; school: ChallanSchoo
           {part ? <span>{cur} {money(c.paid)} received</span> : null}
         </div>
       ) : null}
-      <header className="ch-head">
-        {c.head.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={c.head.logoUrl} alt="" />
-        ) : null}
-        <div>
-          <h1>{c.head.name}</h1>
-          {c.head.campus || c.head.address || c.head.phone ? (
-            <small>{[c.head.campus, c.head.address, c.head.phone ? `Ph: ${c.head.phone}` : ""].filter(Boolean).join(" · ")}</small>
-          ) : null}
-          <b>FEE CHALLAN</b>
-        </div>
-      </header>
+      <SchoolHead school={c.head} title="FEE CHALLAN" className="doc-head ch-head" />
       <div className="ch-grid">
         <div className="ch-line split"><span>Challan No.</span><u>{c.challanNo}</u></div>
         <div className="ch-line"><span>Name:</span> <u>{c.student.name}</u></div>
@@ -212,10 +183,14 @@ function ChallanCopy({ c, school, copy, qr }: { c: Challan; school: ChallanSchoo
             <span>Scan to view this challan online</span>
           </div>
         ) : null}
-        <div className="ch-signs">
-          <span>Depositor&apos;s signature</span>
-          <span>{copy.startsWith("Parent") ? "Received by (stamp & sign)" : "Cashier / bank stamp & sign"}</span>
-        </div>
+        <DocumentSigns
+          className="ch-signs"
+          signatures={c.head.signatures}
+          signers={[
+            { label: "Depositor's signature" },
+            { label: copy.startsWith("Parent") ? "Received by (stamp & sign)" : "Cashier / bank stamp & sign", role: "receiver" },
+          ]}
+        />
       </footer>
     </article>
   );
@@ -333,10 +308,10 @@ export function FeeReceiptPrint({ id, receiptNo }: { id: string; receiptNo: stri
               <div className={`fee-stamp ${data.fee.balance <= 0 ? "paid" : "part"}`}>
                 {data.fee.balance <= 0 ? "PAID" : "PART PAYMENT"}
               </div>
-              <div className="signs">
-                <span>Received by{data.receipt.receivedBy ? `: ${data.receipt.receivedBy}` : ""}</span>
-                <span>Stamp</span>
-              </div>
+              <DocumentSigns signatures={data.school.signatures} signers={[
+                { label: `Received by${data.receipt.receivedBy ? `: ${data.receipt.receivedBy}` : ""}`, role: "receiver" },
+                { label: "Stamp" },
+              ]} />
             </article>
           ))}
         </section>
@@ -406,11 +381,11 @@ export function FeeCollectionsPrint({ query }: { query: string }) {
               <tr><td colSpan={7}><b>Total</b></td><td className="num"><b>{cur} {money(data.total)}</b></td></tr>
             </tfoot>
           </table>
-          <div className="signs">
-            <span>Prepared by (cashier)</span>
-            <span>Checked by (accounts)</span>
-            <span>Approved by (principal)</span>
-          </div>
+          <DocumentSigns signatures={data.school.signatures} signers={[
+            { label: "Prepared by (cashier)", role: "preparedBy" },
+            { label: "Checked by (accounts)", role: "accountant" },
+            { label: "Approved by (principal)", role: "principal" },
+          ]} />
         </section>
       ) : null}
     </PrintShell>

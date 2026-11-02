@@ -259,6 +259,8 @@ export const salaryTaxService = {
         address: head.address,
         phone: head.phone,
         email: head.email,
+        website: head.website,
+        signatures: head.signatures,
         taxNumber: s?.employerTaxNumber || s?.registrationNo || "",
         currency: head.currency,
         logoUrl: head.logoUrl,

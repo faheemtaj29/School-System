@@ -27,6 +27,10 @@ export const THEME_PRESETS: ThemePreset[] = [
   { key: "teal", name: "Deep Teal", primary: "#0f766e", accent: "#f59e0b", sidebar: "#10231f", surface: "#f4f7f7" },
   { key: "plum", name: "Plum Study", primary: "#6d28d9", accent: "#ec4899", sidebar: "#1d1130", surface: "#f7f5fa" },
   { key: "graphite", name: "Graphite", primary: "#334155", accent: "#0ea5e9", sidebar: "#0f172a", surface: "#f5f6f8" },
+  { key: "ocean", name: "Ocean Blue", primary: "#0369a1", accent: "#22d3ee", sidebar: "#10263a", surface: "#f3f8fb" },
+  { key: "forest", name: "Forest Green", primary: "#166534", accent: "#84cc16", sidebar: "#14251b", surface: "#f4f8f3" },
+  { key: "rose", name: "Rose", primary: "#be123c", accent: "#fb7185", sidebar: "#2d101a", surface: "#fbf5f7" },
+  { key: "amber", name: "Amber", primary: "#b45309", accent: "#fbbf24", sidebar: "#2b1d0e", surface: "#fbf8f3" },
 ];
 
 export const DEFAULT_THEME: Theme = {

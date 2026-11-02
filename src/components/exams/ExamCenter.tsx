@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { EmptyState, Field, Panel, inputClass } from "@/components/ui";
+import { EmptyState, Field, PaginationControls, Panel, inputClass, usePaginatedList } from "@/components/ui";
+import { SetupHistory } from "@/components/SetupHistory";
 
 /* ---------- shared types ---------- */
 
@@ -290,7 +291,17 @@ function ClassChecklist({
 
 /* ---------- Step 1: Date sheet ---------- */
 
-function DateSheetStep({ termId, term, onSaved }: { termId: string; term?: TermOption; onSaved: () => void }) {
+function DateSheetStep({
+  termId,
+  term,
+  historyClasses,
+  onSaved,
+}: {
+  termId: string;
+  term?: TermOption;
+  historyClasses: Pick<OverviewClass, "classId" | "classLabel">[];
+  onSaved: () => void;
+}) {
   const [classes, setClasses] = useState<ClassOption[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [opts, setOpts] = useState({
@@ -428,6 +439,20 @@ function DateSheetStep({ termId, term, onSaved }: { termId: string; term?: TermO
           </div>
         ) : null}
       </Panel>
+
+      {historyClasses.length ? (
+        <Panel title="Previous date sheets" meta={`${historyClasses.length} CLASS(ES)`}>
+          {historyClasses.map((item) => (
+            <div className="fee-row" key={item.classId}>
+              <span>{item.classLabel}</span>
+              <SetupHistory
+                url={`/api/exams/center/datesheets/history?termId=${encodeURIComponent(termId)}&classId=${encodeURIComponent(item.classId)}`}
+                label="View versions"
+              />
+            </div>
+          ))}
+        </Panel>
+      ) : null}
 
       <Panel title="② Dates & paper timing">
         <div className="form-grid ec-grid-4">
@@ -1425,7 +1450,46 @@ type ResultBatch = {
   classId: string;
   classLabel: string;
   stats: { students: number; complete: number; passed: number; failed: number; average: number; highest: number };
-  cards: { student: { name: string; rollNo: string }; percent: number; obtained: number; totalMarks: number; position: number; grade: string; result: string }[];
+  subjects: {
+    _id: string;
+    name: string;
+    code: string;
+    totalMarks: number;
+    passingMarks: number;
+    components: { key: string; label: string; maxMarks: number }[];
+  }[];
+  cards: {
+    student: {
+      _id: string;
+      name: string;
+      fatherName: string;
+      admissionNo: string;
+      rollNo: string;
+    };
+    subjects: {
+      subjectId: string;
+      name: string;
+      code: string;
+      totalMarks: number;
+      passingMarks: number;
+      components: { key: string; label: string; maxMarks: number; obtained: number | null }[];
+      obtained: number;
+      percent: number;
+      grade: string;
+      gpa: number;
+      status: string;
+    }[];
+    percent: number;
+    obtained: number;
+    totalMarks: number;
+    position: number;
+    grade: string;
+    gpa: number;
+    failedSubjects: number;
+    pendingSubjects: number;
+    result: string;
+    remarks: string;
+  }[];
 };
 
 type Correction = MarkChange & { student: string; admissionNo: string; classLabel: string; subject: string };
@@ -1515,6 +1579,95 @@ function FinalPanel({ termId, status, isAdmin, onChanged }: { termId: string; st
   );
 }
 
+function ResultBatchTable({ batch }: { batch: ResultBatch }) {
+  const pagination = usePaginatedList(batch.cards);
+
+  return (
+    <div className="table-scroll">
+      <table className="ec-table">
+        <thead>
+          <tr>
+            <th>Position</th>
+            <th>Roll no.</th>
+            <th>Admission no.</th>
+            <th>Student</th>
+            {batch.subjects.map((subject) => (
+              <th key={subject._id} title={`Pass mark: ${subject.passingMarks}`}>
+                {subject.name}<small style={{ display: "block", fontWeight: 400 }}>/{subject.totalMarks}</small>
+              </th>
+            ))}
+            <th>Total</th>
+            <th>%</th>
+            <th>Grade</th>
+            <th>GPA</th>
+            <th>Result</th>
+            <th>Paper issues</th>
+            <th>Remarks</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pagination.pageItems.map((card) => (
+            <tr key={card.student._id}>
+              <td><b>{card.position || "—"}</b></td>
+              <td className="mono">{card.student.rollNo || "—"}</td>
+              <td className="mono">{card.student.admissionNo}</td>
+              <td>
+                <b>{card.student.name}</b>
+                {card.student.fatherName ? <small style={{ display: "block", color: "var(--text-dim)" }}>{card.student.fatherName}</small> : null}
+              </td>
+              {batch.subjects.map((subject) => {
+                const result = card.subjects.find((row) => row.subjectId === subject._id);
+                const detail = result?.components
+                  .map((component) => `${component.label}: ${component.obtained ?? "—"}/${component.maxMarks}`)
+                  .join(" · ");
+                return (
+                  <td key={subject._id} className="mono" title={detail || result?.status || "No marks"}>
+                    {result ? (
+                      <details>
+                        <summary>
+                          {result.status === "pending" ? "—" : `${result.obtained}/${result.totalMarks}`}
+                          <small style={{ display: "block", color: "var(--text-dim)" }}>{result.status}</small>
+                        </summary>
+                        {result.components.length ? (
+                          <div style={{ minWidth: 140, padding: "6px 0", whiteSpace: "normal" }}>
+                            {result.components.map((component) => (
+                              <div key={component.key}>
+                                {component.label}: {component.obtained ?? "—"}/{component.maxMarks}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </details>
+                    ) : "—"}
+                  </td>
+                );
+              })}
+              <td className="mono">{card.obtained}/{card.totalMarks}</td>
+              <td className="mono">{card.percent}%</td>
+              <td>{card.grade}</td>
+              <td className="mono">{card.gpa.toFixed(2)}</td>
+              <td>{card.result}</td>
+              <td>{card.failedSubjects} failed · {card.pendingSubjects} pending</td>
+              <td>{card.remarks || "—"}</td>
+            </tr>
+          ))}
+          {!batch.cards.length ? (
+            <tr><td colSpan={12 + batch.subjects.length} style={{ color: "var(--text-dim)" }}>No students in this class.</td></tr>
+          ) : null}
+        </tbody>
+      </table>
+      <PaginationControls
+        page={pagination.page}
+        pageSize={pagination.pageSize}
+        total={batch.cards.length}
+        pageCount={pagination.pageCount}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
+      />
+    </div>
+  );
+}
+
 function ResultsStep({ termId, overview, isAdmin, reload }: { termId: string; overview: Overview | null; isAdmin: boolean; reload: () => void }) {
   const classes = overview?.classes || [];
   const [selected, setSelected] = useState<string[]>([]);
@@ -1573,7 +1726,6 @@ function ResultsStep({ termId, overview, isAdmin, reload }: { termId: string; ov
         </div>
       </Panel>
       {batches?.map((b) => {
-        const top = b.cards.filter((c) => c.position).sort((x, y) => x.position - y.position).slice(0, 5);
         return (
           <Panel key={b.classId} title={b.classLabel} meta={`${b.stats.students} STUDENTS`}>
             <div className="ec-stats">
@@ -1589,32 +1741,8 @@ function ResultsStep({ termId, overview, isAdmin, reload }: { termId: string; ov
                 {b.stats.students - b.stats.complete} student(s) still have papers without marks — their card shows them as pending.
               </div>
             ) : null}
-            {top.length ? (
-              <table className="ec-table">
-                <thead>
-                  <tr>
-                    <th>Position</th>
-                    <th>Roll No</th>
-                    <th>Student</th>
-                    <th>Marks</th>
-                    <th>%</th>
-                    <th>Grade</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {top.map((c) => (
-                    <tr key={c.student.rollNo + c.student.name}>
-                      <td><b>{c.position}</b></td>
-                      <td className="mono">{c.student.rollNo}</td>
-                      <td>{c.student.name}</td>
-                      <td className="mono">{c.obtained}/{c.totalMarks}</td>
-                      <td className="mono">{c.percent}%</td>
-                      <td><span className="ec-grade">{c.grade}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : null}
+            <h3 style={{ margin: "16px 0 8px" }}>Complete student result register</h3>
+            <ResultBatchTable batch={b} />
           </Panel>
         );
       })}
@@ -1691,7 +1819,7 @@ export function ExamCenter({ step, onStep, role }: { step: ExamStep; onStep: (s:
       </Panel>
 
       {step === "datesheet" && isAdmin ? (
-        <DateSheetStep termId={termId} term={term} onSaved={loadOverview} />
+        <DateSheetStep termId={termId} term={term} historyClasses={overview?.classes || []} onSaved={loadOverview} />
       ) : null}
       {step === "slips" ? <SlipsStep termId={termId} overview={overview} isAdmin={isAdmin} reload={loadOverview} /> : null}
       {step === "marks" ? <MarksStep termId={termId} overview={overview} reload={loadOverview} /> : null}

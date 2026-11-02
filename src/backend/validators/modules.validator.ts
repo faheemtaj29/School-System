@@ -277,12 +277,21 @@ export const stockVoucherSchema = z.object({
 
 export const leaveSchema = z.object({
   teacherId: z.string().min(1),
+  employeeModel: z.enum(["Teacher", "Staff"]).default("Teacher"),
   leaveType: z.enum(["casual", "sick", "annual", "unpaid", "other"]),
   fromDate: z.string().min(1),
   toDate: z.string().min(1),
   days: z.coerce.number().min(1),
   reason: z.string().optional(),
   status: z.enum(["pending", "approved", "rejected"]).default("pending"),
+});
+
+export const studentLeaveSchema = z.object({
+  studentId: z.string().min(1),
+  leaveType: z.enum(["casual", "sick", "annual", "unpaid", "other"]),
+  fromDate: z.string().min(1),
+  toDate: z.string().min(1),
+  reason: z.string().max(1000).optional(),
 });
 
 /** Name of the automatic deduction line for days without pay. */

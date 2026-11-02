@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { EmptyState, Panel, inputClass } from "@/components/ui";
+import { EmptyState, PaginationControls, Panel, inputClass, usePaginatedList } from "@/components/ui";
 import { formatNumber, prettyDate } from "@/lib/types";
 
 type ItemOption = { _id: string; sku: string; name: string; unit: string };
@@ -87,6 +87,7 @@ export function StockLedger({
 
   const q = search.trim().toLowerCase();
   const shown = q ? items.filter((i) => `${i.name} ${i.sku}`.toLowerCase().includes(q)) : items;
+  const rowPagination = usePaginatedList(data?.rows || []);
 
   return (
     <Panel title="Stock Ledger" meta={data ? `${data.item.sku} · ${data.item.name}` : "SELECT ITEM"}>
@@ -144,7 +145,7 @@ export function StockLedger({
                 <td colSpan={7}><strong>Opening stock</strong></td>
                 <td className="num"><strong>{data.opening} {data.item.unit}</strong></td>
               </tr>
-              {data.rows.map((r, i) => (
+              {rowPagination.pageItems.map((r, i) => (
                 <tr
                   key={`${r.voucherId}-${i}`}
                   style={onOpenVoucher ? { cursor: "pointer" } : undefined}
@@ -172,6 +173,16 @@ export function StockLedger({
               </tr>
             </tbody>
           </table>
+          {data.rows.length ? (
+            <PaginationControls
+              page={rowPagination.page}
+              pageSize={rowPagination.pageSize}
+              total={data.rows.length}
+              pageCount={rowPagination.pageCount}
+              onPageChange={rowPagination.setPage}
+              onPageSizeChange={rowPagination.setPageSize}
+            />
+          ) : null}
         </div>
       )}
     </Panel>

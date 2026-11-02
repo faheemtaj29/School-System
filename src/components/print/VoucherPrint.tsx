@@ -1,6 +1,6 @@
 "use client";
 
-import { PrintShell, fmtDate, usePrintData, QbLetterhead } from "./PrintShell";
+import { DocumentSigns, PrintShell, fmtDate, usePrintData, QbLetterhead, type SchoolHeader } from "./PrintShell";
 import { amountInWords } from "./FeePrints";
 
 type Line = {
@@ -34,7 +34,7 @@ type Data = {
     createdBy?: { name?: string } | null;
   };
   branchName: string;
-  school: { name: string; address: string; phone: string; email: string; currency: string; logoUrl: string | null };
+  school: SchoolHeader & { currency: string };
 };
 
 const TITLE: Record<string, string> = {
@@ -221,12 +221,12 @@ export function VoucherPrintPage({ id }: { id: string }) {
             </table>
           ) : null}
 
-          <div className="signs">
-            <span>Prepared by{v.createdBy?.name ? `: ${v.createdBy.name}` : ""}</span>
-            <span>Checked by</span>
-            <span>Approved by</span>
-            <span>{isRec ? "Received by" : isPay ? "Receiver's signature" : "Authorised by"}</span>
-          </div>
+          <DocumentSigns signatures={data.school.signatures} signers={[
+            { label: `Prepared by${v.createdBy?.name ? `: ${v.createdBy.name}` : ""}`, role: "preparedBy" },
+            { label: "Checked by", role: "checkedBy" },
+            { label: "Approved by", role: "approvedBy" },
+            { label: isRec ? "Received by" : isPay ? "Receiver's signature" : "Authorised by", role: isRec ? "receiver" : isPay ? undefined : "approvedBy" },
+          ]} />
         </section>
       ) : null}
     </PrintShell>

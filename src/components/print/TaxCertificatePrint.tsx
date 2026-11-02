@@ -1,6 +1,6 @@
 "use client";
 
-import { PrintShell, QbLetterhead, fmtDate, usePrintData } from "./PrintShell";
+import { DocumentSigns, PrintShell, QbLetterhead, fmtDate, usePrintData, type SchoolHeader } from "./PrintShell";
 import { amountInWords } from "./FeePrints";
 
 type Row = { month: string; basic: number; allowances: number; gross: number; exempt: number; taxable: number; tax: number; status: string };
@@ -11,7 +11,7 @@ type Data = {
   period: { from: string; to: string };
   rules: { slabs: { from: number; rate: number }[]; standardDeduction: number; rebateUpTo: number; cessPercent: number; medicalExemptPercent: number };
   teacher: { name: string; employeeId: string; cnic: string; taxNumber: string; designation: string; address: string };
-  employer: { name: string; campus?: string; address: string; phone: string; email: string; taxNumber: string; currency: string; logoUrl: string | null };
+  employer: SchoolHeader & { taxNumber: string; currency: string };
   rows: Row[];
   totals: Totals;
   taxOnYear: number;
@@ -128,12 +128,12 @@ export function TaxCertificatePrintPage({ query }: { query: string }) {
             </div>
           </div>
 
-          <div className="signs">
-            <span>Prepared by</span>
-            <span>Accountant</span>
-            <span>Principal / Head</span>
-            <span>Employee&apos;s signature</span>
-          </div>
+          <DocumentSigns signatures={data.employer.signatures} signers={[
+            { label: "Prepared by", role: "preparedBy" },
+            { label: "Accountant", role: "accountant" },
+            { label: "Principal / Head", role: "principal" },
+            { label: "Employee's signature" },
+          ]} />
         </section>
       ) : null}
     </PrintShell>

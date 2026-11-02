@@ -17,6 +17,7 @@ import { ExamMark, ExamSchedule } from "@/backend/models/ExamWorkflow";
 import { Fee } from "@/backend/models/Fee";
 import { LeaveRequest, Payslip } from "@/backend/models/HR";
 import { StudentNote } from "@/backend/models/StudentNote";
+import { StudentLeaveRequest } from "@/backend/models/StudentLeave";
 import { LedgerEntry, type LedgerSource } from "@/backend/models/Ledger";
 import { MessageLog } from "@/backend/models/Messaging";
 import { Student } from "@/backend/models/Student";
@@ -39,13 +40,14 @@ export const cascadeService = {
     await dbConnect();
     const student = await Student.findById(id).select("firstName lastName").lean();
     if (!student) throw new ServiceError("NOT_FOUND", "Student not found", 404);
-    const [fees, paid, attendance, marks] = await Promise.all([
+    const [fees, paid, attendance, marks, leaves] = await Promise.all([
       Fee.countDocuments({ studentId: id }),
       Fee.countDocuments({ studentId: id, paidAmount: { $gt: 0 } }),
       Attendance.countDocuments({ "records.studentId": oid(id) }),
       ExamMark.countDocuments({ studentId: id }),
+      StudentLeaveRequest.countDocuments({ studentId: id }),
     ]);
-    return { name: `${student.firstName} ${student.lastName}`, fees, paidFees: paid, attendanceDays: attendance, examMarks: marks };
+    return { name: `${student.firstName} ${student.lastName}`, fees, paidFees: paid, attendanceDays: attendance, examMarks: marks, leaveRequests: leaves };
   },
 
   async removeStudent(id: string) {
@@ -55,10 +57,11 @@ export const cascadeService = {
     const sid = oid(id);
     const feeIds = (await Fee.find({ studentId: id }).select("_id").lean()).map((f) => String(f._id));
     const vouchers = await purgePostings("fee", feeIds);
-    const [fees, attendance, marks] = await Promise.all([
+    const [fees, attendance, marks, leaves] = await Promise.all([
       Fee.deleteMany({ studentId: id }),
       Attendance.updateMany({ "records.studentId": sid }, { $pull: { records: { studentId: sid } } }),
       ExamMark.deleteMany({ studentId: id }),
+      StudentLeaveRequest.deleteMany({ studentId: id }),
       Exam.updateMany({ "results.studentId": sid }, { $pull: { results: { studentId: sid } } }),
       Enrollment.deleteMany({ studentId: id }),
       StudentNote.deleteMany({ studentId: id }),
@@ -79,7 +82,7 @@ export const cascadeService = {
     await Student.deleteOne({ _id: student._id });
     return {
       ok: true,
-      removed: { fees: fees.deletedCount || 0, vouchers, attendanceSheets: attendance.modifiedCount || 0, examMarks: marks.deletedCount || 0, logins: logins.length },
+      removed: { fees: fees.deletedCount || 0, vouchers, attendanceSheets: attendance.modifiedCount || 0, examMarks: marks.deletedCount || 0, leaveRequests: leaves.deletedCount || 0, logins: logins.length },
     };
   },
 
@@ -89,7 +92,7 @@ export const cascadeService = {
     if (!teacher) throw new ServiceError("NOT_FOUND", "Teacher not found", 404);
     const [payslips, leaves, periods, classes] = await Promise.all([
       Payslip.countDocuments({ teacherId: id }),
-      LeaveRequest.countDocuments({ teacherId: id }),
+      LeaveRequest.countDocuments({ teacherId: id, $or: [{ employeeModel: "Teacher" }, { employeeModel: { $exists: false } }] }),
       TimetableSlot.countDocuments({ teacherId: id }),
       ClassModel.countDocuments({ classTeacher: id }),
     ]);
@@ -105,7 +108,7 @@ export const cascadeService = {
     const vouchers = await purgePostings("payslip", slipIds);
     const [payslips, leaves, periods] = await Promise.all([
       Payslip.deleteMany({ teacherId: id }),
-      LeaveRequest.deleteMany({ teacherId: id }),
+      LeaveRequest.deleteMany({ teacherId: id, $or: [{ employeeModel: "Teacher" }, { employeeModel: { $exists: false } }] }),
       TimetableSlot.deleteMany({ teacherId: id }),
       ClassModel.updateMany({ classTeacher: tid }, { $unset: { classTeacher: "" } }),
       Exam.updateMany({ teacherId: tid }, { $unset: { teacherId: "" } }),

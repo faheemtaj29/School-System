@@ -20,6 +20,7 @@ import {
 import { Settings } from "@/backend/models/Settings";
 import { Student } from "@/backend/models/Student";
 import { gpaPoints, gradeOf, remarkOf } from "@/backend/lib/grading";
+import { setupRevision } from "@/backend/lib/setupHistory";
 import { ServiceError, type SessionUser } from "@/backend/types";
 import { resolveTeacher } from "@/backend/lib/portal";
 import { validateRows } from "@/backend/services/examWorkflow.service";
@@ -218,7 +219,16 @@ function sortClasses<T extends { name: string; section?: string; level?: number 
 
 /** The parts of a campus letterhead the exam prints use. */
 function pickHead(h: Letterhead) {
-  return { name: h.name, campus: h.campus, address: h.address, phone: h.phone, logoUrl: h.logoUrl };
+  return {
+    name: h.name,
+    campus: h.campus,
+    address: h.address,
+    phone: h.phone,
+    email: h.email,
+    website: h.website,
+    logoUrl: h.logoUrl,
+    signatures: h.signatures,
+  };
 }
 
 export const examCenterService = {
@@ -311,7 +321,7 @@ export const examCenterService = {
   },
 
   /** Save planned (or edited) date sheets — one per class, replacing any earlier one. */
-  async saveDateSheets(data: DateSheetSaveInput, userId?: string) {
+  async saveDateSheets(data: DateSheetSaveInput, actor?: { id?: string; name?: string }) {
     await dbConnect();
     const term = await loadTerm(data.termId);
     const saved: string[] = [];
@@ -338,7 +348,7 @@ export const examCenterService = {
         status: data.status,
         publishedAt: data.status === "published" ? new Date() : undefined,
         institutionCode: term.institutionCode || "MAIN",
-        updatedBy: userId || undefined,
+        updatedBy: actor?.id || undefined,
         rows: rows.map((r) => ({
           ...r,
           examDate: r.examDate ? new Date(r.examDate) : undefined,
@@ -346,14 +356,41 @@ export const examCenterService = {
           status: data.status,
         })),
       };
+      const classRecord = await ClassModel.findById(sheet.classId).select("name section").lean();
+      const label = classRecord ? classLabel(classRecord as ClassLean) : "class";
       await ExamSchedule.findOneAndUpdate(
         { termId: term._id, classId: sheet.classId },
-        { $set: payload, $setOnInsert: { createdBy: userId || undefined } },
+        {
+          $set: payload,
+          $setOnInsert: { createdBy: actor?.id || undefined },
+          $push: {
+            setupHistory: setupRevision(
+              `${data.status === "published" ? "Published" : "Saved"} date sheet for ${label} · ${rows.length} papers`,
+              {
+                academicYear: term.academicYear,
+                termId: String(term._id),
+                classId: sheet.classId,
+                status: data.status,
+                rows: payload.rows,
+              },
+              actor?.name
+            ),
+          },
+        },
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
       saved.push(sheet.classId);
     }
     return { saved: saved.length };
+  },
+
+  async dateSheetHistory(termId: string, classId: string) {
+    await dbConnect();
+    const schedule = await ExamSchedule.findOne({ termId, classId })
+      .select("+setupHistory")
+      .lean();
+    if (!schedule) throw new ServiceError("NOT_FOUND", "No date sheet exists for this class and term", 404);
+    return schedule.setupHistory || [];
   },
 
   /** Classes that have a date sheet for this term, with paper and marks progress. */

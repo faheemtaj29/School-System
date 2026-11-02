@@ -1,6 +1,6 @@
 "use client";
 
-import { PrintShell, QbLetterhead, chunk, fmtDate, usePrintData, useQr, type SchoolHeader } from "./PrintShell";
+import { DocumentSigns, PrintShell, QbLetterhead, chunk, fmtDate, usePrintData, useQr, type SchoolHeader } from "./PrintShell";
 
 type Head = SchoolHeader & { email?: string; currency?: string; registrationNo?: string };
 
@@ -416,21 +416,70 @@ export function CertificatePrint({ studentId, type }: { studentId: string; type:
               ) : null}
             </div>
             <CertBody d={d} />
-            <div className="cert-signs">
-              {d.type === "admission" ? (
-                <span>Parent / guardian</span>
-              ) : (
-                <span>
-                  {d.student.classTeacher || "Class teacher"}
-                  {d.student.classTeacher ? <small>Class teacher</small> : null}
-                </span>
-              )}
-              {d.type === "clearance" ? <span>Accounts office</span> : null}
-              <span>
-                {d.principalName || "Principal"}
-                <small>{d.principalName ? "Principal · stamp" : "Signature & stamp"}</small>
-              </span>
+            <DocumentSigns
+              className="cert-signs"
+              signatures={d.head.signatures}
+              signers={[
+                d.type === "admission"
+                  ? { label: "Parent / guardian" }
+                  : { label: d.student.classTeacher || "Class teacher", role: "classTeacher" },
+                ...(d.type === "clearance" ? [{ label: "Accounts office", role: "accountant" as const }] : []),
+                { label: d.principalName || "Principal", role: "principal" },
+              ]}
+            />
+          </div>
+        </section>
+      ) : null}
+    </PrintShell>
+  );
+}
+
+type DiplomaData = {
+  diplomaNo: string;
+  title: string;
+  issueDate: string;
+  grade: string;
+  student: { name: string; admissionNo: string; parentName: string };
+  course: { code: string; title: string; level: string; mode: string; durationWeeks: number };
+  head: Head;
+};
+
+type DiplomaResponse = { diploma: DiplomaData };
+
+/** Official print-ready certificate for an issued distance-learning diploma. */
+export function DiplomaPrint({ id }: { id: string }) {
+  const { data: response, error } = usePrintData<DiplomaResponse>(id ? `/api/elearning/${encodeURIComponent(id)}?kind=diploma` : null);
+  const data = response?.diploma;
+  return (
+    <PrintShell title={data ? data.title : "Diploma Certificate"} error={error || (!id ? "Choose a diploma first" : "")} loading={!response && !error}>
+      {data ? (
+        <section className="doc-page diploma-page">
+          <div className="diploma-frame">
+            <QbLetterhead school={data.head} />
+            <div className="diploma-kicker">Certificate of Achievement</div>
+            <h1>{data.title}</h1>
+            <p className="diploma-intro">This certificate is proudly presented to</p>
+            <h2>{data.student.name}</h2>
+            <p className="diploma-copy">
+              for successfully completing the <b>{data.course.title}</b> program.
+              We recognize the commitment and achievement demonstrated throughout this course.
+            </p>
+            <div className="diploma-details">
+              <div><span>Certificate no.</span><b>{data.diplomaNo}</b></div>
+              <div><span>Program code</span><b>{data.course.code}</b></div>
+              <div><span>Program level</span><b>{data.course.level}</b></div>
+              <div><span>Duration</span><b>{data.course.durationWeeks} weeks</b></div>
+              <div><span>Grade</span><b>{data.grade || "Completed"}</b></div>
+              <div><span>Date awarded</span><b>{fmtDate(data.issueDate)}</b></div>
             </div>
+            <DocumentSigns
+              className="diploma-signatures"
+              signatures={data.head.signatures}
+              signers={[
+                { label: "Authorized signature", role: "approvedBy" },
+                { label: "Principal / Director", role: "principal" },
+              ]}
+            />
           </div>
         </section>
       ) : null}

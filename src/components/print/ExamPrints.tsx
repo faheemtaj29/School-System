@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
-import { PrintShell, SchoolHead, chunk, fmtDate, fmtTime, usePrintData, type SchoolHeader } from "./PrintShell";
+import { DocumentSigns, PrintShell, SchoolHead, chunk, fmtDate, fmtTime, usePrintData, type SchoolHeader } from "./PrintShell";
 
 type Paper = {
   subject: string;
@@ -109,11 +109,14 @@ export function RollSlipsPrint({ termId, classIds, perPage }: { termId: string; 
                   <PaperTable papers={s.batch.papers} />
                   <footer className="slip-foot">
                     <p>Bring this slip to every paper. Reach the hall 15 minutes before start time. Mobile phones are not allowed.</p>
-                    <div className="signs">
-                      <span>Class Teacher</span>
-                      <span>Controller of Exams</span>
-                      <span>Principal</span>
-                    </div>
+                    <DocumentSigns
+                      signatures={s.batch.head?.signatures || data.school.signatures}
+                      signers={[
+                        { label: "Class Teacher", role: "classTeacher" },
+                        { label: "Controller of Exams", role: "examController" },
+                        { label: "Principal", role: "principal" },
+                      ]}
+                    />
                   </footer>
                 </article>
               ))}
@@ -179,10 +182,13 @@ export function DateSheetPrint({ termId, classIds, src }: { termId: string; clas
                 <li>A student absent from a paper is marked absent for that subject.</li>
               </ul>
             </div>
-            <div className="signs">
-              <span>Controller of Exams</span>
-              <span>Principal</span>
-            </div>
+            <DocumentSigns
+              signatures={(b.head || data.school).signatures}
+              signers={[
+                { label: "Controller of Exams", role: "examController" },
+                { label: "Principal", role: "principal" },
+              ]}
+            />
           </section>
         );
       })}
@@ -377,11 +383,14 @@ export function ResultCardsPrint({ termId, classIds, studentId, src }: { termId:
                   <p>{card.remarks}</p>
                 </div>
                 <div className="rc-scale">Grading: A+ 80%+ · A 70–79 · B 60–69 · C 50–59 · D 40–49 · F below 40</div>
-                <div className="signs">
-                  <span>Class Teacher</span>
-                  <span>Principal</span>
-                  <span>Parent / Guardian</span>
-                </div>
+                <DocumentSigns
+                  signatures={(b.head || data.school).signatures}
+                  signers={[
+                    { label: "Class Teacher", role: "classTeacher" },
+                    { label: "Principal", role: "principal" },
+                    { label: "Parent / Guardian" },
+                  ]}
+                />
               </section>
             ))}
           </Fragment>
@@ -442,11 +451,14 @@ export function ResultSheetPrint({ termId, classIds }: { termId: string; classId
             <div><span>Pass %</span><b>{b.stats.complete ? Math.round((b.stats.passed / b.stats.complete) * 100) : 0}%</b></div>
             <div><span>Average</span><b>{b.stats.average}%</b></div>
           </div>
-          <div className="signs">
-            <span>Class Teacher</span>
-            <span>Controller of Exams</span>
-            <span>Principal</span>
-          </div>
+          <DocumentSigns
+            signatures={(b.head || data.school).signatures}
+            signers={[
+              { label: "Class Teacher", role: "classTeacher" },
+              { label: "Controller of Exams", role: "examController" },
+              { label: "Principal", role: "principal" },
+            ]}
+          />
         </section>
       ))}
     </PrintShell>

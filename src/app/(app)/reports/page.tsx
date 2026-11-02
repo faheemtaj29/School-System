@@ -4,9 +4,11 @@ import { Defaulters } from "@/components/fees/Defaulters";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState, Hero, Panel, StatusBadge, NameCell, inputClass } from "@/components/ui";
 import { PrintIcon } from "@/components/Icons";
-import { formatNumber, fullName, labelOfClass, prettyDate } from "@/lib/types";
+import { DocumentSigns, SchoolHead } from "@/components/print/PrintShell";
+import type { DocumentSignatureUrls } from "@/lib/documentSignatures";
+import { formatNumber, fullName, labelOfClass, photoSrc, prettyDate } from "@/lib/types";
 
-type SchoolProfile = { schoolName: string; logoUrl?: string; motto?: string; principalName?: string; address?: string; phone?: string; boardName?: string };
+type SchoolProfile = { schoolName: string; campus?: string; logoUrl?: string; motto?: string; principalName?: string; address?: string; phone?: string; email?: string; website?: string; boardName?: string; signatures?: DocumentSignatureUrls };
 
 const REPORTS = [
   { id: "overview", label: "Overview" },
@@ -29,6 +31,8 @@ type ResultCard = {
     admissionNo: string;
     rollNumber: string;
     parentName: string;
+    dateOfBirth?: string;
+    photoUpdatedAt?: string;
   };
   subjects: {
     name: string;
@@ -76,7 +80,24 @@ export default function ReportsPage() {
     fetch("/api/settings")
       .then((r) => r.json())
       .then((d) => {
-        if (d.settings) setSchool({ schoolName: d.settings.schoolName, logoUrl: d.settings.logoUrl, motto: d.settings.motto, principalName: d.settings.principalName, address: d.settings.address, phone: d.settings.phone, boardName: d.settings.boardName });
+        if (d.settings) {
+          const branches = Array.isArray(d.settings.branches) ? d.settings.branches : [];
+          const branch = branches.find((item: { code?: string }) => item.code === d.settings.defaultBranchCode)
+            || (branches.length === 1 ? branches[0] : undefined);
+          setSchool({
+            schoolName: d.settings.schoolName,
+            campus: branch?.name,
+            logoUrl: d.settings.logoUrl,
+            motto: d.settings.motto,
+            principalName: d.settings.principalName,
+            address: branch?.address || d.settings.address,
+            phone: branch?.phone || d.settings.phone,
+            email: branch?.email || d.settings.email,
+            website: d.settings.website,
+            boardName: d.settings.boardName,
+            signatures: d.settings.signatures,
+          });
+        }
       })
       .catch(() => undefined);
   }, []);
@@ -286,10 +307,21 @@ export default function ReportsPage() {
         </>
       ) : null}
 
-      <div className="print-only" style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 20 }}>{school.schoolName} — {REPORTS.find((r) => r.id === type)?.label}</h2>
+      <div className={`print-only${type === "result-cards" ? " no-print" : ""}`} style={{ marginBottom: 16 }}>
+        <SchoolHead
+          school={{
+            name: school.schoolName,
+            campus: school.campus,
+            logoUrl: school.logoUrl,
+            address: school.address,
+            phone: school.phone,
+            email: school.email,
+            website: school.website,
+          }}
+          title={REPORTS.find((r) => r.id === type)?.label || "REPORT"}
+          sub={generatedAt || undefined}
+        />
         <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
-          Generated {generatedAt || "—"}
           {results
             ? ` · ${(results.cards || []).length} cards · ${results.examType || "All exams"} · ${results.class?.name || "All classes"}${
                 results.class?.section ? `-${results.class.section}` : ""
@@ -305,7 +337,7 @@ export default function ReportsPage() {
           !results?.cards?.length ? (
             <EmptyState message="No active students (or no graded exams) for this selection. Enter marks under Exams & Results first." />
           ) : (
-            <div className="result-cards">
+            <div className="result-cards reports-result-cards print-pages">
               {results.cards.map((card) => (
                 <ResultCardView key={`${card.student._id}-${card.classLabel || ""}`} card={card} meta={results} school={school} />
               ))}
@@ -378,6 +410,21 @@ function ResultCardView({
   const examLabel = meta.examType && meta.examType !== "all"
     ? meta.examType.charAt(0).toUpperCase() + meta.examType.slice(1)
     : "Annual";
+  const classCards = meta.cards.filter(
+    (candidate) => (candidate.classLabel || classLine) === classLine
+  );
+  const completedCards = classCards.filter(
+    (item) => item.subjects.length > 0 && item.subjects.every((subject) => subject.obtained != null)
+  );
+  const classAverage = completedCards.length
+    ? Math.round((completedCards.reduce((sum, item) => sum + item.percentage, 0) / completedCards.length) * 10) / 10
+    : 0;
+  const classHighest = completedCards.length
+    ? Math.max(...completedCards.map((item) => item.percentage))
+    : 0;
+  const positionLabel = card.position
+    ? `${ordinal(card.position)} of ${classCards.length}`
+    : "—";
 
   const shareText =
     `${school.schoolName}\n` +
@@ -389,9 +436,16 @@ function ResultCardView({
 
   const waLink = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
   const mailLink = `mailto:?subject=${encodeURIComponent(`Result Card – ${card.student.name}`)}&body=${encodeURIComponent(shareText)}`;
+  const photoUrl = photoSrc("student", card.student);
+  const initials = card.student.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase())
+    .join("");
 
   return (
-    <article className="result-card doc-sheet" id={`rca-${card.student._id}`}>
+    <article className="result-card doc-page result-card-doc reports-result-card rc2" id={`rca-${card.student._id}`}>
       {/* Per-card share toolbar — hidden on print */}
       <div className="result-card-actions no-print">
         <button type="button" className="link-btn" onClick={() => {
@@ -407,103 +461,141 @@ function ResultCardView({
         <a href={mailLink} className="link-btn">Email</a>
       </div>
 
-      <div id={`rc-${card.student._id}`}>
-        <header className="result-card-head doc-sheet-head">
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {school.logoUrl ? (
-              <img src={school.logoUrl} alt="Logo" style={{ height: 56, width: 56, objectFit: "contain" }} />
-            ) : null}
-            <div>
-              <h3 style={{ margin: 0 }}>{school.schoolName}</h3>
-              {school.motto ? <div style={{ fontSize: 11, color: "var(--text-dim)" }}>{school.motto}</div> : null}
-              <p style={{ margin: "2px 0 0", fontSize: 12 }}>
-                Result Card · {classLine} · {year}
-                {meta.examType && meta.examType !== "all" ? ` · ${examLabel}` : ""}
-              </p>
-            </div>
-          </div>
-          <div className="result-card-grade">
-            <span>Grade</span>
-            <strong>{card.grade}</strong>
-          </div>
-        </header>
+      <SchoolHead
+        school={{
+          name: school.schoolName,
+          logoUrl: school.logoUrl,
+          address: school.address,
+          phone: school.phone,
+          email: school.email,
+          website: school.website,
+        }}
+        title="RESULT CARD"
+        sub={`${examLabel} · ${year}`}
+      />
+      <div className="rc2-band">
+        <b>Progress Report</b>
+        <span>{[examLabel, year].filter(Boolean).join(" · ")}</span>
+      </div>
 
-        <div className="result-card-meta">
-          <div>
-            <span>Student Name</span>
-            <strong>{card.student.name}</strong>
-          </div>
-          <div>
-            <span>Roll No.</span>
-            <strong>{card.student.rollNumber || "—"}</strong>
-          </div>
-          <div>
-            <span>Admission No.</span>
-            <strong>{card.student.admissionNo}</strong>
-          </div>
-          <div>
-            <span>Father / Guardian</span>
-            <strong>{card.student.parentName || "—"}</strong>
-          </div>
+      <div className="rc2-profile">
+        <div className="stu-photo">
+          {photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={photoUrl} alt={card.student.name} />
+          ) : (
+            <span>{initials || "?"}</span>
+          )}
         </div>
+        <div className="rc2-who">
+          <h2>{card.student.name}</h2>
+          <dl>
+            <div><dt>Father / Guardian</dt><dd>{card.student.parentName || "—"}</dd></div>
+            <div><dt>Class</dt><dd>{classLine}</dd></div>
+            <div><dt>Roll No.</dt><dd>{card.student.rollNumber || "—"}</dd></div>
+            <div><dt>Admission No.</dt><dd>{card.student.admissionNo}</dd></div>
+            <div><dt>Session</dt><dd>{year || "—"}</dd></div>
+            <div><dt>Date of Birth</dt><dd>{card.student.dateOfBirth ? prettyDate(card.student.dateOfBirth) : "—"}</dd></div>
+          </dl>
+        </div>
+        <div className={`rc2-badge ${card.result === "PASS" ? "pass" : card.result === "FAIL" ? "fail" : ""}`}>
+          <span>Result</span>
+          <b>{card.result}</b>
+          {card.position ? <small>{positionLabel}</small> : null}
+        </div>
+      </div>
 
-        {!card.subjects.length ? (
-          <EmptyState message="No graded exam subjects found for this student." />
-        ) : (
-          <table className="reg">
+      {card.subjects.length ? (
+        <div className="rc2-table-wrap">
+          <table className="rc2-table">
             <thead>
               <tr>
                 <th>Subject</th>
-                <th className="right">Max</th>
-                <th className="right">Obtained</th>
-                <th className="right">%</th>
-                <th className="right">Grade</th>
+                <th className="num">Max</th>
+                <th className="num">Obtained</th>
+                <th className="rc2-bar-h">Score</th>
+                <th className="num">Grade</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              {card.subjects.map((subject) => (
-                <tr key={subject.code + subject.name}>
-                  <td>
-                    {subject.name}
-                    <div style={{ fontSize: 10.5, color: "var(--text-dim)" }}>{subject.code}</div>
-                  </td>
-                  <td className="num">{subject.maxMarks}</td>
-                  <td className="num">{subject.obtained ?? "—"}</td>
-                  <td className="num">
-                    {subject.obtained == null ? "—" : `${subject.percent}%`}
-                  </td>
-                  <td className="num">{subject.grade}</td>
-                </tr>
-              ))}
-              <tr className="total-row">
-                <td><strong>TOTAL</strong></td>
-                <td className="num"><strong>{card.totalMax}</strong></td>
-                <td className="num"><strong>{card.totalObtained}</strong></td>
-                <td className="num"><strong>{card.percentage}%</strong></td>
-                <td className="num"><strong>{card.grade}</strong></td>
-              </tr>
+              {card.subjects.map((subject) => {
+                const status = subject.obtained == null
+                  ? "pending"
+                  : subject.percent < 40
+                    ? "fail"
+                    : "pass";
+                return (
+                  <tr key={subject.code + subject.name} className={status === "fail" ? "rc-fail" : ""}>
+                    <td><b>{subject.name}</b></td>
+                    <td className="num">{subject.maxMarks}</td>
+                    <td className="num"><b>{subject.obtained ?? "—"}</b></td>
+                    <td className="rc2-bar">
+                      {status === "pending" ? "—" : (
+                        <>
+                          <i style={{ width: `${Math.max(0, Math.min(100, subject.percent))}%` }} />
+                          <span>{subject.percent}%</span>
+                        </>
+                      )}
+                    </td>
+                    <td className="num"><b>{subject.grade}</b></td>
+                    <td><span className={`rc2-st ${status}`}>{status === "pending" ? "Pending" : status === "fail" ? "Fail" : "Pass"}</span></td>
+                  </tr>
+                );
+              })}
             </tbody>
+            <tfoot>
+              <tr>
+                <td><b>Grand Total</b></td>
+                <td className="num"><b>{card.totalMax}</b></td>
+                <td className="num"><b>{card.totalObtained}</b></td>
+                <td className="rc2-bar">
+                  <i style={{ width: `${Math.max(0, Math.min(100, card.percentage))}%` }} />
+                  <span>{card.percentage}%</span>
+                </td>
+                <td className="num"><b>{card.grade}</b></td>
+                <td />
+              </tr>
+            </tfoot>
           </table>
-        )}
-
-        <div className="result-card-foot">
-          <span>Position: <strong>{card.position || "—"}</strong></span>
-          <span>GPA: <strong>{card.gpa != null ? card.gpa.toFixed(2) : "—"}</strong></span>
-          <span>Result: <strong>{card.result}</strong></span>
-          <span style={{ borderTop: "1px solid var(--line)", paddingTop: 8, marginTop: 8 }}>Class Teacher</span>
-          <span style={{ borderTop: "1px solid var(--line)", paddingTop: 8, marginTop: 8 }}>
-            {school.principalName || "Principal"}
-          </span>
         </div>
+      ) : (
+        <div className="rc2-remarks">
+          <b>Result status</b>
+          <p>No graded exam subjects found for this student.</p>
+        </div>
+      )}
 
-        {school.address || school.phone ? (
-          <div style={{ fontSize: 10, color: "var(--text-dim)", textAlign: "center", marginTop: 6, borderTop: "1px dashed var(--line)", paddingTop: 6 }}>
-            {[school.address, school.phone].filter(Boolean).join(" · ")}
-          </div>
-        ) : null}
+      <div className="rc2-tiles">
+        <div><span>Marks</span><b>{card.totalObtained} / {card.totalMax}</b></div>
+        <div><span>Percentage</span><b>{card.percentage}%</b></div>
+        <div><span>Grade</span><b>{card.grade}</b></div>
+        {card.gpa != null ? <div><span>GPA</span><b>{card.gpa.toFixed(2)}</b></div> : null}
+        <div><span>Position</span><b>{positionLabel}</b></div>
+        <div><span>Class average</span><b>{classAverage}%</b></div>
+        <div><span>Highest in class</span><b>{classHighest}%</b></div>
       </div>
+      <div className="rc2-remarks">
+        <b>Teacher&apos;s remarks</b>
+        <p>No teacher remarks recorded.</p>
+      </div>
+      <div className="rc-scale">Grading: A+ 80%+ · A 70–79 · B 60–69 · C 50–59 · D 40–49 · F below 40</div>
+      <DocumentSigns
+        signatures={school.signatures}
+        signers={[
+          { label: "Class Teacher", role: "classTeacher" },
+          { label: school.principalName || "Principal", role: "principal" },
+          { label: "Parent / Guardian" },
+        ]}
+      />
     </article>
   );
+}
+
+function ordinal(value: number) {
+  const suffixes = ["th", "st", "nd", "rd"];
+  const lastTwo = value % 100;
+  return `${value}${suffixes[(lastTwo - 20) % 10] || suffixes[lastTwo] || suffixes[0]}`;
 }
 
 function ClassRows({ rows }: { rows: Record<string, unknown>[] }) {

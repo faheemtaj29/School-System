@@ -3,10 +3,14 @@ import { ServiceError } from "@/backend/types";
 import { normalizeCurrency } from "@/lib/currency";
 import { Settings } from "@/backend/models/Settings";
 import { DEFAULT_THEME } from "@/lib/theme";
+import { DOCUMENT_SIGNATURES, type DocumentSignatureRole } from "@/lib/documentSignatures";
 import type { z } from "zod";
 import type { settingsSchema } from "@/backend/validators/modules.validator";
 
 type SettingsInput = z.infer<typeof settingsSchema>;
+const signatureUpdatedAtSelection = DOCUMENT_SIGNATURES
+  .map(({ role }) => `+documentSignatures.${role}.updatedAt`)
+  .join(" ");
 
 const defaults = {
   schoolName: "My School",
@@ -54,12 +58,25 @@ function logoUrl(doc: { logoUpdatedAt?: Date | string | null }) {
     : null;
 }
 
+function signatureUrls(
+  stored?: Partial<Record<DocumentSignatureRole, { updatedAt?: Date | string }>>
+) {
+  return Object.fromEntries(
+    DOCUMENT_SIGNATURES.flatMap(({ role }) => {
+      const signature = stored?.[role];
+      return signature?.updatedAt
+        ? [[role, `/api/settings/signature?role=${role}&v=${new Date(signature.updatedAt).getTime()}`]]
+        : [];
+    })
+  ) as Partial<Record<DocumentSignatureRole, string>>;
+}
+
 type OptionKey = keyof typeof defaults.optionLists;
 
 export const settingsService = {
   async get() {
     await dbConnect();
-    let doc = await Settings.findOne().lean();
+    let doc = await Settings.findOne().select(signatureUpdatedAtSelection).lean();
     if (!doc) {
       const created = await Settings.create(defaults);
       doc = created.toObject();
@@ -94,7 +111,16 @@ export const settingsService = {
       },
       theme: { ...DEFAULT_THEME, ...(doc.theme || {}) },
     };
-    return { ...doc, logoUrl: logoUrl(doc) };
+    const storedSignatures = doc.documentSignatures as
+      | Partial<Record<DocumentSignatureRole, { updatedAt?: Date | string }>>
+      | undefined;
+    const publicDoc = { ...doc };
+    delete publicDoc.documentSignatures;
+    return {
+      ...publicDoc,
+      logoUrl: logoUrl(doc),
+      signatures: signatureUrls(storedSignatures),
+    };
   },
 
   async update(data: SettingsInput) {
@@ -186,6 +212,26 @@ export const settingsService = {
       setDefaultsOnInsert: true,
     }).lean();
     return logoUrl(doc || {});
+  },
+
+  async documentSignatureUrls() {
+    await dbConnect();
+    const doc = await Settings.findOne().select(signatureUpdatedAtSelection).lean();
+    return signatureUrls(doc?.documentSignatures);
+  },
+
+  async getDocumentSignature(role: DocumentSignatureRole) {
+    await dbConnect();
+    const doc = await Settings.findOne().select("+documentSignatures").lean();
+    return doc?.documentSignatures?.[role] || null;
+  },
+
+  async setDocumentSignature(role: DocumentSignatureRole, dataUrl: string | null) {
+    await dbConnect();
+    const update = dataUrl
+      ? { $set: { [`documentSignatures.${role}`]: { dataUrl, updatedAt: new Date() } } }
+      : { $unset: { [`documentSignatures.${role}`]: 1 } };
+    await Settings.updateOne({}, update);
   },
 
   async addOption(key: OptionKey, value: string) {

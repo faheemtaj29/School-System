@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { DocumentSignatureUrls } from "@/lib/documentSignatures";
 
 export type SchoolProfile = {
   name: string;
   currency: string;
   address?: string;
   phone?: string;
+  email?: string;
+  website?: string;
   logoUrl?: string | null;
+  signatures?: DocumentSignatureUrls;
 };
 
 const FALLBACK: SchoolProfile = { name: "", currency: "PKR" };
@@ -18,14 +22,19 @@ let pending: Promise<SchoolProfile> | null = null;
 function loadProfile() {
   pending ??= fetch("/api/settings")
     .then((r) => (r.ok ? r.json() : {}))
-    .then((d: { settings?: Record<string, string | null | undefined> }): SchoolProfile => {
+    .then((d: { settings?: Record<string, unknown> }): SchoolProfile => {
       const s = d.settings || {};
       return {
-        name: s.schoolName || "",
-        currency: s.currency || "PKR",
-        address: s.address ?? undefined,
-        phone: s.phone ?? undefined,
-        logoUrl: s.logoUrl,
+        name: typeof s.schoolName === "string" ? s.schoolName : "",
+        currency: typeof s.currency === "string" ? s.currency : "PKR",
+        address: typeof s.address === "string" ? s.address : undefined,
+        phone: typeof s.phone === "string" ? s.phone : undefined,
+        email: typeof s.email === "string" ? s.email : undefined,
+        website: typeof s.website === "string" ? s.website : undefined,
+        logoUrl: typeof s.logoUrl === "string" ? s.logoUrl : null,
+        signatures: s.signatures && typeof s.signatures === "object"
+          ? s.signatures as DocumentSignatureUrls
+          : {},
       };
     })
     .catch(() => {
@@ -35,7 +44,7 @@ function loadProfile() {
   return pending;
 }
 
-/** School name, currency symbol and logo from Settings → School Profile. */
+/** School branding, contact details, currency and signature URLs from Settings. */
 export function useSchoolProfile() {
   const [profile, setProfile] = useState<SchoolProfile>(FALLBACK);
   useEffect(() => {

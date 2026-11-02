@@ -67,7 +67,12 @@ export const examController = {
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
       if (!(await validateExamAccess(session!, parsed.data))) return jsonError("You are not authorized for this class and subject", 403);
       const teacher = session!.role === "teacher" ? await resolveTeacher(session!) : null;
-      return jsonOk({ exam: await examService.create({ ...parsed.data, teacherId: teacher ? String(teacher._id) : parsed.data.teacherId }) }, 201);
+      return jsonOk({
+        exam: await examService.create(
+          { ...parsed.data, teacherId: teacher ? String(teacher._id) : parsed.data.teacherId },
+          { name: session!.name }
+        ),
+      }, 201);
     } catch (e) { return fromServiceError(e); }
   },
 
@@ -85,7 +90,13 @@ export const examController = {
       }
       if (!(await validateExamAccess(session!, parsed.data))) return jsonError("You are not authorized for this class and subject", 403);
       const teacher = session!.role === "teacher" ? await resolveTeacher(session!) : null;
-      return jsonOk({ exam: await examService.update(id, { ...parsed.data, teacherId: teacher ? String(teacher._id) : parsed.data.teacherId }) });
+      return jsonOk({
+        exam: await examService.update(
+          id,
+          { ...parsed.data, teacherId: teacher ? String(teacher._id) : parsed.data.teacherId },
+          { name: session!.name }
+        ),
+      });
     } catch (e) { return fromServiceError(e); }
   },
 
@@ -96,6 +107,23 @@ export const examController = {
       const { id } = await ctx.params;
       return jsonOk(await examService.remove(id));
     } catch (e) { return fromServiceError(e); }
+  },
+
+  async history(_: Request, ctx: Ctx) {
+    const { session, error } = await requireAuth(["admin", "teacher"]);
+    if (error) return error;
+    try {
+      const { id } = await ctx.params;
+      if (!/^[a-f0-9]{24}$/i.test(id)) return jsonError("Invalid exam ID", 400);
+      const exam = await Exam.findById(id).select("classId subjectId").lean();
+      if (!exam) return jsonError("Exam not found", 404);
+      if (!(await canAccessSubject(session!, String(exam.classId), String(exam.subjectId)))) {
+        return jsonError("You are not authorized to view this exam history", 403);
+      }
+      return jsonOk({ history: await examService.setupHistory(id) });
+    } catch (e) {
+      return fromServiceError(e);
+    }
   },
 
   async getMarksheet(req: Request) {
@@ -149,7 +177,7 @@ export const examController = {
           }
         }
       }
-      return jsonOk(await examService.saveMarksheet(parsed.data));
+      return jsonOk(await examService.saveMarksheet(parsed.data, { name: session!.name }));
     } catch (e) { return fromServiceError(e); }
   },
 };

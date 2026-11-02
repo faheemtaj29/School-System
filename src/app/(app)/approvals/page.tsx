@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EmptyState, Hero, Panel, StatusBadge, inputClass } from "@/components/ui";
+import { EmptyState, Hero, PaginationControls, Panel, StatusBadge, inputClass, usePaginatedList } from "@/components/ui";
 import { prettyDate } from "@/lib/types";
 
 type Instance = {
@@ -88,6 +88,7 @@ export default function ApprovalsPage() {
   }, [all]);
   const kinds = useMemo(() => [...new Set(all.map((i) => i.workflowCode))], [all]);
   const rows = all.filter((i) => (!status || i.status === status) && (!kind || i.workflowCode === kind));
+  const rowsPagination = usePaginatedList(rows);
 
   async function act(id: string, action: "approve" | "reject") {
     if (action === "reject" && !notes[id]?.trim() && !confirm("Reject without giving a reason?")) return;
@@ -156,6 +157,16 @@ export default function ApprovalsPage() {
       </div>
 
       <Panel title={status === "pending" ? "Waiting for a decision" : "Requests"} meta={`${rows.length} ITEMS`}>
+        {rows.length ? (
+          <PaginationControls
+            page={rowsPagination.page}
+            pageSize={rowsPagination.pageSize}
+            total={rows.length}
+            pageCount={rowsPagination.pageCount}
+            onPageChange={rowsPagination.setPage}
+            onPageSizeChange={rowsPagination.setPageSize}
+          />
+        ) : null}
         {!rows.length ? (
           <EmptyState
             message={
@@ -165,7 +176,7 @@ export default function ApprovalsPage() {
             }
           />
         ) : (
-          rows.map((row) => {
+          rowsPagination.pageItems.map((row) => {
             const wf = byCode.get(row.workflowCode);
             const sorted = [...(wf?.steps || [])].sort((a, b) => a.order - b.order);
             // A "submit" step only records the request; it waits on the step after it (as the server does).

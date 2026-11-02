@@ -5,12 +5,24 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { SalaryTaxSettings } from "@/components/hr/SalaryTaxSettings";
 import { DEDUCTION_HEADS, EARNING_HEADS, SalaryLines, cleanLines, lineTotal, type PayLine } from "@/components/hr/SalaryLines";
 import { useSchoolProfile } from "@/lib/useSchoolProfile";
-import { EmptyState, Field, Hero, ModalForm, NameCell, Panel, StatusBadge, inputClass } from "@/components/ui";
+import { EmptyState, Field, Hero, ModalForm, NameCell, PaginationControls, Panel, StatusBadge, inputClass, usePaginatedList } from "@/components/ui";
 import { TeacherItem, formatNumber, fullName, prettyDate, toDateInput, photoSrc } from "@/lib/types";
 
 type Leave = {
   _id: string;
-  teacherId: TeacherItem | string;
+  teacherId: (Employee & { photoUpdatedAt?: string }) | string;
+  employeeModel?: "Teacher" | "Staff";
+  leaveType: string;
+  fromDate: string;
+  toDate: string;
+  days: number;
+  reason?: string;
+  status: string;
+};
+
+type StudentLeave = {
+  _id: string;
+  studentId: { firstName: string; lastName: string; admissionNo: string; classId?: { name: string; section?: string } } | string;
   leaveType: string;
   fromDate: string;
   toDate: string;
@@ -66,7 +78,7 @@ function structureOf(t: Employee | undefined) {
 
 export default function HrPage() {
   const { currency: cur } = useSchoolProfile();
-  const [tab, setTab] = useState<"payroll" | "leave" | "tax">("payroll");
+  const [tab, setTab] = useState<"payroll" | "leave" | "student-leave" | "tax">("payroll");
   const [teachers, setTeachers] = useState<TeacherItem[]>([]);
   const [campusStaff, setCampusStaff] = useState<Employee[]>([]);
   const employees: Employee[] = useMemo(
@@ -74,13 +86,18 @@ export default function HrPage() {
     [teachers, campusStaff]
   );
   const [leaves, setLeaves] = useState<Leave[]>([]);
+  const [studentLeaves, setStudentLeaves] = useState<StudentLeave[]>([]);
   const [payslips, setPayslips] = useState<Payslip[]>([]);
+  const payslipPagination = usePaginatedList(payslips);
+  const leavePagination = usePaginatedList(leaves);
+  const studentLeavePagination = usePaginatedList(studentLeaves);
   const [payroll, setPayroll] = useState({ paid: 0, pending: 0, draft: 0, total: 0 });
-  const [portal, setPortal] = useState<"admin" | "teacher" | null>(null);
+  const [portal, setPortal] = useState<"admin" | "teacher" | "staff" | null>(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [leaveForm, setLeaveForm] = useState({
     teacherId: "",
+    employeeModel: "Teacher" as "Teacher" | "Staff",
     leaveType: "casual",
     fromDate: toDateInput(new Date()),
     toDate: toDateInput(new Date()),
@@ -113,22 +130,30 @@ export default function HrPage() {
       setErr(hr.error || "Unable to load HR records.");
       return;
     }
-    const currentPortal = hr.portal === "teacher" ? "teacher" : "admin";
+    const currentPortal = hr.portal === "teacher" || hr.portal === "staff" ? hr.portal : "admin";
     setPortal(currentPortal);
     setLeaves(hr.leaves || []);
     setPayslips(hr.payslips || []);
     setPayroll(hr.payroll || { paid: 0, pending: 0, draft: 0, total: 0 });
     if (currentPortal === "admin") {
-      const [teacherResponse, staffResponse] = await Promise.all([fetch("/api/teachers"), fetch("/api/staff")]);
-      const [teacherData, staffData] = await Promise.all([teacherResponse.json(), staffResponse.json()]);
+      const [teacherResponse, staffResponse, studentLeaveResponse] = await Promise.all([
+        fetch("/api/teachers"),
+        fetch("/api/staff"),
+        fetch("/api/student-leaves"),
+      ]);
+      const [teacherData, staffData, studentLeaveData] = await Promise.all([teacherResponse.json(), staffResponse.json(), studentLeaveResponse.json()]);
       setTeachers(teacherResponse.ok ? teacherData.teachers || [] : []);
       setCampusStaff(
         staffResponse.ok
           ? (staffData.staff || []).filter((s: { status?: string }) => s.status !== "inactive").map((s: Omit<Employee, "model">) => ({ ...s, model: "Staff" as const }))
           : []
       );
+      if (!studentLeaveResponse.ok) setErr(studentLeaveData.error || "Unable to load student leave requests.");
+      else setStudentLeaves(studentLeaveData.leaves || []);
     } else {
       setTeachers([]);
+      setCampusStaff([]);
+      setStudentLeaves([]);
     }
   }, []);
 
@@ -142,7 +167,7 @@ export default function HrPage() {
     const res = await fetch("/api/hr", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(leaveForm),
+      body: JSON.stringify({ ...leaveForm, teacherId: portal === "admin" ? leaveForm.teacherId : "self" }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -151,6 +176,24 @@ export default function HrPage() {
     }
     setLeaveOpen(false);
     load();
+  }
+
+  async function setStudentLeaveStatus(id: string, status: "approved" | "rejected") {
+    const res = await fetch(`/api/student-leaves/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setErr(data.error || "Could not update the leave request.");
+      return;
+    }
+    setErr("");
+    const response = await fetch("/api/student-leaves");
+    const result = await response.json();
+    if (response.ok) setStudentLeaves(result.leaves || []);
+    else setErr(result.error || "Could not reload student leave requests.");
   }
 
   async function createPayslip(e: FormEvent) {
@@ -264,7 +307,7 @@ export default function HrPage() {
       <Hero
         title="HR & Payroll"
         subtitle="Staff leave, salaries and payslips"
-        actionLabel={tab === "payroll" ? (portal === "teacher" ? undefined : "Create Payslip") : tab === "leave" ? "Add Leave" : undefined}
+        actionLabel={tab === "payroll" ? (portal === "admin" ? "Create Payslip" : undefined) : tab === "leave" ? "Add Leave" : undefined}
         onAction={() => (tab === "payroll" ? (portal === "admin" ? setPayOpen(true) : undefined) : setLeaveOpen(true))}
       />
 
@@ -287,6 +330,7 @@ export default function HrPage() {
       <div className="tabs">
         <button type="button" className={`tab${tab === "payroll" ? " active" : ""}`} onClick={() => setTab("payroll")}>Payroll</button>
         <button type="button" className={`tab${tab === "leave" ? " active" : ""}`} onClick={() => setTab("leave")}>Leave Requests</button>
+        {portal === "admin" ? <button type="button" className={`tab${tab === "student-leave" ? " active" : ""}`} onClick={() => setTab("student-leave")}>Student Leave</button> : null}
         <button type="button" className={`tab${tab === "tax" ? " active" : ""}`} onClick={() => setTab("tax")}>Salary Tax</button>
       </div>
 
@@ -295,6 +339,9 @@ export default function HrPage() {
         <div className="alert ok no-print">
           Your full salary history and yearly tax certificate are on <Link href="/teachers/me">My Profile → Salary &amp; Tax</Link>.
         </div>
+      ) : null}
+      {tab === "payroll" && portal === "staff" ? (
+        <div className="alert ok no-print">Your payslips are listed here. Submit leave requests under Leave Requests.</div>
       ) : null}
 
       {tab === "payroll" && portal === "admin" ? (
@@ -318,8 +365,9 @@ export default function HrPage() {
           {!payslips.length ? (
             <EmptyState message="No payslips yet. Create one for a staff member." />
           ) : (
-            <div className="table-scroll">
-              <table className="reg">
+            <>
+              <div className="table-scroll">
+                <table className="reg">
                 <thead>
                   <tr>
                     <th>Staff</th>
@@ -333,7 +381,7 @@ export default function HrPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {payslips.map((p) => {
+                  {payslipPagination.pageItems.map((p) => {
                     const t = typeof p.teacherId === "object" ? p.teacherId : null;
                     const isStaff = p.employeeModel === "Staff";
                     return (
@@ -371,8 +419,10 @@ export default function HrPage() {
                     );
                   })}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+              <PaginationControls page={payslipPagination.page} pageSize={payslipPagination.pageSize} total={payslips.length} pageCount={payslipPagination.pageCount} onPageChange={payslipPagination.setPage} onPageSizeChange={payslipPagination.setPageSize} />
+            </>
           )}
         </Panel>
       ) : tab === "leave" ? (
@@ -380,8 +430,9 @@ export default function HrPage() {
           {!leaves.length ? (
             <EmptyState message="No leave requests." />
           ) : (
-            <div className="table-scroll">
-              <table className="reg">
+            <>
+              <div className="table-scroll">
+                <table className="reg">
                 <thead>
                   <tr>
                     <th>Staff</th>
@@ -393,11 +444,12 @@ export default function HrPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {leaves.map((l) => {
+                  {leavePagination.pageItems.map((l) => {
                     const t = typeof l.teacherId === "object" ? l.teacherId : null;
+                    const kind = l.employeeModel === "Staff" ? "staff" : "teacher";
                     return (
                       <tr key={l._id}>
-                        <td><NameCell name={t ? fullName(t) : "—"} photo={t ? photoSrc("teacher", t) : null} /></td>
+                        <td><NameCell name={t ? fullName(t) : "—"} sub={t?.designation} photo={t ? photoSrc(kind, t) : null} /></td>
                         <td style={{ textTransform: "capitalize" }}>{l.leaveType}</td>
                         <td>{prettyDate(l.fromDate)} → {prettyDate(l.toDate)}</td>
                         <td className="num">{l.days}</td>
@@ -416,8 +468,47 @@ export default function HrPage() {
                     );
                   })}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+              <PaginationControls page={leavePagination.page} pageSize={leavePagination.pageSize} total={leaves.length} pageCount={leavePagination.pageCount} onPageChange={leavePagination.setPage} onPageSizeChange={leavePagination.setPageSize} />
+            </>
+          )}
+        </Panel>
+      ) : tab === "student-leave" && portal === "admin" ? (
+        <Panel title="Student Leave Requests" meta={`${studentLeaves.length} RECORDS`}>
+          {!studentLeaves.length ? <EmptyState message="No student leave requests." /> : (
+            <>
+              <div className="table-scroll">
+                <table className="reg">
+                  <thead><tr><th>Student</th><th>Class</th><th>Type</th><th>From → To</th><th className="right">Days</th><th>Reason</th><th className="right">Status / Actions</th></tr></thead>
+                  <tbody>{studentLeavePagination.pageItems.map((leave) => {
+                    const student = typeof leave.studentId === "object" ? leave.studentId : null;
+                    return (
+                      <tr key={leave._id}>
+                        <td>{student ? `${student.firstName} ${student.lastName} · ${student.admissionNo}` : "—"}</td>
+                        <td>{student?.classId ? `${student.classId.name}${student.classId.section ? `-${student.classId.section}` : ""}` : "—"}</td>
+                        <td style={{ textTransform: "capitalize" }}>{leave.leaveType}</td>
+                        <td>{prettyDate(leave.fromDate)} → {prettyDate(leave.toDate)}</td>
+                        <td className="num">{leave.days}</td>
+                        <td>{leave.reason || "—"}</td>
+                        <td>
+                          <div className="row-actions">
+                            <StatusBadge status={leave.status === "approved" ? "active" : leave.status === "rejected" ? "overdue" : "pending"} />
+                            {leave.status === "pending" ? (
+                              <>
+                                <button type="button" className="link-btn" onClick={() => setStudentLeaveStatus(leave._id, "approved")}>Approve</button>
+                                <button type="button" className="link-btn danger" onClick={() => setStudentLeaveStatus(leave._id, "rejected")}>Reject</button>
+                              </>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}</tbody>
+                </table>
+              </div>
+              <PaginationControls page={studentLeavePagination.page} pageSize={studentLeavePagination.pageSize} total={studentLeaves.length} pageCount={studentLeavePagination.pageCount} onPageChange={studentLeavePagination.setPage} onPageSizeChange={studentLeavePagination.setPageSize} />
+            </>
           )}
         </Panel>
       ) : null}
@@ -425,14 +516,26 @@ export default function HrPage() {
       <ModalForm open={leaveOpen} onClose={() => setLeaveOpen(false)} onSubmit={createLeave} title="Add Leave Request" submitLabel="Submit">
         {err ? <div className="alert err">{err}</div> : null}
         <div className="form-grid">
-          <Field label="Staff" required>
-            <select className={inputClass} value={leaveForm.teacherId} onChange={(e) => setLeaveForm({ ...leaveForm, teacherId: e.target.value })} required>
-              <option value="">Select</option>
-              {teachers.map((t) => (
-                <option key={t._id} value={t._id}>{fullName(t)}</option>
-              ))}
-            </select>
-          </Field>
+          {portal === "admin" ? (
+            <Field label="Employee" required>
+              <select
+                className={inputClass}
+                value={leaveForm.teacherId ? `${leaveForm.employeeModel}:${leaveForm.teacherId}` : ""}
+                onChange={(e) => {
+                  const [employeeModel, teacherId] = e.target.value.split(":");
+                  setLeaveForm({ ...leaveForm, employeeModel: employeeModel === "Staff" ? "Staff" : "Teacher", teacherId: teacherId || "" });
+                }}
+                required
+              >
+                <option value="">Select</option>
+                {employees.map((employee) => (
+                  <option key={`${employee.model}:${employee._id}`} value={`${employee.model}:${employee._id}`}>
+                    {fullName(employee)} · {employee.model === "Staff" ? employee.designation || "Campus staff" : "Teacher"}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : <p className="coa-hint">This request will be linked to your own staff profile and reviewed by the school.</p>}
           <Field label="Type">
             <select className={inputClass} value={leaveForm.leaveType} onChange={(e) => setLeaveForm({ ...leaveForm, leaveType: e.target.value })}>
               <option value="casual">Casual</option>

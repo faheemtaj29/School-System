@@ -10,6 +10,7 @@ import { parseOptionalDate } from "@/backend/lib/http";
 import { ServiceError, type SessionUser } from "@/backend/types";
 import { accountingService } from "@/backend/services/accounting.service";
 import { resolveStudent, resolveTeacher } from "@/backend/lib/portal";
+import { letterhead } from "@/backend/lib/letterhead";
 import type { z } from "zod";
 import { Types } from "mongoose";
 import type {
@@ -569,10 +570,11 @@ export const elearningService = {
   },
 
   // —— Diplomas ——
-  async listDiplomas(scope?: { teacherId?: string; studentId?: string }) {
+  async listDiplomas(scope?: { teacherId?: string; studentId?: string; studentIds?: string[] }) {
     await dbConnect();
-    const filter: Record<string, unknown> = {};
-    if (scope?.studentId) filter.studentId = scope.studentId;
+    const filter: Record<string, unknown> = { status: "issued" };
+    if (scope?.studentIds) filter.studentId = { $in: scope.studentIds };
+    else if (scope?.studentId) filter.studentId = scope.studentId;
     if (scope?.teacherId) {
       const courseIds = (
         await Course.find({ teacherId: scope.teacherId }).select("_id").lean()
@@ -584,6 +586,56 @@ export const elearningService = {
       .populate("courseId", "code title level")
       .sort({ issueDate: -1 })
       .lean();
+  },
+
+  async diploma(id: string) {
+    await dbConnect();
+    const item = await Diploma.findById(id)
+      .populate("studentId", "firstName lastName admissionNo parentName branchCode")
+      .populate("courseId", "code title level mode durationWeeks branchCode")
+      .lean();
+    if (!item || item.status !== "issued") throw new ServiceError("NOT_FOUND", "Issued diploma not found", 404);
+
+    const student = item.studentId as unknown as {
+      _id: unknown;
+      firstName: string;
+      lastName?: string;
+      admissionNo: string;
+      parentName?: string;
+      branchCode?: string;
+    } | null;
+    const course = item.courseId as unknown as {
+      _id: unknown;
+      code: string;
+      title: string;
+      level: string;
+      mode: string;
+      durationWeeks: number;
+      branchCode?: string;
+    } | null;
+    if (!student?._id || !course?._id) {
+      throw new ServiceError("NOT_FOUND", "Diploma student or course could not be found", 404);
+    }
+    return {
+      diplomaNo: item.diplomaNo,
+      title: item.title,
+      issueDate: item.issueDate,
+      grade: item.grade || "",
+      student: {
+        _id: String(student._id),
+        name: `${student.firstName} ${student.lastName || ""}`.trim(),
+        admissionNo: student.admissionNo,
+        parentName: student.parentName || "",
+      },
+      course: {
+        code: course.code,
+        title: course.title,
+        level: course.level,
+        mode: course.mode,
+        durationWeeks: course.durationWeeks,
+      },
+      head: await letterhead(student.branchCode || course.branchCode),
+    };
   },
 
   async issueDiploma(data: DiplomaInput) {

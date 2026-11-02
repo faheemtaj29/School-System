@@ -31,6 +31,11 @@ export const attendanceController = {
     try {
       const { searchParams } = new URL(req.url);
       const classId = searchParams.get("classId");
+      const page = Number(searchParams.get("page") || 1);
+      const pageSize = Number(searchParams.get("pageSize") || 50);
+      if (!Number.isInteger(page) || page < 1 || ![25, 50, 100].includes(pageSize)) {
+        return jsonError("Page must be positive and page size must be 25, 50, or 100.", 400);
+      }
       if (session!.role === "teacher") {
         if (classId && !(await canAccessClass(session!, classId))) {
           return jsonError("You are not assigned to this class", 403);
@@ -41,12 +46,11 @@ export const attendanceController = {
           const assignedIds = (teacher.classes || []).map((id: unknown) => String(id));
           const leadClasses = await ClassModel.find({ classTeacher: teacher._id }).distinct("_id");
           const allowedIds = [...new Set([...assignedIds, ...leadClasses.map(String)])];
-          const sheets = await attendanceService.list({ date: searchParams.get("date") });
-          return jsonOk({ attendance: sheets.filter((sheet: { classId?: unknown }) => allowedIds.includes(String((sheet.classId as { _id?: unknown })?._id ?? sheet.classId))) });
+          const result = await attendanceService.list({ classIds: allowedIds, date: searchParams.get("date"), page, pageSize });
+          return jsonOk(result);
         }
       }
-      const attendance = await attendanceService.list({ classId, date: searchParams.get("date") });
-      return jsonOk({ attendance });
+      return jsonOk(await attendanceService.list({ classId, date: searchParams.get("date"), page, pageSize }));
     } catch (e) {
       return fromServiceError(e);
     }

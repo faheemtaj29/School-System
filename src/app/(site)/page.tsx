@@ -84,6 +84,9 @@ export default async function HomePage() {
                 <p className="site-mono">
                   {currency} {c.fee.toLocaleString()} · {c.durationWeeks} weeks
                 </p>
+                <Link href={`/admissions?course=${encodeURIComponent(c._id)}`} className="site-link">
+                  Apply for this program →
+                </Link>
               </div>
             ))}
           </div>

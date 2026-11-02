@@ -1,4 +1,5 @@
 import mongoose, { Schema, models, model, Types } from "mongoose";
+import { SetupRevisionSchema, type ISetupRevision } from "./SetupRevision";
 
 /** Breakdown of how marks are distributed across components for a subject. */
 export interface IMarkComponents {
@@ -30,6 +31,7 @@ export interface IExam {
   /** Max marks per component (defines which components are used). */
   markComponents?: IMarkComponents;
   results: IExamResult[];
+  setupHistory?: ISetupRevision[];
   /** Set when generated from term marks entry ("term:class:subject"), so it stays in sync. */
   sourceKey?: string;
   createdAt: Date;
@@ -67,6 +69,7 @@ const ExamSchema = new Schema<IExam>(
         remarks: String,
       },
     ],
+    setupHistory: { type: [SetupRevisionSchema], select: false, default: undefined },
     sourceKey: { type: String, index: true, sparse: true },
   },
   { timestamps: true }

@@ -1,9 +1,10 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { EmptyState, Hero, NameCell, Panel, StatusBadge, inputClass } from "@/components/ui";
+import { EmptyState, Hero, NameCell, PaginationControls, Panel, StatusBadge, inputClass, usePaginatedList } from "@/components/ui";
 import { ExamForm } from "@/components/forms/SchoolForms";
 import { ExamCenter, type ExamStep } from "@/components/exams/ExamCenter";
+import { SetupHistory } from "@/components/SetupHistory";
 import {
   ClassItem,
   ExamItem,
@@ -152,6 +153,9 @@ export default function ExamsPage() {
   }
 
   const selected = useMemo(() => exams.find((e) => e._id === selectedId) ?? exams[0] ?? null, [exams, selectedId]);
+  const examPagination = usePaginatedList(exams);
+  const selectedResults = useMemo(() => selected?.results ?? [], [selected]);
+  const resultPagination = usePaginatedList(selectedResults);
 
   /* ─── workflow helpers ───────────────────────────────────────── */
   function clearWorkflowAlerts() { setWorkflowErr(""); setWorkflowMsg(""); }
@@ -242,7 +246,7 @@ export default function ExamsPage() {
           {!exams.length ? <EmptyState message="No results yet. Enter marks in Exam Center → Marks Entry, or add a class test with Quick Exam." /> : null}
           <div className="grid-2">
             <Panel title="Exam List" meta={`${exams.length} TOTAL`}>
-              {exams.map((exam) => {
+              {examPagination.pageItems.map((exam) => {
                 const d = dayMonth(exam.date);
                 const upcoming = new Date(exam.date) >= new Date();
                 return (
@@ -260,6 +264,7 @@ export default function ExamsPage() {
                   </div>
                 );
               })}
+              <PaginationControls page={examPagination.page} pageSize={examPagination.pageSize} total={exams.length} pageCount={examPagination.pageCount} onPageChange={examPagination.setPage} onPageSizeChange={examPagination.setPageSize} />
             </Panel>
 
             <Panel title="Exam Summary">
@@ -271,6 +276,9 @@ export default function ExamsPage() {
                   <div className="fee-row"><span>Date</span><span className="mono">{prettyDate(selected.date)}</span></div>
                   <div className="fee-row"><span>Results entered</span><span className="mono">{selected.results?.length ?? 0}</span></div>
                   <div className="fee-row total"><span>TOTAL MARKS</span><span>{selected.maxMarks}</span></div>
+                  {role === "admin" || role === "teacher" ? (
+                    <SetupHistory url={`/api/exams/${selected._id}/history`} label="Exam setup history" />
+                  ) : null}
                 </>
               ) : (
                 <EmptyState message="Select an exam to view details." />
@@ -296,7 +304,7 @@ export default function ExamsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(selected?.results ?? []).map((r, i) => {
+                  {resultPagination.pageItems.map((r, i) => {
                     const student = typeof r.studentId === "object" ? (r.studentId as StudentItem) : students.find((s) => s._id === r.studentId);
                     const pct = selected?.maxMarks ? Math.round((r.marks / selected.maxMarks) * 100) : 0;
                     const c = (r as { components?: Partial<MarkComponents> }).components;
@@ -321,6 +329,7 @@ export default function ExamsPage() {
                 </tbody>
               </table>
             </div>
+            <PaginationControls page={resultPagination.page} pageSize={resultPagination.pageSize} total={selectedResults.length} pageCount={resultPagination.pageCount} onPageChange={resultPagination.setPage} onPageSizeChange={resultPagination.setPageSize} />
           </Panel>
         </>
       ) : null}

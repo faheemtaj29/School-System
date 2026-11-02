@@ -1,6 +1,6 @@
 "use client";
 
-import { PrintShell, fmtDate, usePrintData, QbLetterhead } from "./PrintShell";
+import { DocumentSigns, PrintShell, fmtDate, usePrintData, QbLetterhead, type SchoolHeader } from "./PrintShell";
 import { amountInWords } from "./FeePrints";
 
 type Item = { sku: string; name: string; unit: string; quantity: number; rate: number; amount: number; description?: string };
@@ -29,7 +29,7 @@ type Data = {
   toCampus: string;
   settlement: { name: string; bankName?: string; accountNumber?: string } | null;
   journal: { number: string; lines: JLine[] } | null;
-  school: { name: string; address: string; phone: string; email: string; currency: string; logoUrl: string | null };
+  school: SchoolHeader & { currency: string };
 };
 
 const TITLE: Record<string, string> = {
@@ -159,12 +159,12 @@ export function StockVoucherPrintPage({ id }: { id: string }) {
             </table>
           ) : null}
 
-          <div className="signs">
-            <span>Prepared by{v.createdBy?.name ? `: ${v.createdBy.name}` : ""}</span>
-            <span>{isTransfer ? "Dispatched by" : "Checked by"}</span>
-            <span>{isTransfer ? "Received by (destination)" : "Approved by"}</span>
-            <span>{isPurchase ? "Store keeper" : isTransfer ? "Store keeper" : "Customer's signature"}</span>
-          </div>
+          <DocumentSigns signatures={data.school.signatures} signers={[
+            { label: `Prepared by${v.createdBy?.name ? `: ${v.createdBy.name}` : ""}`, role: "preparedBy" },
+            { label: isTransfer ? "Dispatched by" : "Checked by", role: isTransfer ? "checkedBy" : "checkedBy" },
+            { label: isTransfer ? "Received by (destination)" : "Approved by", role: isTransfer ? "receiver" : "approvedBy" },
+            { label: isPurchase || isTransfer ? "Store keeper" : "Customer's signature", role: isPurchase || isTransfer ? "storeKeeper" : undefined },
+          ]} />
         </section>
       ) : null}
     </PrintShell>

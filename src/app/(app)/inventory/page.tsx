@@ -10,13 +10,16 @@ import {
   Hero,
   ModalForm,
   OptionSelect,
+  PaginationControls,
   Panel,
   StatusBadge,
   inputClass,
+  usePaginatedList,
 } from "@/components/ui";
 import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
 import { QbStockVoucher, type StockType } from "@/components/inventory/QbStockVoucher";
 import { StockLedger } from "@/components/inventory/StockLedger";
+import { DocumentSigns, SchoolHead } from "@/components/print/PrintShell";
 
 type Item = {
   _id: string;
@@ -445,6 +448,12 @@ export default function InventoryPage() {
 
   const config = VOUCHERS[voucherForm.voucherType];
   const itemMap = useMemo(() => new Map(items.map((item) => [item._id, item])), [items]);
+  const productPagination = usePaginatedList(items);
+  const voucherPagination = usePaginatedList(vouchers);
+  const movementPagination = usePaginatedList(vouchers);
+  const categoryPagination = usePaginatedList(categoryRows);
+  const warehousePagination = usePaginatedList(warehouseRows);
+  const auditPagination = usePaginatedList(auditEvents);
 
   const subtotal = useMemo(
     () =>
@@ -811,6 +820,16 @@ export default function InventoryPage() {
               <option value="void">Void / Cancelled</option>
             </select>
           </div>
+          {vouchers.length ? (
+            <PaginationControls
+              page={voucherPagination.page}
+              pageSize={voucherPagination.pageSize}
+              total={vouchers.length}
+              pageCount={voucherPagination.pageCount}
+              onPageChange={voucherPagination.setPage}
+              onPageSizeChange={voucherPagination.setPageSize}
+            />
+          ) : null}
           {!vouchers.length ? (
             <EmptyState message={voucherEmptyMessage} />
           ) : (
@@ -829,7 +848,7 @@ export default function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {vouchers.map((v) => (
+                  {voucherPagination.pageItems.map((v) => (
                     <tr key={v._id}>
                       <td className="num">{v.number}</td>
                       <td>{prettyDate(v.date)}</td>
@@ -898,7 +917,7 @@ export default function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((item) => (
+                  {productPagination.pageItems.map((item) => (
                     <tr key={item._id}>
                       <td className="num">{item.sku}</td>
                       <td>
@@ -928,11 +947,24 @@ export default function InventoryPage() {
               </table>
             </div>
           )}
+          {items.length ? (
+            <PaginationControls page={productPagination.page} pageSize={productPagination.pageSize} total={items.length} pageCount={productPagination.pageCount} onPageChange={productPagination.setPage} onPageSizeChange={productPagination.setPageSize} />
+          ) : null}
         </Panel>
       ) : null}
 
       {activeTab === "products" && navNode === "categories" ? (
         <Panel title="Category Listing" meta={`${categoryRows.length} CATEGORIES`}>
+          {categoryRows.length ? (
+            <PaginationControls
+              page={categoryPagination.page}
+              pageSize={categoryPagination.pageSize}
+              total={categoryRows.length}
+              pageCount={categoryPagination.pageCount}
+              onPageChange={categoryPagination.setPage}
+              onPageSizeChange={categoryPagination.setPageSize}
+            />
+          ) : null}
           {!categoryRows.length ? (
             <EmptyState message="No categories yet." />
           ) : (
@@ -947,7 +979,7 @@ export default function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {categoryRows.map((row) => (
+                  {categoryPagination.pageItems.map((row) => (
                     <tr key={row.name}>
                       <td>{row.name}</td>
                       <td className="num">{row.skus}</td>
@@ -964,6 +996,16 @@ export default function InventoryPage() {
 
       {activeTab === "products" && navNode === "warehouses" ? (
         <Panel title="Warehouse Listing" meta={`${warehouseRows.length} WAREHOUSES`}>
+          {warehouseRows.length ? (
+            <PaginationControls
+              page={warehousePagination.page}
+              pageSize={warehousePagination.pageSize}
+              total={warehouseRows.length}
+              pageCount={warehousePagination.pageCount}
+              onPageChange={warehousePagination.setPage}
+              onPageSizeChange={warehousePagination.setPageSize}
+            />
+          ) : null}
           {!warehouseRows.length ? (
             <EmptyState message="No warehouses available." />
           ) : (
@@ -979,7 +1021,7 @@ export default function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {warehouseRows.map((row) => (
+                  {warehousePagination.pageItems.map((row) => (
                     <tr key={row.code}>
                       <td className="num">{row.code}</td>
                       <td>{row.name}</td>
@@ -997,6 +1039,16 @@ export default function InventoryPage() {
 
       {activeTab === "products" && navNode === "barcode" ? (
         <Panel title="Barcode Register" meta={`${items.length} ITEMS`}>
+          {items.length ? (
+            <PaginationControls
+              page={productPagination.page}
+              pageSize={productPagination.pageSize}
+              total={items.length}
+              pageCount={productPagination.pageCount}
+              onPageChange={productPagination.setPage}
+              onPageSizeChange={productPagination.setPageSize}
+            />
+          ) : null}
           {!items.length ? (
             <EmptyState message="No products available for barcode generation." />
           ) : (
@@ -1011,7 +1063,7 @@ export default function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((item) => (
+                  {productPagination.pageItems.map((item) => (
                     <tr key={item._id}>
                       <td className="num">{item.sku}</td>
                       <td>{item.name}</td>
@@ -1030,6 +1082,16 @@ export default function InventoryPage() {
 
       {activeTab === "products" && navNode === "product-ledger" ? (
         <Panel title="Product Ledger" meta={`${items.length} ITEMS`}>
+          {items.length ? (
+            <PaginationControls
+              page={productPagination.page}
+              pageSize={productPagination.pageSize}
+              total={items.length}
+              pageCount={productPagination.pageCount}
+              onPageChange={productPagination.setPage}
+              onPageSizeChange={productPagination.setPageSize}
+            />
+          ) : null}
           {!items.length ? (
             <EmptyState message="No product ledger entries yet." />
           ) : (
@@ -1045,7 +1107,7 @@ export default function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((item) => (
+                  {productPagination.pageItems.map((item) => (
                     <tr key={item._id}>
                       <td className="num">{item.sku}</td>
                       <td>{item.name}</td>
@@ -1072,6 +1134,16 @@ export default function InventoryPage() {
 
       {activeTab === "vouchers" && navNode === "stock-movement" ? (
         <Panel title="Stock Movement" meta={`${vouchers.length} TRANSACTIONS`}>
+          {vouchers.length ? (
+            <PaginationControls
+              page={movementPagination.page}
+              pageSize={movementPagination.pageSize}
+              total={vouchers.length}
+              pageCount={movementPagination.pageCount}
+              onPageChange={movementPagination.setPage}
+              onPageSizeChange={movementPagination.setPageSize}
+            />
+          ) : null}
           {!vouchers.length ? (
             <EmptyState message="No stock movement yet." />
           ) : (
@@ -1087,7 +1159,7 @@ export default function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {vouchers.map((v) => (
+                  {movementPagination.pageItems.map((v) => (
                     <tr key={v._id}>
                       <td>{prettyDate(v.date)}</td>
                       <td className="num">{v.number}</td>
@@ -1147,6 +1219,16 @@ export default function InventoryPage() {
           {auditLoadedFor === selected._id ? (
             <div className="voucher-editor" style={{ marginTop: 16 }}>
               <div className="form-section-title">Audit History</div>
+              {auditEvents.length ? (
+                <PaginationControls
+                  page={auditPagination.page}
+                  pageSize={auditPagination.pageSize}
+                  total={auditEvents.length}
+                  pageCount={auditPagination.pageCount}
+                  onPageChange={auditPagination.setPage}
+                  onPageSizeChange={auditPagination.setPageSize}
+                />
+              ) : null}
               {!auditEvents.length ? (
                 <EmptyState message="No audit events recorded yet for this voucher." />
               ) : (
@@ -1156,7 +1238,7 @@ export default function InventoryPage() {
                       <tr><th>When</th><th>Action</th><th>By</th><th>Details</th></tr>
                     </thead>
                     <tbody>
-                      {auditEvents.map((ev) => (
+                      {auditPagination.pageItems.map((ev) => (
                         <tr key={ev._id}>
                           <td className="num">{prettyDate(ev.createdAt)}</td>
                           <td style={{ textTransform: "capitalize" }}>{ev.action}</td>
@@ -1439,19 +1521,23 @@ function StockItemsTable({ voucher }: { voucher: StockVoucher }) {
 }
 
 function StockVoucherPrint({ voucher, branches }: { voucher: StockVoucher; branches: Branch[] }) {
-  const { name: schoolName } = useSchoolProfile();
+  const school = useSchoolProfile();
+  const campus = branches.find((b) => b.code === voucher.branchCode)?.name || voucher.branchCode;
   return (
     <div className="print-only voucher-print">
-      <div className="voucher-print-head">
-        <div>
-          <h1>{schoolName || "School"}</h1>
-          <p>{branches.find((b) => b.code === voucher.branchCode)?.name || voucher.branchCode}</p>
-        </div>
-        <div>
-          <h2>{VOUCHERS[voucher.voucherType]?.label}</h2>
-          <div className="num">{voucher.number}</div>
-        </div>
-      </div>
+      <SchoolHead
+        school={{
+          name: school.name || "School",
+          campus,
+          address: school.address,
+          phone: school.phone,
+          email: school.email,
+          website: school.website,
+          logoUrl: school.logoUrl,
+        }}
+        title={VOUCHERS[voucher.voucherType]?.label || "Stock Voucher"}
+        sub={voucher.number}
+      />
       <div className="voucher-print-meta">
         <span><b>Date:</b> {prettyDate(voucher.date)}</span>
         <span><b>Campus:</b> {voucher.branchCode}{voucher.toBranchCode ? ` → ${voucher.toBranchCode}` : ""}</span>
@@ -1467,12 +1553,16 @@ function StockVoucherPrint({ voucher, branches }: { voucher: StockVoucher; branc
         <span>Tax <strong>{formatNumber(voucher.taxAmount)}</strong></span>
         <span>Grand Total <strong>{formatNumber(voucher.grandTotal)}</strong></span>
       </div>
-      <div className="voucher-signatures">
-        <span>Prepared by</span>
-        <span>Store keeper</span>
-        <span>Approved by</span>
-        <span>Received by</span>
-      </div>
+      <DocumentSigns
+        className="voucher-signatures"
+        signatures={school.signatures}
+        signers={[
+          { label: "Prepared by", role: "preparedBy" },
+          { label: "Store keeper", role: "storeKeeper" },
+          { label: "Approved by", role: "approvedBy" },
+          { label: "Received by", role: "receiver" },
+        ]}
+      />
     </div>
   );
 }

@@ -88,6 +88,37 @@ function download(blob: Blob, name: string) {
 
 const schoolName = () => document.querySelector<HTMLMetaElement>('meta[name="application-name"]')?.content || "";
 
+type PrintProfile = {
+  schoolName: string;
+  logoUrl?: string | null;
+  address?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  campus?: string;
+};
+
+async function printProfile(): Promise<PrintProfile> {
+  const response = await fetch("/api/settings");
+  const data = await response.json();
+  if (!response.ok || !data.settings) {
+    throw new Error(data.error || "Could not load school details for printing.");
+  }
+  const settings = data.settings;
+  const branches = Array.isArray(settings.branches) ? settings.branches : [];
+  const branch = branches.find((item: { code?: string }) => item.code === settings.defaultBranchCode)
+    || (branches.length === 1 ? branches[0] : undefined);
+  return {
+    schoolName: settings.schoolName || schoolName(),
+    logoUrl: settings.logoUrl,
+    address: branch?.address || settings.address,
+    phone: branch?.phone || settings.phone,
+    email: branch?.email || settings.email,
+    website: settings.website,
+    campus: branch?.name,
+  };
+}
+
 async function toExcel(grid: Grid, title: string) {
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
@@ -127,9 +158,10 @@ function toCsv(grid: Grid, title: string) {
   download(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }), fileName(title, "csv"));
 }
 
-function toPrint(grid: Grid, title: string) {
-  const school = schoolName();
-  const esc = (v: string) => v.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] || c);
+async function toPrint(grid: Grid, title: string) {
+  const profile = await printProfile();
+  const school = profile.schoolName;
+  const esc = (v: string) => v.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] || c);
   const numCols = grid.head.map((_, i) => grid.rows.length > 0 && grid.rows.every((r) => !r[i] || asNumber(r[i]) !== null));
   const td = (r: string[], tag = "td") => r.map((v, i) => `<${tag}${numCols[i] ? ' class="n"' : ""}>${esc(v)}</${tag}>`).join("");
   const w = window.open("", "_blank");
@@ -141,9 +173,15 @@ function toPrint(grid: Grid, title: string) {
 <style>
 @page { size: A4 ${grid.head.length > 7 ? "landscape" : "portrait"}; margin: 12mm; }
 body { font: 12px "Segoe UI", Arial, sans-serif; color: #101828; margin: 0; }
-header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #101828; padding-bottom: 8px; margin-bottom: 12px; }
-header b { font-size: 18px; display: block; } header span { color: #667085; font-size: 11px; }
-h1 { font-size: 15px; margin: 0; text-align: right; }
+header { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #157a5c; padding-bottom: 10px; margin-bottom: 14px; }
+header img, header .mark { width: 52px; height: 52px; object-fit: contain; flex: 0 0 52px; }
+header .mark { display: grid; place-items: center; border: 2px solid #157a5c; border-radius: 50%; color: #157a5c; font: 700 25px Georgia, serif; }
+header .identity { flex: 1; min-width: 0; }
+header b { font-size: 22px; display: block; text-align: center; }
+header .contacts { display: flex; justify-content: center; flex-wrap: wrap; gap: 0 8px; margin-top: 3px; color: #475467; font-size: 10px; }
+header .report-title { margin-left: auto; text-align: right; }
+header .report-title strong { display: block; font-size: 14px; }
+header .report-title span { color: #667085; font-size: 10px; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 th { background: #f2f4f7; text-align: left; font-size: 11px; padding: 6px 8px; border-bottom: 1px solid #d0d5dd; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 td { padding: 6px 8px; border-bottom: 1px solid #eaecf0; }
@@ -152,7 +190,9 @@ tfoot td { font-weight: 700; border-top: 1.5px solid #101828; }
 thead { display: table-header-group; } tr { break-inside: avoid; }
 footer { margin-top: 14px; font-size: 10px; color: #667085; }
 </style></head><body>
-<header><div><b>${esc(school)}</b><span>Printed ${esc(new Date().toLocaleString("en-GB"))}</span></div><h1>${esc(title)}</h1></header>
+<header>${profile.logoUrl ? `<img src="${esc(profile.logoUrl)}" alt="">` : `<span class="mark">${esc(school.trim().charAt(0).toUpperCase() || "S")}</span>`}
+<div class="identity"><b>${esc(school)}</b><div class="contacts">${[profile.campus, profile.address, profile.phone ? `Ph: ${profile.phone}` : "", profile.email, profile.website].filter((item): item is string => Boolean(item)).map((item) => `<span>${esc(item)}</span>`).join("")}</div></div>
+<div class="report-title"><strong>${esc(title)}</strong><span>Printed ${esc(new Date().toLocaleString("en-GB"))}</span></div></header>
 <table><thead><tr>${td(grid.head, "th")}</tr></thead><tbody>${grid.rows.map((r) => `<tr>${td(r)}</tr>`).join("")}</tbody>${
     grid.foot.length ? `<tfoot>${grid.foot.map((r) => `<tr>${td(r)}</tr>`).join("")}</tfoot>` : ""
   }</table>
@@ -197,7 +237,9 @@ export function TableExport({ root, title }: { root: RefObject<HTMLElement | nul
     try {
       if (kind === "xlsx") await toExcel(grid, title);
       else if (kind === "csv") toCsv(grid, title);
-      else toPrint(grid, title);
+      else await toPrint(grid, title);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Export failed.");
     } finally {
       setBusy(false);
     }

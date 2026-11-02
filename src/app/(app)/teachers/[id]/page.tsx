@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { EmptyState, Panel, StatusBadge, inputClass } from "@/components/ui";
+import { EmptyState, Panel, PortalAccessButton, StatusBadge, inputClass } from "@/components/ui";
 import { PersonPhoto } from "@/components/PersonPhoto";
 import { formatNumber, prettyDate } from "@/lib/types";
 import { useSchoolProfile } from "@/lib/useSchoolProfile";
@@ -103,6 +103,7 @@ export default function TeacherProfilePage() {
   const [year, setYear] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
   const [contact, setContact] = useState({ phone: "", address: "", city: "", emergencyName: "", emergencyPhone: "", bloodGroup: "" });
+  const [contactError, setContactError] = useState("");
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/teachers/${id}/profile`);
@@ -125,15 +126,19 @@ export default function TeacherProfilePage() {
   const canPhoto = data.canEdit || data.isSelf;
 
   async function saveContact() {
+    setContactError("");
     const res = await fetch(`/api/teachers/${teacherId}/profile`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(contact),
     });
-    if (res.ok) {
-      setEditing(false);
-      load();
+    const result = await res.json();
+    if (!res.ok) {
+      setContactError(result.error || "Could not save contact details.");
+      return;
     }
+    setEditing(false);
+    load();
   }
 
   // Payslips in the chosen tax year (e.g. Jul 2025 – Jun 2026).
@@ -189,7 +194,10 @@ export default function TeacherProfilePage() {
           </button>
         ))}
         {data.canEdit ? (
-          <Link href="/teachers" className="filter-chip">Edit in Teachers list</Link>
+          <>
+            <Link href="/teachers" className="filter-chip">Edit in Teachers list</Link>
+            <PortalAccessButton kind="teacher" id={teacherId} email={t.email} name={name} onDone={load} />
+          </>
         ) : null}
       </div>
 
@@ -213,8 +221,9 @@ export default function TeacherProfilePage() {
                     <input className={inputClass} value={contact[k]} onChange={(e) => setContact({ ...contact, [k]: e.target.value })} />
                   </label>
                 ))}
+                {contactError ? <div className="alert err">{contactError}</div> : null}
                 <div className="form-actions">
-                  <button type="button" className="btn-ghost" onClick={() => setEditing(false)}>Cancel</button>
+                  <button type="button" className="btn-ghost" onClick={() => { setEditing(false); setContactError(""); }}>Cancel</button>
                   <button type="button" className="btn-dark" onClick={saveContact}>Save</button>
                 </div>
               </div>
@@ -224,6 +233,10 @@ export default function TeacherProfilePage() {
                 <Info label="Phone" value={t.phone} />
                 <Info label="Address" value={[t.address, t.city].filter(Boolean).join(", ")} />
                 <Info label="Emergency contact" value={[t.emergencyName, t.emergencyPhone].filter(Boolean).join(" · ")} />
+                <div className="row-actions no-print">
+                  {t.phone ? <a className="link-btn" href={`tel:${t.phone}`}>Call teacher</a> : null}
+                  {t.email ? <a className="link-btn" href={`mailto:${t.email}`}>Email teacher</a> : null}
+                </div>
                 {data.isSelf ? (
                   <button
                     type="button"

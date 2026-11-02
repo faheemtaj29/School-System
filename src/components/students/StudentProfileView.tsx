@@ -3,8 +3,10 @@
 import { AdvanceFeeModal } from "@/components/fees/FeeTools";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EmptyState, Panel, StatusBadge, inputClass } from "@/components/ui";
+import { EmptyState, Panel, PortalAccessButton, StatusBadge, inputClass } from "@/components/ui";
 import { PersonPhoto } from "@/components/PersonPhoto";
+import { StudentLeaveRequests } from "@/components/students/StudentLeaveRequests";
+import { SetupHistory } from "@/components/SetupHistory";
 import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
 
 /* ── types (shape of /api/students/[id]/profile) ─────────────────── */
@@ -87,8 +89,8 @@ type Profile = {
 
 type Note = { _id: string; kind: string; text: string; date: string; shared: boolean; by: string };
 
-type Tab = "overview" | "record" | "attendance" | "fees" | "results" | "notes" | "courses" | "documents";
-const TABS: Tab[] = ["overview", "record", "attendance", "fees", "results", "notes", "courses", "documents"];
+type Tab = "overview" | "record" | "attendance" | "fees" | "results" | "notes" | "courses" | "leaves" | "documents";
+const TABS: Tab[] = ["overview", "record", "attendance", "fees", "results", "notes", "courses", "leaves", "documents"];
 
 const NOTE_LABEL: Record<string, string> = {
   academic: "Academic",
@@ -277,6 +279,7 @@ export function StudentProfileView({ id, portal = false }: { id: string; portal?
             ["results", `Results (${data.results.cards.length || data.results.tests.length})`],
             ["notes", `Notes${data.notes.length ? ` (${data.notes.length})` : ""}`],
             ["courses", `Courses${data.courses.length ? ` (${data.courses.length})` : ""}`],
+            ["leaves", "Leave requests"],
             ["documents", "Print & documents"],
           ] as [Tab, string][]
         ).map(([k, l]) => (
@@ -284,6 +287,12 @@ export function StudentProfileView({ id, portal = false }: { id: string; portal?
             {l}
           </button>
         ))}
+        {!portal && data.viewer.role === "admin" ? (
+          <>
+            <PortalAccessButton kind="student" id={s._id} email={s.email} name={name} onDone={load} />
+            <PortalAccessButton kind="parent" id={s._id} email={s.parentEmail} name={name} onDone={load} />
+          </>
+        ) : null}
       </div>
 
       {/* ── profile ─────────────────────────────────────────────── */}
@@ -304,6 +313,11 @@ export function StudentProfileView({ id, portal = false }: { id: string; portal?
             <Info label="Email" value={s.parentEmail} />
             <Info label="Student phone" value={s.phone} />
             <Info label="Student email" value={s.email} />
+            <div className="row-actions no-print">
+              {s.parentPhone ? <a className="link-btn" href={`tel:${s.parentPhone}`}>Call parent</a> : null}
+              {s.parentEmail ? <a className="link-btn" href={`mailto:${s.parentEmail}`}>Email parent</a> : null}
+              {s.phone ? <a className="link-btn" href={`tel:${s.phone}`}>Call student</a> : null}
+            </div>
           </Panel>
           <Panel title="School">
             <Info label="Admission no." value={s.admissionNo} />
@@ -312,6 +326,9 @@ export function StudentProfileView({ id, portal = false }: { id: string; portal?
             <Info label="Roll no." value={s.rollNumber} />
             <Info label="Previous school" value={s.previousSchool} />
             <Info label="Status" value={s.status} />
+            {!portal && data.viewer.role === "admin" ? (
+              <SetupHistory url={`/api/students/${s._id}/history`} label="Placement history" />
+            ) : null}
           </Panel>
           {data.siblings.length ? (
             <Panel title="Brothers & sisters" meta={`${data.siblings.length} IN SCHOOL`}>
@@ -700,6 +717,10 @@ export function StudentProfileView({ id, portal = false }: { id: string; portal?
             <Link href="/distance-learning" className="btn-ghost">Open Distance Learning</Link>
           </div>
         </Panel>
+      ) : null}
+
+      {tab === "leaves" ? (
+        <StudentLeaveRequests studentId={s._id} canRequest={portal && ["student", "parent"].includes(data.viewer.role)} />
       ) : null}
 
       {/* ── print centre ───────────────────────────────────────── */}

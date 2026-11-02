@@ -2,6 +2,7 @@ import { Schema, models, model, Types } from "mongoose";
 
 export interface ILeaveRequest {
   teacherId: Types.ObjectId;
+  employeeModel?: "Teacher" | "Staff";
   leaveType: "casual" | "sick" | "annual" | "unpaid" | "other";
   fromDate: Date;
   toDate: Date;
@@ -15,7 +16,8 @@ export interface ILeaveRequest {
 
 const LeaveSchema = new Schema<ILeaveRequest>(
   {
-    teacherId: { type: Schema.Types.ObjectId, ref: "Teacher", required: true },
+    teacherId: { type: Schema.Types.ObjectId, refPath: "employeeModel", required: true },
+    employeeModel: { type: String, enum: ["Teacher", "Staff"], default: "Teacher" },
     leaveType: {
       type: String,
       enum: ["casual", "sick", "annual", "unpaid", "other"],

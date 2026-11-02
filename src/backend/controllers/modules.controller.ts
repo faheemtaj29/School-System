@@ -16,6 +16,7 @@ import { noticeService } from "@/backend/services/notice.service";
 import { reportsService } from "@/backend/services/reports.service";
 import { elearningService } from "@/backend/services/elearning.service";
 import { siteService } from "@/backend/services/site.service";
+import { canSeeStudent, resolveChildren, resolveStaff, resolveTeacher } from "@/backend/lib/portal";
 import {
   settingsSchema,
   ledgerSchema,
@@ -491,21 +492,21 @@ export const inventoryController = {
 
 export const hrController = {
   async overview() {
-    const { session, error } = await requireAuth(["admin", "teacher"]);
+    const { session, error } = await requireAuth(["admin", "teacher", "staff"]);
     if (error) return error;
     try {
-      if (session!.role === "teacher") {
-        const { resolveTeacher } = await import("@/backend/lib/portal");
-        const teacher = await resolveTeacher(session!);
-        if (!teacher) {
-          return jsonOk({ leaves: [], payslips: [], payroll: null, portal: "teacher", linked: false });
+      if (session!.role === "teacher" || session!.role === "staff") {
+        const employeeModel = session!.role === "staff" ? "Staff" : "Teacher";
+        const employee = session!.role === "staff" ? await resolveStaff(session!) : await resolveTeacher(session!);
+        if (!employee) {
+          return jsonOk({ leaves: [], payslips: [], payroll: null, portal: session!.role, linked: false });
         }
-        const tid = String(teacher._id);
+        const tid = String(employee._id);
         const [leaves, payslips] = await Promise.all([
-          hrService.listLeavesForTeacher(tid),
-          hrService.listPayslipsForTeacher(tid),
+          hrService.listLeavesForEmployee(tid, employeeModel),
+          hrService.listPayslipsForEmployee(tid, employeeModel),
         ]);
-        return jsonOk({ leaves, payslips, payroll: null, portal: "teacher", linked: true });
+        return jsonOk({ leaves, payslips, payroll: null, portal: session!.role, linked: true });
       }
       const [leaves, payslips, payroll] = await Promise.all([
         hrService.listLeaves(),
@@ -518,18 +519,19 @@ export const hrController = {
     }
   },
   async createLeave(req: Request) {
-    const { session, error } = await requireAuth(["admin", "teacher"]);
+    const { session, error } = await requireAuth(["admin", "teacher", "staff"]);
     if (error) return error;
     try {
       const body = await req.json();
       const parsed = leaveSchema.safeParse(body);
       if (!parsed.success) return jsonError(firstZodError(parsed.error.issues));
       const data = { ...parsed.data };
-      if (session!.role === "teacher") {
-        const { resolveTeacher } = await import("@/backend/lib/portal");
-        const teacher = await resolveTeacher(session!);
-        if (!teacher) return jsonError("Teacher profile not linked", 400);
-        data.teacherId = String(teacher._id);
+      if (session!.role === "teacher" || session!.role === "staff") {
+        const employeeModel = session!.role === "staff" ? "Staff" : "Teacher";
+        const employee = session!.role === "staff" ? await resolveStaff(session!) : await resolveTeacher(session!);
+        if (!employee) return jsonError("Employee profile not linked", 400);
+        data.teacherId = String(employee._id);
+        data.employeeModel = employeeModel;
       }
       return jsonOk({ leave: await hrService.createLeave(data, session) }, 201);
     } catch (e) {
@@ -784,6 +786,26 @@ function eKind(req: Request): EKind {
 
 /** Distance learning — one controller, ?kind=course|lecture|enrollment|diploma|quiz */
 export const elearningController = {
+  async getDiploma(_: Request, ctx: Ctx) {
+    const { session, error } = await requireAuth();
+    if (error) return error;
+    try {
+      const { id } = await ctx.params;
+      if (!isValidObjectId(id)) return jsonError("Invalid diploma ID.", 400);
+      const diploma = await elearningService.diploma(id);
+      if (session!.role === "teacher") {
+        const scope = await elearningService.scopeFor(session!);
+        const visible = scope.teacherId ? await elearningService.listDiplomas({ teacherId: scope.teacherId }) : [];
+        if (!visible.some((item) => String(item._id) === id)) return jsonError("Forbidden", 403);
+      } else if (!(await canSeeStudent(session!, diploma.student._id))) {
+        return jsonError("Forbidden", 403);
+      }
+      return jsonOk({ diploma });
+    } catch (e) {
+      return fromServiceError(e);
+    }
+  },
+
   async list(req: Request) {
     const { session, error } = await requireAuth();
     if (error) return error;
@@ -810,7 +832,7 @@ export const elearningController = {
           portal,
         });
       }
-      if (portal.role === "student" && !portal.studentId) {
+      if (portal.role === "student" && !portal.studentId && !(session!.role === "parent" && kind === "diploma")) {
         return jsonOk({
           kind,
           stats: await elearningService.stats(scope),
@@ -851,11 +873,15 @@ export const elearningController = {
         });
       }
       if (kind === "diploma") {
+        const diplomaScope =
+          session!.role === "parent"
+            ? { studentIds: (await resolveChildren(session!)).map((student) => String(student._id)) }
+            : scope;
         return jsonOk({
           kind,
           stats,
           portal,
-          diplomas: await elearningService.listDiplomas(scope),
+          diplomas: await elearningService.listDiplomas(diplomaScope),
         });
       }
       if (kind === "quiz") {

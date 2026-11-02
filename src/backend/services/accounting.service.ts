@@ -376,8 +376,10 @@ export async function printHeader(branchCode?: string | null) {
       address: head.address,
       phone: head.phone,
       email: head.email,
+      website: head.website,
       currency: head.currency,
       logoUrl: head.logoUrl,
+      signatures: head.signatures,
     },
   };
 }

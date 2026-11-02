@@ -9,11 +9,14 @@ import {
   Field,
   Hero,
   ModalForm,
+  PaginationControls,
   Panel,
   StatusBadge,
   inputClass,
+  usePaginatedList,
 } from "@/components/ui";
 import { formatNumber, prettyDate, toDateInput } from "@/lib/types";
+import { DocumentSigns, SchoolHead } from "@/components/print/PrintShell";
 import { PartyLedger } from "@/components/accounting/PartyLedger";
 import { CoaSetup, type CoaAccount } from "@/components/accounting/CoaSetup";
 import { AdjustedTrialBalance, AgingReport, BudgetReport, EquityStatement, FullLedgerReport, ProfitDistribution, type Distribution } from "@/components/accounting/Reports";
@@ -413,6 +416,9 @@ export default function AccountingPage() {
   }, [vouchers, voucherTypeByNode, navMode]);
 
   const effectiveVoucherTypeFilter = voucherTypeByNode || typeFilter;
+  const voucherPagination = usePaginatedList(visibleVouchers);
+  const trialPagination = usePaginatedList(trial.rows);
+  const bankPagination = usePaginatedList(bankEntries);
 
   const recentAccountingVouchers = useMemo(
     () =>
@@ -1467,7 +1473,7 @@ export default function AccountingPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleVouchers.map((v) => (
+                  {voucherPagination.pageItems.map((v) => (
                     <tr key={v._id}>
                       <td className="num">{v.number}</td>
                       <td>{prettyDate(v.date)}</td>
@@ -1515,6 +1521,7 @@ export default function AccountingPage() {
                   ))}
                 </tbody>
               </table>
+              <PaginationControls page={voucherPagination.page} pageSize={voucherPagination.pageSize} total={visibleVouchers.length} pageCount={voucherPagination.pageCount} onPageChange={voucherPagination.setPage} onPageSizeChange={voucherPagination.setPageSize} />
             </div>
           )}
         </Panel>
@@ -1573,7 +1580,7 @@ export default function AccountingPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {trial.rows.map((row) => (
+                  {trialPagination.pageItems.map((row) => (
                     <tr key={row.code}>
                       <td className="num">{row.code}</td>
                       <td>
@@ -1601,6 +1608,7 @@ export default function AccountingPage() {
                   </tr>
                 </tbody>
               </table>
+              <PaginationControls page={trialPagination.page} pageSize={trialPagination.pageSize} total={trial.rows.length} pageCount={trialPagination.pageCount} onPageChange={trialPagination.setPage} onPageSizeChange={trialPagination.setPageSize} />
             </div>
           )}
         </Panel>
@@ -1794,7 +1802,7 @@ export default function AccountingPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {bankEntries.map((row) => (
+                  {bankPagination.pageItems.map((row) => (
                     <tr key={row._id}>
                       <td>{prettyDate(row.date)}</td>
                       <td>
@@ -1849,6 +1857,7 @@ export default function AccountingPage() {
                   ))}
                 </tbody>
               </table>
+              <PaginationControls page={bankPagination.page} pageSize={bankPagination.pageSize} total={bankEntries.length} pageCount={bankPagination.pageCount} onPageChange={bankPagination.setPage} onPageSizeChange={bankPagination.setPageSize} />
             </div>
           )}
         </Panel>
@@ -2345,13 +2354,23 @@ function VoucherLinesTable({ voucher }: { voucher: Voucher }) {
 }
 
 function VoucherPrint({ voucher, branches }: { voucher: Voucher; branches: Branch[] }) {
-  const { name: schoolName } = useSchoolProfile();
+  const school = useSchoolProfile();
+  const campus = branches.find((b) => b.code === voucher.branchCode)?.name || voucher.branchCode;
   return (
     <div className="print-only voucher-print">
-      <div className="voucher-print-head">
-        <div><h1>{schoolName || "School"}</h1><p>{branches.find((b) => b.code === voucher.branchCode)?.name || voucher.branchCode}</p></div>
-        <div><h2>{voucherLabels[voucher.voucherType]}</h2><div className="num">{voucher.number}</div></div>
-      </div>
+      <SchoolHead
+        school={{
+          name: school.name || "School",
+          campus,
+          address: school.address,
+          phone: school.phone,
+          email: school.email,
+          website: school.website,
+          logoUrl: school.logoUrl,
+        }}
+        title={voucherLabels[voucher.voucherType]}
+        sub={voucher.number}
+      />
       <div className="voucher-print-meta">
         <span><b>Date:</b> {prettyDate(voucher.date)}</span>
         <span><b>Due:</b> {prettyDate(voucher.dueDate)}</span>
@@ -2373,7 +2392,16 @@ function VoucherPrint({ voucher, branches }: { voucher: Voucher; branches: Branc
         <span>Tax <strong>{formatNumber(voucher.taxAmount)}</strong></span>
         <span>Grand Total <strong>{voucher.currency} {formatNumber(voucher.grandTotal)}</strong></span>
       </div>
-      <div className="voucher-signatures"><span>Prepared by</span><span>Checked by</span><span>Approved by</span><span>Received by</span></div>
+      <DocumentSigns
+        className="voucher-signatures"
+        signatures={school.signatures}
+        signers={[
+          { label: "Prepared by", role: "preparedBy" },
+          { label: "Checked by", role: "checkedBy" },
+          { label: "Approved by", role: "approvedBy" },
+          { label: "Received by", role: "receiver" },
+        ]}
+      />
     </div>
   );
 }

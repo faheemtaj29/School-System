@@ -58,6 +58,8 @@ async function schoolHeader(branchCode?: string | null) {
     address: head.address,
     phone: head.phone,
     email: head.email,
+    website: head.website,
+    signatures: head.signatures,
     registrationNo: head.registrationNo,
     currency: head.currency,
     lateFeePercent: s?.lateFeePercent ?? 0,

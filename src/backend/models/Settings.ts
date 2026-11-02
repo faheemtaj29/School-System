@@ -130,6 +130,7 @@ export interface ISettings {
   logoUrl?: string;
   motto?: string;
   website?: string;
+  documentSignatures?: Record<string, { dataUrl: string; updatedAt: Date }>;
   city?: string;
   province?: string;
   country?: string;
@@ -239,6 +240,7 @@ const SettingsSchema = new Schema<ISettings>(
     logoUrl: String,
     motto: String,
     website: String,
+    documentSignatures: { type: Schema.Types.Mixed, select: false },
     city: String,
     province: String,
     country: { type: String, default: "Pakistan" },
